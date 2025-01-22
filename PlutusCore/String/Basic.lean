@@ -6,6 +6,7 @@ open PlutusCore.ByteString
 /-! ## Formalisation for PlutusCore String representation and builtin functions. -/
 
 namespace PlutusCore.StringInternal
+
 -- We here use the Lean4 String representation
 
 /-! ## Builtin String functions. -/

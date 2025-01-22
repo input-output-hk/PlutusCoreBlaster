@@ -4,6 +4,7 @@ namespace PlutusCore.List
 /-! ## Formalisation for PlutusCore List representation and builtin functions. -/
 
 namespace PlutusCore.ListInternal
+
 -- We here use the Lean4 List representation
 
 /-! ## Builtin List functions. -/

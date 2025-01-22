@@ -4,6 +4,7 @@ namespace PlutusCore.Unit
 /-! ## Formalisation for PlutusCore Unit representation and builtin functions. -/
 
 namespace PlutusCore.UnitInternal
+
 -- We here use the Lean4 Unit representation
 
 /-! ## Builtin Unit functions. -/

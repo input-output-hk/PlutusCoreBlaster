@@ -7,6 +7,7 @@ open PlutusCore.Integer PlutusCore.ByteString
 /-! ## Formalisation for PlutusCore BLS12_381_G2_Element representation and builtin functions. -/
 
 namespace PlutusCore.Crypto.BLS12_381.G2Internal
+
 -- TODO: BLS12_381_G2_Element
 
 -- TODO bls12_381_G2_add : BLS12_381_G2_Element → BLS12_381_G2_Element → BLS12_381_G2_Element

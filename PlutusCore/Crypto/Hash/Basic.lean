@@ -4,6 +4,7 @@ namespace PlutusCore.Crypto.Hash
 open PlutusCore.ByteString
 
 /-! ## Formalisation for PlutusCore hash builtin functions. -/
+
 namespace PlutusCore.Crypto.HashInternal
 
 -- TODO: sha2_256 : ByteString → ByteString

@@ -123,7 +123,6 @@ instance LawfulBEqByteString : LawfulBEq ByteString where
     rw [h]
     apply LawfulBEqByteString.rfl
 
-
 /-- LT instance for ByteString -/
 instance LTByteString : LT ByteString where
   lt x y := x.data.toList < y.data.toList

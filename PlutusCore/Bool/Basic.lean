@@ -4,6 +4,7 @@ namespace PlutusCore.Bool
 /-! ## Formalisation for PlutusCore Bool representation and builtin functions. -/
 
 namespace PlutusCore.BoolInternal
+
 -- We here use the Lean4 Bool representation
 
 /-! ## Builtin Bool functions. -/
