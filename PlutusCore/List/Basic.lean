@@ -3,6 +3,7 @@ namespace PlutusCore.List
 
 /-! ## Formalisation for PlutusCore List representation and builtin functions. -/
 
+namespace PlutusCore.ListInternal
 -- We here use the Lean4 List representation
 
 /-! ## Builtin List functions. -/
@@ -63,6 +64,16 @@ def tailList (xs : List α) : Except String (List α) :=
     Otherwise `false`
 -/
 def nullList (xs : List α) : Bool := xs.isEmpty
+
+end PlutusCore.ListInternal
+
+export PlutusCore.ListInternal
+  ( -- NOTE: macro rules chooseList, caseList are implicitly exported
+    headList
+    mkCons
+    nullList
+    tailList
+  )
 
 end PlutusCore.List
 

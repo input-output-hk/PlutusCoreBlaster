@@ -16,65 +16,8 @@ open PlutusCore.Integer (Integer)
 
 @[simp] theorem Data.not_beq_iff_not_eq (x y : Data) : x != y ↔ x ≠ y := by simp [BEq.beq]
 
-
-mutual
-@[simp] theorem ltData_irrefl (x : Data) : ¬ ltData x x := by
-    match x with
-    | .Constr i xs =>
-        simp [ltData, ltDataConstr]
-        intro h1
-        have h2 := Int.lt_irrefl i
-        contradiction
-    | .List xs =>
-         simp only [ltData]
-         apply ltDataList_irrefl
-    | .Map xm =>
-         simp only [ltData]
-         apply ltDataMap_irrefl
-    | .I i =>
-         simp [ltData]
-         apply Int.lt_irrefl
-    | .B bs => simp [ltData]
-
-@[simp] theorem ltDataList_irrefl (xs : List Data) : ¬ ltDataList xs xs := by
-    match xs with
-    | [] => simp [ltDataList]
-    | hd :: tl =>
-       simp [ltDataList]
-       apply And.intro
-       . have h := ltData_irrefl hd
-         simp at h
-         assumption
-       . have h := ltDataList_irrefl tl
-         simp at h
-         assumption
-
-@[simp] theorem ltDataMap_irrefl (xs : List (Data × Data)) : ¬ ltDataMap xs xs := by
-    match xs with
-    | [] => simp [ltDataMap]
-    | (x, y) :: tl =>
-        simp [ltDataMap]
-        apply And.intro
-        . have h := ltData_irrefl x
-          simp at h
-          assumption
-        . apply And.intro
-          . have h := ltData_irrefl y
-            simp at h
-            assumption
-          . have h := ltDataMap_irrefl tl
-            simp at h
-            assumption
-end
-
 @[simp] theorem Data.lt_irrefl (x : Data) : ¬ x < x := by
   simp [LT.lt]
-
-@[simp] theorem Data.compare_rlf (x y : Data) : compare x y = Data.compareData x y := rfl
-
-@[simp] theorem Data.compareData_rlf (x y : Data) :
-  Data.compareData x y =
-  if ltData x y then .lt else if x == y then .eq else .gt := rfl
 
 @[simp] theorem chooseData_constr
   (idx : Integer) (xs : List Data) (tc : α) (tm : α) (tl : α) (ti : α) (tb : α) :
@@ -191,6 +134,5 @@ end
 @[simp] theorem equalsData_rfl (d1 d2 : Data) : equalsData d1 d2 = (d1 == d2) := rfl
 @[simp] theorem mkPairData_rfl (d1 d2 : Data) : mkPairData d1 d2 = (d1, d2) := rfl
 @[simp] theorem mkNilPairData_rfl (u : Unit) : mkNilPairData u = [] := rfl
-
 
 end PlutusCore.Data

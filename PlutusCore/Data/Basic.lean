@@ -6,6 +6,8 @@ open PlutusCore.Integer PlutusCore.ByteString
 
 /-! ## Formalisation for PlutusCore Data representation and Builtin functions. -/
 
+namespace PlutusCore.DataInternal
+
 -- Lean definition of Data
 inductive Data where
   | Constr : Integer → List Data → Data
@@ -125,6 +127,11 @@ def Data.compareData (d1 : Data) (d2: Data) : Ordering :=
 instance OrdData : Ord Data where
   compare x y := Data.compareData x y
 
+@[simp] theorem Data.compare_rlf (x y : Data) : compare x y = Data.compareData x y := rfl
+
+@[simp] theorem Data.compareData_rlf (x y : Data) :
+  Data.compareData x y =
+  if ltData x y then .lt else if x == y then .eq else .gt := rfl
 
 /-! DecidableEq instance for Data -/
 
@@ -318,6 +325,56 @@ instance LawfulBEqData : LawfulBEq Data where
   rfl := by simp [BEq.beq]; apply eqData_reflexive
 
 
+mutual
+@[simp] theorem ltData_irrefl (x : Data) : ¬ ltData x x := by
+    match x with
+    | .Constr i xs =>
+        simp [ltData, ltDataConstr]
+        intro h1
+        have h2 := Int.lt_irrefl i
+        contradiction
+    | .List xs =>
+         simp only [ltData]
+         apply ltDataList_irrefl
+    | .Map xm =>
+         simp only [ltData]
+         apply ltDataMap_irrefl
+    | .I i =>
+         simp [ltData]
+         apply Int.lt_irrefl
+    | .B bs => simp [ltData]
+
+@[simp] theorem ltDataList_irrefl (xs : List Data) : ¬ ltDataList xs xs := by
+    match xs with
+    | [] => simp [ltDataList]
+    | hd :: tl =>
+       simp [ltDataList]
+       apply And.intro
+       . have h := ltData_irrefl hd
+         simp at h
+         assumption
+       . have h := ltDataList_irrefl tl
+         simp at h
+         assumption
+
+@[simp] theorem ltDataMap_irrefl (xs : List (Data × Data)) : ¬ ltDataMap xs xs := by
+    match xs with
+    | [] => simp [ltDataMap]
+    | (x, y) :: tl =>
+        simp [ltDataMap]
+        apply And.intro
+        . have h := ltData_irrefl x
+          simp at h
+          assumption
+        . apply And.intro
+          . have h := ltData_irrefl y
+            simp at h
+            assumption
+          . have h := ltDataMap_irrefl tl
+            simp at h
+            assumption
+end
+
 /-! ## Builtin Data functions. -/
 
 /-- Given `d` a Data instance, `chooseData d tc tm tl ti tb` is defined as follows:
@@ -459,6 +516,56 @@ def mkNilData (_u : Unit) : List Data := []
 def mkNilPairData (_u : Unit) : List (Data × Data) := []
 
 -- TODO: serialiseData : Data → ByteString
+end PlutusCore.DataInternal
 
+export PlutusCore.DataInternal
+  -- NOTE: macro rules chooseData and caseData are implicitly exported
+  ( -- type
+   Data
+   Data.Constr
+   Data.Map
+   Data.List
+   Data.I
+   Data.B
+   -- intermediate definitions
+   eqData
+   eqDataMap
+   eqDataList
+   eqDataConstr
+   ltData
+   ltDataMap
+   ltDataList
+   ltDataConstr
+   -- builtin functions
+   bData
+   constrData
+   equalsData
+   iData
+   listData
+   mapData
+   mkNilData
+   mkNilPairData
+   mkPairData
+   unBData
+   unConstrData
+   unIData
+   unListData
+   unMapData
+   -- theorems
+   Data.compare_rlf
+   Data.compareData_rlf
+   eqData_true_imp_eq
+   eqDataList_true_imp_eq
+   eqDataMap_true_imp_eq
+   eqData_false_imp_not_eq
+   eqDataList_false_imp_not_eq
+   eqDataMap_false_imp_not_eq
+   eqData_reflexive
+   eqDataList_reflexive
+   eqDataMap_reflexive
+   ltData_irrefl
+   ltDataList_irrefl
+   ltDataMap_irrefl
+  )
 
 end PlutusCore.Data

@@ -5,13 +5,15 @@ open PlutusCore.Integer
 
 /-! ## Formalisation for PlutusCore ByteString representation and builtin functions. -/
 
+namespace PlutusCore.ByteStringInternal
+
 abbrev ByteString := ByteArray
 
 /-- Base16-encode of ByteString to show result.
     Note that "<invalid byte>" is returned for invalid byte representation.
     Same behaviour as in PlutusTx.
 -/
-protected def ByteString.toHex (bs : ByteString) : String :=
+def ByteString.toHex (bs : ByteString) : String :=
   Array.foldr (fun u acc => (showWord8 u.toNat) ++ acc) "" bs.data
 
   where
@@ -40,7 +42,7 @@ protected def ByteString.toHex (bs : ByteString) : String :=
 /-- Preserve the string representation when transforming to ByteString
     i.e., no utf8 encoding is applied.
 -/
-protected def stringToByteString (s : String) : ByteString :=
+def ByteString.stringToByteString (s : String) : ByteString :=
   let rec loop
     | [],    r => r
     | c :: cs, r => loop cs (r.push c.toNat.toUInt8)
@@ -114,6 +116,14 @@ instance LawfulBEqByteString : LawfulBEq ByteString where
   rfl {bs} := by simp [BEq.beq]; apply Array.isEqv_self
 
 
+@[simp] theorem ByteString.beq_iff_eq (x y : ByteString) : x == y ↔ x = y := by
+  apply Iff.intro
+  . apply BEqByteString_true_imp_eq
+  . intro h
+    rw [h]
+    apply LawfulBEqByteString.rfl
+
+
 /-- LT instance for ByteString -/
 instance LTByteString : LT ByteString where
   lt x y := x.data.toList < y.data.toList
@@ -131,7 +141,32 @@ instance : (x y : ByteString) → Decidable (x ≤ y) :=
  fun x y => inferInstanceAs (Decidable (x.data.toList ≤ y.data.toList))
 
 
-protected def cons (u :  UInt8) (bs : ByteString) : ByteString :=
+/-- NOTE: To be removed once migrated to latest Lean version -/
+theorem ListUInt8_lt_irrefl (xs : List UInt8) : ¬ xs < xs := by
+  simp [LT.lt]
+  match xs with
+  | [] => unfold Not
+          intro h
+          contradiction
+  | hd :: tl =>
+       unfold Not
+       intro h1
+       cases h1; rename_i h2
+       . simp [LT.lt] at h2
+         unfold UInt8.lt at h2
+         have h3 : ¬ hd.val < hd.val := Nat.lt_irrefl hd.val
+         contradiction
+       . have h3 : ¬ List.lt tl tl := by apply ListUInt8_lt_irrefl tl
+         contradiction
+
+@[simp] theorem ByteString.lt_irrefl (x : ByteString) : ¬ x < x := by
+  match x with
+  | ByteArray.mk v =>
+       unfold LT.lt LTByteString
+       simp only [BEq.beq, LT.lt]
+       apply ListUInt8_lt_irrefl
+
+def ByteString.cons (u :  UInt8) (bs : ByteString) : ByteString :=
   {data := Array.append #[u] bs.data}
 
 /-! ## Builtin ByteString functions. -/
@@ -184,6 +219,33 @@ def indexByteString (bs : ByteString) (j : Integer) : Except String Integer :=
 def equalsByteString (b1 : ByteString) (b2 : ByteString) : Bool := BEqByteString.beq b1 b2
 def lessThanByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 < b2
 def lessThanEqualsByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 <= b2
+
+end PlutusCore.ByteStringInternal
+
+export PlutusCore.ByteStringInternal
+  ( -- type
+    ByteString
+    -- builtin functions
+    appendByteString
+    consByteStringV1
+    consByteStringV2
+    emptyByteString
+    equalsByteString
+    indexByteString
+    lengthOfByteString
+    lessThanByteString
+    lessThanEqualsByteString
+    sliceByteString
+    ByteString.cons
+    ByteString.stringToByteString
+    -- theorems
+    EqByteString_equiv_EqArray
+    BEqByteString_false_imp_not_eq
+    BEqByteString_true_imp_eq
+    ListUInt8_lt_irrefl
+    ByteString.beq_iff_eq
+    ByteString.lt_irrefl
+  )
 
 end PlutusCore.ByteString
 

@@ -20,6 +20,19 @@ namespace PlutusCore.Integer
 @[simp] theorem modInteger_zero (x : Integer) :
   modInteger x 0 = throw "modInteger: division by zero" := rfl
 
+-- NOTE: To be updated when migrating to latest Lean version
+theorem divide_add_mod (x y d m : Integer) :
+  divideInteger x y = pure d → modInteger x y = pure m → addInteger (multiplyInteger d y) m = x := by
+    simp
+    split <;> rename_i h1
+    . intros
+      contradiction
+    . simp [pure, Except.pure]
+      intro h2 h3
+      rw[← h2, ← h3]
+      rw[Int.mul_comm]
+      apply Int.fdiv_add_fmod
+
 @[simp] theorem quotientInteger_rfl (x y : Integer) :
   quotientInteger x y = if y != 0 then pure (Int.div x y) else throw "quotientInteger: division by zero" := rfl
 
@@ -31,6 +44,19 @@ namespace PlutusCore.Integer
 
 @[simp] theorem remainderInteger_zero (x : Integer) :
   remainderInteger x 0 = throw "remainderInteger: division by zero" := rfl
+
+-- NOTE: To be updated when migrating to latest Lean version
+theorem quotient_add_remainder (x y q r : Integer) :
+  quotientInteger x y = pure q → remainderInteger x y = pure r → addInteger (multiplyInteger q y) r = x := by
+    simp
+    split <;> rename_i h1
+    . intros
+      contradiction
+    . simp [pure, Except.pure]
+      intro h2 h3
+      rw[← h2, ← h3]
+      rw[Int.mul_comm]
+      apply Int.div_add_mod
 
 @[simp] theorem equalsInteger_rfl (x y : Integer) : equalsInteger x y = (x == y) := rfl
 @[simp] theorem equalsInteger_iff_eq (x y : Integer) : equalsInteger x y ↔ x = y := by simp

@@ -7,6 +7,8 @@ abbrev Integer := Int
 
 /-! ## Builtin Integer functions. -/
 
+namespace PlutusCore.IntegerInternal
+
 def addInteger := Int.add
 def subtractInteger := Int.sub
 def multiplyInteger := Int.mul
@@ -47,5 +49,21 @@ def remainderInteger (x : Integer) (y : Integer) : Except String Integer :=
 def equalsInteger (x : Integer) (y : Integer) : Bool := x == y
 def lessThanInteger (x : Integer) (y : Integer) : Bool := x < y
 def lessThanEqualsInteger (x : Integer) (y : Integer) : Bool := x ≤ y
+
+end PlutusCore.IntegerInternal
+
+export PlutusCore.IntegerInternal
+  (  -- builtin functions
+    addInteger
+    divideInteger
+    equalsInteger
+    lessThanInteger
+    lessThanEqualsInteger
+    modInteger
+    multiplyInteger
+    quotientInteger
+    remainderInteger
+    subtractInteger
+  )
 
 end PlutusCore.Integer
