@@ -133,6 +133,75 @@ instance OrdData : Ord Data where
   Data.compareData x y =
   if ltData x y then .lt else if x == y then .eq else .gt := rfl
 
+/-! DecidableLT instance for Data -/
+
+theorem ltData_true_imp_lt (x y : Data) : ltData x y -> x < y := by
+  match x, y with
+  | .Constr i xs, .Constr j ys => simp [ltData, ltDataConstr, LT.lt]
+  | .Map xm, .Map ym => simp [ltData, ltDataMap, LT.lt]
+  | .List xs, .List ys => simp [ltData, ltDataList, LT.lt]
+  | .I i, .I j => simp [ltData, LT.lt]
+  | .B bs1, .B bs2 => simp only [ltData, LT.lt]; intro; assumption
+  | .Constr .., .Map _
+  | .Constr .., .List _
+  | .Constr .., .I _
+  | .Constr .., .B _
+  | .Map _, .List _
+  | .Map _, .I _
+  | .Map _, .B _
+  | .List _, .I _
+  | .List _, .B _
+  | .I _, .B _ => simp [ltData, LT.lt]
+  | .Map _, .Constr ..
+  | .List _, .Constr ..
+  | .I _, .Constr ..
+  | .B _, .Constr ..
+  | .List _, .Map _
+  | .I _, .Map _
+  | .B _, .Map _
+  | .I _, .List ..
+  | .B _, .List ..
+  | .B _ , .I _ => simp [ltData]
+
+theorem ltData_false_imp_not_lt (x y : Data) : ltData x y = false -> ¬ x < y := by
+  match x, y with
+  | .Constr i xs, .Constr j ys => simp [ltData, ltDataConstr, LT.lt]
+  | .Map xm, .Map ym => simp [ltData, ltDataMap, LT.lt]
+  | .List xs, .List ys => simp [ltData, ltDataList, LT.lt]
+  | .I i, .I j => simp [ltData, LT.lt]
+  | .B bs1, .B bs2 =>
+      simp only [ltData, LT.lt];
+      unfold Not; intro h1 h2
+      rw [h1] at h2
+      contradiction
+  | .Constr .., .Map _
+  | .Constr .., .List _
+  | .Constr .., .I _
+  | .Constr .., .B _
+  | .Map _, .List _
+  | .Map _, .I _
+  | .Map _, .B _
+  | .List _, .I _
+  | .List _, .B _
+  | .I _, .B _ => simp [ltData, LT.lt]
+  | .Map _, .Constr ..
+  | .List _, .Constr ..
+  | .I _, .Constr ..
+  | .B _, .Constr ..
+  | .List _, .Map _
+  | .I _, .Map _
+  | .B _, .Map _
+  | .I _, .List ..
+  | .B _, .List ..
+  | .B _ , .I _ => simp [ltData, LT.lt]
+
+def Data.decLt (x y : Data) : Decidable (LT.lt x y) :=
+  match h:(ltData x y) with
+  | true => isTrue (ltData_true_imp_lt _ _ h)
+  | false => isFalse (ltData_false_imp_not_lt _ _ h)
+
+instance : DecidableLT Data := Data.decLt
+
 /-! DecidableEq instance for Data -/
 
 mutual
@@ -156,23 +225,23 @@ mutual
        intro h1
        have h2 : bs1 = bs2 := BEqByteString_true_imp_eq _ _ h1
        rw [h2]
-    | .Constr _ _, .List _
-    | .Constr _ _, .Map _
-    | .Constr _ _, .I _
-    | .Constr _ _, .B _
-    | .List _, .Constr _ _
+    | .Constr .., .List _
+    | .Constr .., .Map _
+    | .Constr .., .I _
+    | .Constr .., .B _
+    | .List _, .Constr ..
     | .List _, .Map _
     | .List _, .I _
     | .List _, .B _
-    | .Map _, .Constr _ _
+    | .Map _, .Constr ..
     | .Map _, .List _
     | .Map _, .I _
     | .Map _, .B _
-    | .I _, .Constr _ _
+    | .I _, .Constr ..
     | .I _, .List _
     | .I _, .Map _
     | .I _, .B _
-    | .B _, .Constr _ _
+    | .B _, .Constr ..
     | .B _, .List _
     | .B _, .Map _
     | .B _, .I _ =>
@@ -279,7 +348,7 @@ mutual
 end
 
 def Data.decEq (x y : Data) : Decidable (Eq x y) :=
-  match h:(eqData x  y) with
+  match h:(eqData x y) with
   | true => isTrue (eqData_true_imp_eq _ _ h)
   | false => isFalse (eqData_false_imp_not_eq _ _ h)
 
@@ -328,20 +397,14 @@ instance LawfulBEqData : LawfulBEq Data where
 mutual
 @[simp] theorem ltData_irrefl (x : Data) : ¬ ltData x x := by
     match x with
-    | .Constr i xs =>
-        simp [ltData, ltDataConstr]
-        intro h1
-        have h2 := Int.lt_irrefl i
-        contradiction
+    | .Constr i xs => simp [ltData, ltDataConstr]
     | .List xs =>
          simp only [ltData]
          apply ltDataList_irrefl
     | .Map xm =>
          simp only [ltData]
          apply ltDataMap_irrefl
-    | .I i =>
-         simp [ltData]
-         apply Int.lt_irrefl
+    | .I i => simp [ltData]
     | .B bs => simp [ltData]
 
 @[simp] theorem ltDataList_irrefl (xs : List Data) : ¬ ltDataList xs xs := by
@@ -374,6 +437,14 @@ mutual
             simp at h
             assumption
 end
+
+@[simp] theorem Data.lt_irrefl (x : Data) : ¬ x < x := by
+  simp [LT.lt]
+
+/-! Std.Irrefl instance for Data -/
+instance : Std.Irrefl (. < . : Data → Data → Prop) where
+  irrefl := Data.lt_irrefl
+
 
 /-! ## Builtin Data functions. -/
 

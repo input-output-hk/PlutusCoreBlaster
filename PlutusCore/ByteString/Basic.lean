@@ -140,33 +140,26 @@ instance : (x y : ByteString) → Decidable (x ≤ y) :=
  fun x y => inferInstanceAs (Decidable (x.data.toList ≤ y.data.toList))
 
 
-/-- NOTE: To be removed once migrated to latest Lean version -/
-theorem ListUInt8_lt_irrefl (xs : List UInt8) : ¬ xs < xs := by
+
+/-- NOTE: instance and theorem to be removed once added in Lean (currently not present) --/
+
+theorem UInt8.lt_irrefl (x : UInt8) : ¬ x < x := by
   simp [LT.lt]
-  match xs with
-  | [] => unfold Not
-          intro h
-          contradiction
-  | hd :: tl =>
-       unfold Not
-       intro h1
-       cases h1; rename_i h2
-       . simp [LT.lt] at h2
-         unfold UInt8.lt at h2
-         have h3 : ¬ hd.val < hd.val := Nat.lt_irrefl hd.val
-         contradiction
-       . have h3 : ¬ List.lt tl tl := by apply ListUInt8_lt_irrefl tl
-         contradiction
+  unfold UInt8.lt
+  simp only [LT.lt]
+  apply Nat.lt_irrefl
+
+instance : Std.Irrefl ( . < . : UInt8 → UInt8 → Prop) where
+  irrefl := UInt8.lt_irrefl
 
 @[simp] theorem ByteString.lt_irrefl (x : ByteString) : ¬ x < x := by
   match x with
   | ByteArray.mk v =>
        unfold LT.lt LTByteString
-       simp only [BEq.beq, LT.lt]
-       apply ListUInt8_lt_irrefl
+       apply List.lt_irrefl
 
 def ByteString.cons (u :  UInt8) (bs : ByteString) : ByteString :=
-  {data := Array.append #[u] bs.data}
+  {data := #[u] ++ bs.data}
 
 /-! ## Builtin ByteString functions. -/
 
@@ -241,7 +234,7 @@ export PlutusCore.ByteStringInternal
     EqByteString_equiv_EqArray
     BEqByteString_false_imp_not_eq
     BEqByteString_true_imp_eq
-    ListUInt8_lt_irrefl
+    UInt8.lt_irrefl
     ByteString.beq_iff_eq
     ByteString.lt_irrefl
   )

@@ -35,7 +35,7 @@ def modInteger (x : Integer) (y : Integer) : Except String Integer :=
 -/
 def quotientInteger (x : Integer) (y : Integer) : Except String Integer :=
   if y != 0
-  then pure (Int.div x y)
+  then pure (Int.tdiv x y)
   else throw "quotientInteger: division by zero"
 
 /-- Modulo truncating towards zero.
@@ -43,7 +43,7 @@ def quotientInteger (x : Integer) (y : Integer) : Except String Integer :=
 -/
 def remainderInteger (x : Integer) (y : Integer) : Except String Integer :=
   if y != 0
-  then pure (Int.mod x y)
+  then pure (Int.tmod x y)
   else throw "remainderInteger: division by zero"
 
 def equalsInteger (x : Integer) (y : Integer) : Bool := x == y

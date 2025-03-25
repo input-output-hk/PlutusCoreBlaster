@@ -29,7 +29,7 @@ theorem lt_imp_stringToByteString_lt (s1 s2 : String) :
 @[simp] theorem lengthOfByteString_rfl (bs : ByteString) : lengthOfByteString bs = Int.ofNat bs.size := rfl
 
 @[simp] theorem size_cons (u : UInt8) (bs : ByteString) : (ByteString.cons u bs).size = 1 + bs.size := by
-  simp [ByteString.cons, ByteArray.size, Array.size]
-  apply Nat.add_comm
+  simp only
+  [ ByteString.cons, ByteArray.size, Array.size, Array.toList_append, List.length_append, List.length_singleton ]
 
 end PlutusCore.ByteString

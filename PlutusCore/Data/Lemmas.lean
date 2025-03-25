@@ -16,9 +16,6 @@ open PlutusCore.Integer (Integer)
 
 @[simp] theorem Data.not_beq_iff_not_eq (x y : Data) : x != y ↔ x ≠ y := by simp [BEq.beq]
 
-@[simp] theorem Data.lt_irrefl (x : Data) : ¬ x < x := by
-  simp [LT.lt]
-
 @[simp] theorem chooseData_constr
   (idx : Integer) (xs : List Data) (tc : α) (tm : α) (tl : α) (ti : α) (tb : α) :
   UPLC.chooseData (Data.Constr idx xs) tc tm tl ti tb = tc := rfl
@@ -133,6 +130,7 @@ open PlutusCore.Integer (Integer)
 
 @[simp] theorem equalsData_rfl (d1 d2 : Data) : equalsData d1 d2 = (d1 == d2) := rfl
 @[simp] theorem mkPairData_rfl (d1 d2 : Data) : mkPairData d1 d2 = (d1, d2) := rfl
+@[simp] theorem mkNilData_rfl (u : Unit) : mkNilData u = [] := rfl
 @[simp] theorem mkNilPairData_rfl (u : Unit) : mkNilPairData u = [] := rfl
 
 end PlutusCore.Data

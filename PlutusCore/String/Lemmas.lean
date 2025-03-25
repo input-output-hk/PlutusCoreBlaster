@@ -1,6 +1,7 @@
 import PlutusCore.String.Basic
 
 namespace PlutusCore.String
+open PlutusCore.ByteString (ByteString)
 
 /-! ## Theorems on PlutusCore String representation and builtin functions. -/
 
@@ -9,6 +10,13 @@ namespace PlutusCore.String
 @[simp] theorem equalsString_rfl (x y : String) : equalsString x y = (x == y) := rfl
 
 @[simp] theorem encodeUft8_rfl (x : String) : encodeUtf8 x = x.toUTF8 := rfl
+
+@[simp] theorem decodeUtf8_rfl (bs : ByteString) :
+  decodeUtf8 bs =
+    if h : String.validateUTF8 bs
+    then pure (String.fromUTF8 bs h)
+    else throw "decodeUtf8: invalid ByteString"
+  := rfl
 
 -- TODO : complete the following proofs
 theorem utf8EncodeChar_lt_imp_lt (c1 c2 : Char) :
