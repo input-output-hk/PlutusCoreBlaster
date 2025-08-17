@@ -68,7 +68,7 @@ instance : Coe String ByteString where
 
 /-- Ord instance for ByteString -/
 instance OrdByteString : Ord ByteString where
-  compare x y := Ord.arrayOrd.compare x.data y.data
+  compare x y := compare x.data y.data
 
 /-- BEq instance for ByteString -/
 instance BEqByteString : BEq ByteString where
@@ -166,7 +166,7 @@ def ByteString.cons (u :  UInt8) (bs : ByteString) : ByteString :=
 /-- Return an empty ByteString
     NOTE: that this function is not a builtin. It is here provided for convenience.
 -/
-def emptyByteString : ByteString := ByteArray.empty
+@[simp] def emptyByteString : ByteString := ByteArray.empty
 
 /-- Given two ByteStrings `[c₁, ... cₘ]` and `[d₁, ..., dₙ]`, return `[c₁, ... cₘ, d₁, ..., dₙ]` -/
 def appendByteString (b1 : ByteString) (b2 : ByteString) : ByteString := b1 ++ b2

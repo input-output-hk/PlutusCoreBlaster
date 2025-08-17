@@ -138,8 +138,8 @@ instance OrdData : Ord Data where
 theorem ltData_true_imp_lt (x y : Data) : ltData x y -> x < y := by
   match x, y with
   | .Constr i xs, .Constr j ys => simp [ltData, ltDataConstr, LT.lt]
-  | .Map xm, .Map ym => simp [ltData, ltDataMap, LT.lt]
-  | .List xs, .List ys => simp [ltData, ltDataList, LT.lt]
+  | .Map xm, .Map ym => simp [ltData, LT.lt]
+  | .List xs, .List ys => simp [ltData, LT.lt]
   | .I i, .I j => simp [ltData, LT.lt]
   | .B bs1, .B bs2 => simp only [ltData, LT.lt]; intro; assumption
   | .Constr .., .Map _
@@ -166,8 +166,8 @@ theorem ltData_true_imp_lt (x y : Data) : ltData x y -> x < y := by
 theorem ltData_false_imp_not_lt (x y : Data) : ltData x y = false -> ¬ x < y := by
   match x, y with
   | .Constr i xs, .Constr j ys => simp [ltData, ltDataConstr, LT.lt]
-  | .Map xm, .Map ym => simp [ltData, ltDataMap, LT.lt]
-  | .List xs, .List ys => simp [ltData, ltDataList, LT.lt]
+  | .Map xm, .Map ym => simp [ltData, LT.lt]
+  | .List xs, .List ys => simp [ltData, LT.lt]
   | .I i, .I j => simp [ltData, LT.lt]
   | .B bs1, .B bs2 =>
       simp only [ltData, LT.lt];

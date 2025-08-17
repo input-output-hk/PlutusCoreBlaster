@@ -14,7 +14,7 @@ open PlutusCore.Integer (Integer)
     rw [h]
     apply eqData_reflexive
 
-@[simp] theorem Data.not_beq_iff_not_eq (x y : Data) : x != y ↔ x ≠ y := by simp [BEq.beq]
+@[simp] theorem Data.not_beq_iff_not_eq (x y : Data) : x != y ↔ x ≠ y := by simp
 
 @[simp] theorem chooseData_constr
   (idx : Integer) (xs : List Data) (tc : α) (tm : α) (tl : α) (ti : α) (tb : α) :
