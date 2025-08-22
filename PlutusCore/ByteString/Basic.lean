@@ -144,7 +144,9 @@ def consByteStringV2 (n : Integer) (bs : ByteString) : Except String ByteString 
 def sliceByteString (s : Integer) (k : Integer) (bs : ByteString) : ByteString :=
   -- Note that extract determine the number of elements by subtracting `s` and `k`.
   -- Hence, there is no need for us to subtract by one.
-  {data := bs.data.extract ⟨(Max.max s (0 : Integer)).toNat⟩ ⟨(Min.min (s + k).toNat bs.data.length)⟩ }
+  let subString := bs.data.toList.extract (Max.max s (0 : Integer)).toNat (Min.min (s + k).toNat bs.data.length)
+  {data := String.mk subString }
+
 
 /-- Given ByteString `[c₁, ..., cₙ]` return `n` as result; -/
 def lengthOfByteString (bs : ByteString) : Integer := Int.ofNat bs.length
@@ -156,9 +158,12 @@ def lengthOfByteString (bs : ByteString) : Integer := Int.ofNat bs.length
          - return ⊥
 -/
 def indexByteString (bs : ByteString) (j : Integer) : Except String Integer :=
-  if 0 <= j && j <= bs.length - 1
-  then pure (bs.data.get ⟨j.toNat⟩).toNat
-  else throw s!"indexByteString: index out of bounds: {j}"
+  if j < 0 then throw s!"indexByteString: index out of bounds: {j}"
+  else
+    match bs.data.toList[j.toNat]? with
+    | none => throw s!"indexByteString: index out of bounds: {j}"
+    | some c => pure c.toNat
+
 
 def equalsByteString (b1 : ByteString) (b2 : ByteString) : Bool := BEqByteString.beq b1 b2
 def lessThanByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 < b2
