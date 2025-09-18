@@ -109,8 +109,6 @@ where
     have := Nat.sub_lt_sub_left _h (Nat.add_lt_add_left c.utf8Size_pos i)
     decreasing_tactic
 
--- exact Nat.sub_lt_sub_left ‹_› (Nat.lt_add_of_pos_right c.utf8Size_pos)
-
 end PlutusCore.StringInternal
 
 export PlutusCore.StringInternal
@@ -119,7 +117,6 @@ export PlutusCore.StringInternal
     decodeUtf8
     emptyString
     encodeUtf8
-    decodeUtf8
     equalsString
     utf8EncodeChar
     utf8DecodeChar?
