@@ -2,6 +2,7 @@
 import PlutusCore.Bool
 import PlutusCore.Bitwise
 import PlutusCore.ByteString
+import PlutusCore.Cbor
 import PlutusCore.Crypto
 import PlutusCore.Data
 import PlutusCore.Integer
