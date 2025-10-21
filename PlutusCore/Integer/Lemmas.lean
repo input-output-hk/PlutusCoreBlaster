@@ -31,7 +31,7 @@ theorem divide_add_mod (x y d m : Integer) :
       intro h2 h3
       rw[← h2, ← h3]
       rw[Int.mul_comm]
-      apply Int.fdiv_add_fmod
+      apply Int.mul_fdiv_add_fmod
 
 @[simp] theorem quotientInteger_rfl (x y : Integer) :
   quotientInteger x y = if y != 0 then pure (Int.tdiv x y) else throw "quotientInteger: division by zero" := rfl
@@ -56,7 +56,7 @@ theorem quotient_add_remainder (x y q r : Integer) :
       intro h2 h3
       rw[← h2, ← h3]
       rw[Int.mul_comm]
-      apply Int.tdiv_add_tmod
+      apply Int.mul_tdiv_add_tmod
 
 @[simp] theorem equalsInteger_rfl (x y : Integer) : equalsInteger x y = (x == y) := rfl
 @[simp] theorem equalsInteger_iff_eq (x y : Integer) : equalsInteger x y ↔ x = y := by simp
