@@ -1,8 +1,10 @@
+import PlutusCore.ByteString
 import PlutusCore.Integer
 import PlutusCore.Data
 
 namespace PlutusCore.Cbor
 
+open PlutusCore.ByteString (ByteString)
 open PlutusCore.Data (Data)
 open PlutusCore.Integer (Integer)
 
@@ -10,6 +12,10 @@ open PlutusCore.Integer (Integer)
 -- found at https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf
 
 namespace CborInternal
+
+-- ==============
+-- =  Encoding  =
+-- ==============
 
 /-- Returns the `i`th byte of `n` in little-endian ordering -/
 -- Spec B.4. 𝖻_𝑖(𝑛) = 𝗆𝗈𝖽(𝖽𝗂𝗏(𝑛, 256 ^ 𝑖), 256)
@@ -119,7 +125,7 @@ def encodeInt (n : Integer) : Option String :=
 -- Spec B.7. ε_ctag
 def encodeCtag (i : Integer) : Option String :=
   String.mk <$>
-         if (0 ≤ i) && (i ≤   6) then encodeHead 6 (121 + i |> Int.toNat)
+         if (0 ≤ i) && (i ≤   6) then encodeHead 6 (121 + i        |> Int.toNat)
     else if (7 ≤ i) && (i ≤ 127) then encodeHead 6 (1280 + (i - 7) |> Int.toNat)
     else do (←encodeHead 6 102) ++ (←encodeHead 4 2) ++ ((←encodeInt i).data)
 
@@ -153,6 +159,185 @@ def encodeData : Data → Option String
     · have : sizeOf a < sizeOf xs := by apply List.sizeOf_lt_of_mem; assumption
       simp; omega
 
+-- ==============
+-- =  Decoding  =
+-- ==============
+
+/-- Helper function that is used in reconstructing natural numbers from their big endian representation -/
+def d_ (i : Nat) (c : Char) := (Char.toNat c) * (256 ^ i)
+
+-- Spec B.4. The `d_k` function is a general function to reconstruct a `k` byte natural number
+-- from its big endian representation. In the spec only the forms with k = 1, 2, 4 and 8 are used.
+/-- Decodes a one byte integer. -/
+def d₁ : List Char → Option (List Char × Nat)
+  | b :: t => .some (t, Char.toNat b)
+  | []     => .none
+
+/-- Decodes a two byte integer. -/
+def d₂ : List Char → Option (List Char × Nat)
+  | b₁ :: b₀ :: t => .some (t, d_ 1 b₁ + d_ 0 b₀)
+  | _             => .none
+
+/-- Decodes a four byte integer. -/
+def d₄ : List Char → Option (List Char × Nat)
+  | b₃ :: b₂ :: b₁ :: b₀ :: t => .some (t, d_ 3 b₃ + d_ 2 b₂ + d_ 1 b₁ + d_ 0 b₀)
+  | _                         => .none
+
+/-- Decodes an eight byte integer. -/
+def d₈ : List Char → Option (List Char × Nat)
+  | b₇ :: b₆ :: b₅ :: b₄ :: b₃ :: b₂ :: b₁ :: b₀ :: t => .some (t, d_ 7 b₇ + d_ 6 b₆ + d_ 5 b₅ + d_ 4 b₄ + d_ 3 b₃ + d_ 2 b₂ + d_ 1 b₁ + d_ 0 b₀)
+  | _                                                 => .none
+
+/-- Decodes a "head" structure that describes how the next bytes should be interpreted. -/
+-- Spec B.4. D_head
+def decodeHead : List Char → Option ((List Char) × Nat × Nat)
+  | n' :: s =>
+      let n := Char.toNat n'
+      let d := n / 32
+      match n % 32 with
+      | 24 => (λ (s', k) => (s', d, k)) <$> d₁ s
+      | 25 => (λ (s', k) => (s', d, k)) <$> d₂ s
+      | 26 => (λ (s', k) => (s', d, k)) <$> d₄ s
+      | 27 => (λ (s', k) => (s', d, k)) <$> d₈ s
+      | m  => if m ≤ 23 then .some (s, d, m)
+                        else .none
+  | _ => .none
+
+/-- Decodes a "head" structure with indefinite length that describes how the next bytes should be interpreted. -/
+-- Spec B.4. D_indef
+def decodeIndef : List Char → Option (List Char × Nat)
+  | n' :: s =>
+      let n := Char.toNat n'
+      if n % 32 = 31
+        then .some (s, n / 32)
+        else .none
+  | [] => .none
+
+/-- Decodes (consumes) the next `n` bytes from the input. -/
+-- Spec B.5. D_bytes
+def decodeBytes : Nat → List Char → Option (List Char × List Char)
+  | .zero  , s       => .some (s, [])
+  | .succ _, []      => .none
+  | .succ p, b :: s' => do
+      let (s'', t) ← decodeBytes p s'
+      .some (s'', b :: t)
+
+/-- Decodes a definite length "block" (bytestring chunnk). -/
+-- Spec B.5. D_block
+def decodeBlock (s : List Char) : Option (List Char × List Char) := do
+  let (s', m, n) ← decodeHead s
+  if m = 2 ∧ n ≤ 64
+    then decodeBytes n s'
+    else .none
+
+/-- Decodes an indefinite number blocks. This function can be parial as long as
+    it is not used in UPLC evaluation. -/
+-- Spec B.5. D_blocks
+partial def decodeBlocks : List Char → Option (List Char × List Char)
+  | '\xFF' :: s' => .some (s', [])
+  | s            => do
+      let (s' , t ) ← decodeBlock s
+      let (s'', t') ← decodeBlocks s'
+      .some (s'', t ++ t')
+
+/-- Decodes a bytestring from the input `s`. -/
+-- Spec B.5. D_B*
+def decodeBytestring (s : String) : Option (String × String) :=
+  match decodeBlock s.data with
+  | .some (s', t) => .some (⟨s'⟩, ⟨t⟩)
+  | .none         => do
+      let (s', n) ← decodeIndef s.data
+      if n = 2
+        then Prod.map String.mk String.mk <$> decodeBlocks s'
+        else .none
+
+/-- Reconstructs a natural number from its big endian representation. -/
+-- Spec B.6. stoi
+def stoi (s : String) : Nat :=
+  let rec go : List Char → Nat
+    | []      => 0
+    | n :: l' => 256 * go l' + (Char.toNat n)
+  go (List.reverse s.data)
+
+/- Decodes an integer value from input `s`. -/
+--  Spec B.6. D_Z
+def decodeInt (s : String) : Option (String × Integer) :=
+  match decodeHead s.data with
+  | .some (s', 0, n) => .some (⟨s'⟩, (Int.ofNat n))
+  | .some (s', 1, n) => .some (⟨s'⟩, -(Int.ofNat n) - 1)
+  | .some (s', 6, 2) => (λ (s'', b) => (s'', stoi b))                    <$> decodeBytestring ⟨s'⟩
+  | .some (s', 6, 3) => (λ (s'', b) => (s'', -(Int.ofNat (stoi b) - 1))) <$> decodeBytestring ⟨s'⟩
+  | _                => .none
+
+/- Decodes a ctag from input `s`. -/
+-- Spec B.7. D_ctag
+def decodeCtag (s : List Char) : Option (List Char × Integer) :=
+  match decodeHead s with
+  | .some (s', 6, 102) => do
+      let (s'', m, n) ← decodeHead s'
+      if m = 4 ∧ n = 2
+        then Prod.map String.data id <$> decodeInt ⟨s''⟩
+        else .none
+  | .some (s', 6, i) =>      if  121 ≤ i ∧ i ≤  127 then .some (s', i - 121)
+                        else if 1280 ≤ i ∧ i ≤ 1400 then .some (s', (i - 1280) + 7)
+                        else .none
+  | _ => .none
+
+/- Tries to decode a value from `s` using `f`. If fails it tries `g` with the same input. Fails if both fails. -/
+def decodeAlternative {α β : Type} (f : List Char → Option (List Char × α)) (g : List Char → Option (List Char × β)) (s : List Char) : Option (List Char × (α ⊕ β)) :=
+  match f s with
+  | .some (s', a) => .some (s', .inl a)
+  | .none         => (λ (s', b) => (s', .inr b)) <$> g s
+
+/- Decodes a builtin data from input `s`. -/
+-- SPec B.7. D_data
+partial def decodeData (s : String) : Option (String × Data) :=
+    Prod.map String.mk id <$> decodeDataLoop s.data
+  where
+    decodeDataLoop (s : List Char) : Option (List Char × Data) :=
+      match decodeAlternative decodeIndef decodeHead s with
+      | .some (_ , .inl 2)      => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
+      | .some (s', .inl 4     ) => Prod.map id          .List                <$> decodeListIndef s'
+      | .some (_ , .inr (0, _))
+      | .some (_ , .inr (1, _))
+      | .some (_ , .inr (6, 2))
+      | .some (_ , .inr (6, 3)) => Prod.map String.data .I                   <$> decodeInt ⟨s⟩
+      | .some (_ , .inr (2, _)) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
+      | .some (s', .inr (4, n)) => Prod.map id          .List                <$> decodeList n s'
+      | .some (s', .inr (5, n)) => Prod.map id          .Map                 <$> decodePairList n s'
+      | .some (_ , .inr (6, _)) =>                                               decodeConstr s
+      | _ => .none
+
+    decodeList : Nat → List Char → Option (List Char × List Data)
+      | .zero  , s => .some (s, [])
+      | .succ p, s => do
+          let (s' , d) ← decodeDataLoop s
+          let (s'', l) ← decodeList p s'
+          .some (s'', d :: l)
+
+    decodeListIndef : List Char → Option (List Char × List Data)
+      | '\xFF' :: s' => .some (s', [])
+      | s            => do
+          let (s' , d) ← decodeDataLoop s
+          let (s'', l) ← decodeListIndef s'
+          .some (s'', d :: l)
+
+    decodePairList : Nat → List Char → Option (List Char × List (Data × Data))
+      | .zero  , s => .some (s, [])
+      | .succ p, s => do
+          let (s'  , k) ← decodeDataLoop s
+          let (s'' , d) ← decodeDataLoop s'
+          let (s''', l) ← decodePairList p s''
+          .some (s''', (k, d) :: l)
+
+    decodeConstr (s : List Char) : Option (List Char × Data) := do
+      let (s' , i) ← decodeCtag s
+      let (s'', r) ← decodeAlternative decodeIndef decodeHead s'
+      match r with
+      | .inl 4      => Prod.map id (.Constr i) <$> decodeListIndef s''
+      | .inr (4, n) => Prod.map id (.Constr i) <$> decodeList n s''
+      | _           => .none
+
 end CborInternal
 
 export CborInternal
@@ -160,6 +345,10 @@ export CborInternal
     encodeBytestring
     encodeInt
     encodeData
+    -- decoding
+    decodeBytestring
+    decodeInt
+    decodeData
   )
 
 end PlutusCore.Cbor
