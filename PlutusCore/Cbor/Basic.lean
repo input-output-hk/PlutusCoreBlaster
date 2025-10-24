@@ -75,7 +75,7 @@ def splitToChunks (s : String) : List String :=
     apply String.drop_decreases_data_length <;> try assumption
     omega
 
-/-- Some sequences are encoded without a specified -/
+/-- Some sequences are encoded without a specified length (indefinite length encoding). -/
 -- Spec B.4. Heads for indefinite-length items.
 def encodeIndef (m : Nat) : Char := Char.ofNat (32 * m + 31)
 
@@ -222,7 +222,7 @@ def decodeBytes : Nat → List Char → Option (List Char × List Char)
       let (s'', t) ← decodeBytes p s'
       .some (s'', b :: t)
 
-/-- Decodes a definite length "block" (bytestring chunnk). -/
+/-- Decodes a definite length "block" (bytestring chunk). -/
 -- Spec B.5. D_block
 def decodeBlock (s : List Char) : Option (List Char × List Char) := do
   let (s', m, n) ← decodeHead s
@@ -230,7 +230,7 @@ def decodeBlock (s : List Char) : Option (List Char × List Char) := do
     then decodeBytes n s'
     else .none
 
-/-- Decodes an indefinite number blocks. This function can be parial as long as
+/-- Decodes an indefinite number of blocks. This function can be partial as long as
     it is not used in UPLC evaluation. -/
 -- Spec B.5. D_blocks
 partial def decodeBlocks : List Char → Option (List Char × List Char)
@@ -290,7 +290,7 @@ def decodeAlternative {α β : Type} (f : List Char → Option (List Char × α)
   | .none         => (λ (s', b) => (s', .inr b)) <$> g s
 
 /- Decodes a builtin data from input `s`. -/
--- SPec B.7. D_data
+-- Spec B.7. D_data
 partial def decodeData (s : String) : Option (String × Data) :=
     Prod.map String.mk id <$> decodeDataLoop s.data
   where
