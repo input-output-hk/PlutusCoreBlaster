@@ -26,7 +26,9 @@ instance : ToString ByteString where
 
 /-- Repr instance for ByteString -/
 instance : Repr ByteString where
-  reprPrec x _ := byteStringToString x
+  reprPrec x _ :=
+    let s := BitVec.toHex <$> UInt8.toBitVec <$> Char.toUInt8 <$> x.data.data
+    .text (List.foldl String.append "#" s)
 
 /-- String to ByteString coercion to mimick OverloadedString in Haskell -/
 instance : Coe String ByteString where
@@ -197,4 +199,3 @@ export PlutusCore.ByteStringInternal
   )
 
 end PlutusCore.ByteString
-
