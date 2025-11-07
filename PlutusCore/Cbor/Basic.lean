@@ -251,6 +251,31 @@ def decodeBytestring (s : String) : Option (String × String) :=
         then Prod.map String.mk String.mk <$> decodeBlocks s'
         else .none
 
+/-- Decodes a "large" block, which can have a length larger than 64 bytes. -/
+def decodeLargeBlock (s : List Char) : Option (List Char × List Char) := do
+  let (s', m, n) ← decodeHead s
+  if m = 2
+    then decodeBytes n s'
+    else .none
+
+/-- Decodes a sequence of "large" blocks. -/
+partial def decodeLargeBlocks : List Char → Option (List Char × List Char)
+  | '\xFF' :: s' => .some (s', [])
+  | s            => do
+      let (s' , t ) ← decodeLargeBlock s
+      let (s'', t') ← decodeLargeBlocks s'
+      .some (s'', t ++ t')
+
+/-- Decodes a "large" bytestring, which can have blocks larger than 64 bytes.. -/
+def decodeLargeBytestring (s : String) : Option (String × String) :=
+  match decodeLargeBlock s.data with
+  | .some (s', t) => .some (⟨s'⟩, ⟨t⟩)
+  | .none         => do
+      let (s', n) ← decodeIndef s.data
+      if n = 2
+        then Prod.map String.mk String.mk <$> decodeLargeBlocks s'
+        else .none
+
 /-- Reconstructs a natural number from its big endian representation. -/
 -- Spec B.6. stoi
 def stoi (s : String) : Nat :=
@@ -347,6 +372,7 @@ export CborInternal
     encodeData
     -- decoding
     decodeBytestring
+    decodeLargeBytestring
     decodeInt
     decodeData
   )
