@@ -42,17 +42,8 @@ def encodeHead (m n : Nat) : Option (List Char) :=
     else .none
   else .none
 
--- TODO: use Fin version after support is implemented in Solver.
--- def encodeHead (m : Fin 8) (n : Fin (256 ^ 8)) : Option (List Char) :=
---        if      n ≤                   23 then .some [Char.ofNat (32 * m + n)]
---   else if h₁ : n ≤                  255 then .some (Char.ofNat (32 * m + 24) :: e₁ (Fin.castLT n (Nat.lt_add_one_of_le h₁)))
---   else if h₂ : n ≤                65535 then .some (Char.ofNat (32 * m + 25) :: e₂ (Fin.castLT n (Nat.lt_add_one_of_le h₂)))
---   else if h₃ : n ≤           4294967295 then .some (Char.ofNat (32 * m + 26) :: e₄ (Fin.castLT n (Nat.lt_add_one_of_le h₃)))
---   else if h₄ : n ≤ 18446744073709551615 then .some (Char.ofNat (32 * m + 27) :: e₈ (Fin.castLT n (Nat.lt_add_one_of_le h₄)))
---   else False.elim (h₄ (Fin.succ_le_succ_iff.mp (Fin.isLt n))) -- absurd case
-
 /-- Helper theorem used in  the termination proof for `splitToChunks` -/
-theorem String.data_length_of_nonEmpty_pos (s : String) (h : s ≠ "") : 0 < List.length s.data :=  by
+theorem String.data_length_of_nonEmpty_pos (s : String) (h : s ≠ "") : 0 < List.length s.data := by
   obtain ⟨data⟩ := s
   induction data
   · contradiction
@@ -116,16 +107,16 @@ def itos (n : Nat) : String :=
 -- Spec B.6. ε_Z
 def encodeInt (n : Integer) : Option String :=
        if (                    0 ≤ n) && (n ≤  18446744073709551615) then String.mk <$> encodeHead 0 (Int.toNat n)
-  else if ( 18446744073709551616 ≤ n                               ) then do (String.mk (←encodeHead 6 2)) ++ (←encodeBytestring (n |> Int.toNat |> itos))
+  else if ( 18446744073709551616 ≤ n)                                then do (String.mk (←encodeHead 6 2)) ++ (←encodeBytestring (n |> Int.toNat |> itos))
   else if (-18446744073709551616 ≤ n) && (n ≤                    -1) then String.mk <$> encodeHead 1 ((-n - 1) |> Int.toNat)
-  else if (                               n ≤ -18446744073709551617) then do (String.mk (←encodeHead 6 3)) ++ (←encodeBytestring (-n - 1 |> Int.toNat |> itos))
+  else if                                (n ≤ -18446744073709551617) then do (String.mk (←encodeHead 6 3)) ++ (←encodeBytestring (-n - 1 |> Int.toNat |> itos))
   else .none
 
 /-- Encodes a ctag. -/
 -- Spec B.7. ε_ctag
 def encodeCtag (i : Integer) : Option String :=
   String.mk <$>
-         if (0 ≤ i) && (i ≤   6) then encodeHead 6 (121 + i        |> Int.toNat)
+         if (0 ≤ i) && (i ≤   6) then encodeHead 6 ( 121 + i       |> Int.toNat)
     else if (7 ≤ i) && (i ≤ 127) then encodeHead 6 (1280 + (i - 7) |> Int.toNat)
     else do (←encodeHead 6 102) ++ (←encodeHead 4 2) ++ ((←encodeInt i).data)
 
@@ -138,7 +129,7 @@ def encodeData : Data → Option String
       ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeData a))) "" fields)
       ++ "\xFF"
   | .Map mxs => do
-      String.mk (←encodeHead 5 (List.length mxs))
+      ((←encodeHead 5 (List.length mxs)) |> String.mk)
       ++ (←List.foldlM (λ s p => do .some (s ++ (←encodeData p.fst) ++ (←encodeData p.snd))) "" mxs)
   | .List xs => do
       (encodeIndef 4 |> String.singleton)
@@ -148,15 +139,15 @@ def encodeData : Data → Option String
   | .B bs => encodeBytestring bs.data
 
   decreasing_by
-    · have : sizeOf a < sizeOf fields := by apply List.sizeOf_lt_of_mem; assumption
+    · have : sizeOf a     < sizeOf fields := by apply List.sizeOf_lt_of_mem; assumption
       simp; omega
-    · have : sizeOf p.fst < sizeOf p   := by induction p; simp; omega
-      have : sizeOf p     < sizeOf mxs := by apply List.sizeOf_lt_of_mem; assumption
+    · have : sizeOf p.fst < sizeOf p      := by induction p; simp; omega
+      have : sizeOf p     < sizeOf mxs    := by apply List.sizeOf_lt_of_mem; assumption
       simp; omega
-    · have : sizeOf p.snd < sizeOf p   := by induction p; simp; omega
-      have : sizeOf p     < sizeOf mxs := by apply List.sizeOf_lt_of_mem; assumption
+    · have : sizeOf p.snd < sizeOf p      := by induction p; simp; omega
+      have : sizeOf p     < sizeOf mxs    := by apply List.sizeOf_lt_of_mem; assumption
       simp; omega
-    · have : sizeOf a < sizeOf xs := by apply List.sizeOf_lt_of_mem; assumption
+    · have : sizeOf a     < sizeOf xs     := by apply List.sizeOf_lt_of_mem; assumption
       simp; omega
 
 -- ==============
@@ -236,7 +227,7 @@ def decodeBlock (s : List Char) : Option (List Char × List Char) := do
 partial def decodeBlocks : List Char → Option (List Char × List Char)
   | '\xFF' :: s' => .some (s', [])
   | s            => do
-      let (s' , t ) ← decodeBlock s
+      let (s' , t ) ← decodeBlock  s
       let (s'', t') ← decodeBlocks s'
       .some (s'', t ++ t')
 
@@ -262,7 +253,7 @@ def decodeLargeBlock (s : List Char) : Option (List Char × List Char) := do
 partial def decodeLargeBlocks : List Char → Option (List Char × List Char)
   | '\xFF' :: s' => .some (s', [])
   | s            => do
-      let (s' , t ) ← decodeLargeBlock s
+      let (s' , t ) ← decodeLargeBlock  s
       let (s'', t') ← decodeLargeBlocks s'
       .some (s'', t ++ t')
 
@@ -288,9 +279,9 @@ def stoi (s : String) : Nat :=
 --  Spec B.6. D_Z
 def decodeInt (s : String) : Option (String × Integer) :=
   match decodeHead s.data with
-  | .some (s', 0, n) => .some (⟨s'⟩, (Int.ofNat n))
+  | .some (s', 0, n) => .some (⟨s'⟩,  (Int.ofNat n)    )
   | .some (s', 1, n) => .some (⟨s'⟩, -(Int.ofNat n) - 1)
-  | .some (s', 6, 2) => (λ (s'', b) => (s'', stoi b))                    <$> decodeBytestring ⟨s'⟩
+  | .some (s', 6, 2) => (λ (s'', b) => (s'',              stoi b      )) <$> decodeBytestring ⟨s'⟩
   | .some (s', 6, 3) => (λ (s'', b) => (s'', -(Int.ofNat (stoi b) - 1))) <$> decodeBytestring ⟨s'⟩
   | _                => .none
 
@@ -303,7 +294,7 @@ def decodeCtag (s : List Char) : Option (List Char × Integer) :=
       if m = 4 ∧ n = 2
         then Prod.map String.data id <$> decodeInt ⟨s''⟩
         else .none
-  | .some (s', 6, i) =>      if  121 ≤ i ∧ i ≤  127 then .some (s', i - 121)
+  | .some (s', 6, i) =>      if  121 ≤ i ∧ i ≤  127 then .some (s',  i -  121     )
                         else if 1280 ≤ i ∧ i ≤ 1400 then .some (s', (i - 1280) + 7)
                         else .none
   | _ => .none
@@ -321,7 +312,7 @@ partial def decodeData (s : String) : Option (String × Data) :=
   where
     decodeDataLoop (s : List Char) : Option (List Char × Data) :=
       match decodeAlternative decodeIndef decodeHead s with
-      | .some (_ , .inl 2)      => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
+      | .some (_ , .inl 2     ) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
       | .some (s', .inl 4     ) => Prod.map id          .List                <$> decodeListIndef s'
       | .some (_ , .inr (0, _))
       | .some (_ , .inr (1, _))
