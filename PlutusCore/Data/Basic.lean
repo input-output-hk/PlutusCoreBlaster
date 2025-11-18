@@ -1,7 +1,11 @@
+import Lean
+
 import PlutusCore.ByteString
 import PlutusCore.Integer
 
 namespace PlutusCore.Data
+
+open Lean (ToExpr)
 open PlutusCore.Integer PlutusCore.ByteString
 
 /-! ## Formalisation for PlutusCore Data representation and Builtin functions. -/
@@ -52,6 +56,7 @@ instance : ToString Data where
 instance : Repr Data where
   reprPrec x _ := dataStr x
 
+deriving instance ToExpr for Data
 
 mutual
   def eqData : Data → Data → Bool

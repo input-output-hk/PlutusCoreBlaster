@@ -1,6 +1,10 @@
+import Lean
+
 import PlutusCore.Integer
 
 namespace PlutusCore.ByteString
+
+open Lean (ToExpr)
 open PlutusCore.Integer
 
 /-! ## Formalisation for PlutusCore ByteString representation and builtin functions. -/
@@ -9,6 +13,7 @@ namespace PlutusCore.ByteStringInternal
 
 structure ByteString where
   data : String
+deriving ToExpr
 
 instance : Inhabited ByteString where
   default := { data := "" }
