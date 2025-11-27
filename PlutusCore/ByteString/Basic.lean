@@ -33,7 +33,7 @@ instance : ToString ByteString where
 instance : Repr ByteString where
   reprPrec x _ :=
     let s := BitVec.toHex <$> UInt8.toBitVec <$> Char.toUInt8 <$> x.data.data
-    .text (List.foldl String.append "#" s)
+    .text ("#" ++ String.join s)
 
 /-- String to ByteString coercion to mimick OverloadedString in Haskell -/
 instance : Coe String ByteString where
