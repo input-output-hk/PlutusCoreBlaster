@@ -9,6 +9,7 @@ import PlutusCore.Integer
 import PlutusCore.List
 import PlutusCore.Pair
 import PlutusCore.String
+import PlutusCore.ToExpr
 import PlutusCore.Trace
 import PlutusCore.Unit
 

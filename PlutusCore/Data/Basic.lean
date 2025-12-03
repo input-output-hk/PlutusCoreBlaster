@@ -1,11 +1,13 @@
 import Lean
+import Lean.Expr
 
 import PlutusCore.ByteString
 import PlutusCore.Integer
+import PlutusCore.ToExpr
 
 namespace PlutusCore.Data
 
-open Lean (ToExpr)
+open Lean (Expr mkApp2 ToExpr toExpr)
 open PlutusCore.Integer PlutusCore.ByteString
 
 /-! ## Formalisation for PlutusCore Data representation and Builtin functions. -/
@@ -56,7 +58,18 @@ instance : ToString Data where
 instance : Repr Data where
   reprPrec x _ := dataStr x
 
-deriving instance ToExpr for Data
+def dataPairsType := mkApp2 (.const ``Prod.mk [.zero, .zero]) (.const ``Data []) (.const ``Data [])
+
+partial def dataToExpr : Data → Expr
+  | .Constr i ds => mkApp2 (.const ``Data.Constr []) (toExpr i) (listToExpr (α := Data) (.const ``Data []) dataToExpr ds)
+  | .Map    ps   =>  .app  (.const ``Data.Map    []) (listToExpr (α := Data × Data) dataPairsType (pairToExpr (α := Data) dataToExpr) ps)
+  | .List   ds   =>  .app  (.const ``Data.List   []) (listToExpr (α := Data) (.const ``Data []) dataToExpr ds)
+  | .I      i    =>  .app  (.const ``Data.I      []) (toExpr i)
+  | .B      b    =>  .app  (.const ``Data.B      []) (toExpr b)
+
+instance : ToExpr Data where
+  toTypeExpr := .const ``Data []
+  toExpr     := dataToExpr
 
 mutual
   def eqData : Data → Data → Bool

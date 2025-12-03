@@ -13,7 +13,6 @@ namespace PlutusCore.ByteStringInternal
 
 structure ByteString where
   data : String
-deriving ToExpr
 
 instance : Inhabited ByteString where
   default := { data := "" }
@@ -34,6 +33,10 @@ instance : Repr ByteString where
   reprPrec x _ :=
     let s := BitVec.toHex <$> UInt8.toBitVec <$> Char.toUInt8 <$> x.data.data
     .text ("#" ++ String.join s)
+
+instance : ToExpr ByteString where
+  toTypeExpr := .const ``ByteString []
+  toExpr   b := .app (.const ``ByteString.mk []) (.lit (.strVal b.data))
 
 /-- String to ByteString coercion to mimick OverloadedString in Haskell -/
 instance : Coe String ByteString where

@@ -55,16 +55,18 @@ theorem String.drop_decreases_data_length (s : String) (n : Nat) (hs : s ≠ "")
     simp
     omega
 
-/-- Splitting strings to chunks as it is implemented in Plutus and stated in the spec. -/
--- Spec B.5. "Canonical 64-byte decomposition"
-def splitToChunks (s : String) : List String :=
-  if s = "" then []
-  else ⟨List.take 64 s.data⟩ :: splitToChunks ⟨List.drop 64 s.data⟩
+def splitToChunksLoop (acc : List String) (s : String) : List String :=
+  if s = "" then List.reverse acc
+            else splitToChunksLoop (⟨List.take 64 s.data⟩ :: acc) ⟨List.drop 64 s.data⟩
 
   termination_by (List.length s.data)
   decreasing_by
     apply String.drop_decreases_data_length <;> try assumption
     omega
+
+/-- Splitting strings to chunks as it is implemented in Plutus and stated in the spec. -/
+-- Spec B.5. "Canonical 64-byte decomposition"
+def splitToChunks := splitToChunksLoop []
 
 /-- Some sequences are encoded without a specified length (indefinite length encoding). -/
 -- Spec B.4. Heads for indefinite-length items.
@@ -204,14 +206,14 @@ def decodeIndef : List Char → Option (List Char × Nat)
         else .none
   | [] => .none
 
+def decodeBytesLoop (acc : List Char) : Nat → List Char → Option (List Char × List Char)
+  | .zero  , s       => .some (s, (List.reverse acc))
+  | .succ _, []      => .none
+  | .succ p, b :: s' => decodeBytesLoop (b :: acc) p s'
+
 /-- Decodes (consumes) the next `n` bytes from the input. -/
 -- Spec B.5. D_bytes
-def decodeBytes : Nat → List Char → Option (List Char × List Char)
-  | .zero  , s       => .some (s, [])
-  | .succ _, []      => .none
-  | .succ p, b :: s' => do
-      let (s'', t) ← decodeBytes p s'
-      .some (s'', b :: t)
+def decodeBytes := decodeBytesLoop []
 
 /-- Decodes a definite length "block" (bytestring chunk). -/
 -- Spec B.5. D_block
@@ -221,15 +223,16 @@ def decodeBlock (s : List Char) : Option (List Char × List Char) := do
     then decodeBytes n s'
     else .none
 
+partial def decodeBlocksLoop (acc : List Char) : List Char → Option (List Char × List Char)
+  | '\xFF' :: s' => .some (s', List.reverse acc)
+  | s            => do
+      let (s' , t ) ← decodeBlock s
+      decodeBlocksLoop ((List.reverse t) ++ acc) s'
+
 /-- Decodes an indefinite number of blocks. This function can be partial as long as
     it is not used in UPLC evaluation. -/
 -- Spec B.5. D_blocks
-partial def decodeBlocks : List Char → Option (List Char × List Char)
-  | '\xFF' :: s' => .some (s', [])
-  | s            => do
-      let (s' , t ) ← decodeBlock  s
-      let (s'', t') ← decodeBlocks s'
-      .some (s'', t ++ t')
+def decodeBlocks := decodeBlocksLoop []
 
 /-- Decodes a bytestring from the input `s`. -/
 -- Spec B.5. D_B*
@@ -249,15 +252,16 @@ def decodeLargeBlock (s : List Char) : Option (List Char × List Char) := do
     then decodeBytes n s'
     else .none
 
-/-- Decodes a sequence of "large" blocks. -/
-partial def decodeLargeBlocks : List Char → Option (List Char × List Char)
-  | '\xFF' :: s' => .some (s', [])
+partial def decodeLargeBlocksLoop (acc : List Char) : List Char → Option (List Char × List Char)
+  | '\xFF' :: s' => .some (s', List.reverse acc)
   | s            => do
-      let (s' , t ) ← decodeLargeBlock  s
-      let (s'', t') ← decodeLargeBlocks s'
-      .some (s'', t ++ t')
+      let (s' , t ) ← decodeLargeBlock s
+      decodeLargeBlocksLoop ((List.reverse t) ++ acc) s'
 
-/-- Decodes a "large" bytestring, which can have blocks larger than 64 bytes.. -/
+/-- Decodes a sequence of "large" blocks. -/
+def decodeLargeBlocks := decodeLargeBlocksLoop []
+
+/-- Decodes a "large" bytestring, which can have blocks larger than 64 bytes. -/
 def decodeLargeBytestring (s : String) : Option (String × String) :=
   match decodeLargeBlock s.data with
   | .some (s', t) => .some (⟨s'⟩, ⟨t⟩)
