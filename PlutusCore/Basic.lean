@@ -12,5 +12,6 @@ import PlutusCore.String
 import PlutusCore.ToExpr
 import PlutusCore.Trace
 import PlutusCore.Unit
+import PlutusCore.UPLC
 
 /-! ## Header file regrouping the PlutusCore formalization. -/
