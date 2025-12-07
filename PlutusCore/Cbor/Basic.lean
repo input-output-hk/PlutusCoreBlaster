@@ -223,16 +223,231 @@ def decodeBlock (s : List Char) : Option (List Char × List Char) := do
     then decodeBytes n s'
     else .none
 
-partial def decodeBlocksLoop (acc : List Char) : List Char → Option (List Char × List Char)
-  | '\xFF' :: s' => .some (s', List.reverse acc)
-  | s            => do
-      let (s' , t ) ← decodeBlock s
-      decodeBlocksLoop ((List.reverse t) ++ acc) s'
+-- ==========================
+-- = Termination Helpers    =
+-- ==========================
 
-/-- Decodes an indefinite number of blocks. This function can be partial as long as
-    it is not used in UPLC evaluation. -/
+/-- Helper theorem: decodeHead always consumes at least one byte on success -/
+theorem decodeHead_consumes (s : List Char) :
+  ∀ s' d k, decodeHead s = some (s', d, k) → s'.length < s.length := by
+  intro s' d k h
+  unfold decodeHead at h
+  cases s with
+  | nil => simp at h
+  | cons n' t =>
+    simp at h
+    split at h
+    · -- Case: n % 32 = 24, uses d₁
+      simp [Option.map_eq_some_iff, d₁] at h
+      obtain ⟨b, heq⟩ := h
+      cases t with
+      | nil => simp at heq
+      | cons c t' =>
+        simp at heq
+        obtain ⟨h1, h2, h3, h4, h5⟩ := heq
+        obtain ⟨h2a, h2b⟩ := h2
+        rw [← h3, ← h2a]
+        simp; omega
+    · -- Case: n % 32 = 25, uses d₂
+      simp [Option.map_eq_some_iff, d₂] at h
+      obtain ⟨b, heq⟩ := h
+      cases t with
+      | nil => simp at heq
+      | cons c1 t1 =>
+        cases t1 with
+        | nil => simp at heq
+        | cons c0 t' =>
+          simp at heq
+          obtain ⟨h1, h2, h3, h4, h5⟩ := heq
+          obtain ⟨h2a, h2b⟩ := h2
+          rw [← h3, ← h2a]
+          simp; omega
+    · -- Case: n % 32 = 26, uses d₄
+      simp [Option.map_eq_some_iff, d₄] at h
+      obtain ⟨b, heq⟩ := h
+      cases t with
+      | nil => simp at heq
+      | cons c3 t3 =>
+        cases t3 with
+        | nil => simp at heq
+        | cons c2 t2 =>
+          cases t2 with
+          | nil => simp at heq
+          | cons c1 t1 =>
+            cases t1 with
+            | nil => simp at heq
+            | cons c0 t' =>
+              simp at heq
+              obtain ⟨h1, h2, h3, h4, h5⟩ := heq
+              obtain ⟨h2a, h2b⟩ := h2
+              rw [← h3, ← h2a]
+              simp; omega
+    · -- Case: n % 32 = 27, uses d₈
+      simp [Option.map_eq_some_iff, d₈] at h
+      obtain ⟨b, heq⟩ := h
+      cases t with
+      | nil => simp at heq
+      | cons c7 t7 =>
+        cases t7 with
+        | nil => simp at heq
+        | cons c6 t6 =>
+          cases t6 with
+          | nil => simp at heq
+          | cons c5 t5 =>
+            cases t5 with
+            | nil => simp at heq
+            | cons c4 t4 =>
+              cases t4 with
+              | nil => simp at heq
+              | cons c3 t3 =>
+                cases t3 with
+                | nil => simp at heq
+                | cons c2 t2 =>
+                  cases t2 with
+                  | nil => simp at heq
+                  | cons c1 t1 =>
+                    cases t1 with
+                    | nil => simp at heq
+                    | cons c0 t' =>
+                      simp at heq
+                      obtain ⟨h1, h2, h3, h4, h5⟩ := heq
+                      obtain ⟨h2a, h2b⟩ := h2
+                      rw [← h3, ← h2a]
+                      simp; omega
+    · -- Case: m ≤ 23
+      split at h
+      · simp at h
+        obtain ⟨h1, h2, h3⟩ := h
+        rw [← h1]
+        simp
+      · simp at h
+
+/-- Helper theorem: decodeBytesLoop consumes exactly n bytes regardless of accumulator -/
+theorem decodeBytesLoop_consumes : ∀ (acc : List Char) (n : Nat) (s : List Char) (s' t : List Char),
+  decodeBytesLoop acc n s = some (s', t) → s'.length + n = s.length := by
+  intro acc n s s' t h
+  revert acc s s' t
+  induction n with
+  | zero =>
+    intro acc s s' t h
+    unfold decodeBytesLoop at h
+    simp at h
+    obtain ⟨h1, _⟩ := h
+    rw [← h1]; simp
+  | succ p ih =>
+    intro acc s s' t h
+    cases s with
+    | nil => unfold decodeBytesLoop at h; simp at h
+    | cons b s'' =>
+      unfold decodeBytesLoop at h
+      have ih_result := ih (b :: acc) s'' s' t h
+      simp
+      calc s'.length + (p + 1)
+        = s'.length + p + 1 := by omega
+        _ = s''.length + 1 := by rw [ih_result]
+
+/-- Helper theorem: decodeBytes consumes exactly n bytes on success -/
+theorem decodeBytes_consumes (n : Nat) (s : List Char) :
+  ∀ s' t, decodeBytes n s = some (s', t) → s'.length + n = s.length := by
+  intro s' t h
+  unfold decodeBytes at h
+  exact decodeBytesLoop_consumes [] n s s' t h
+
+/-- Helper theorem: decodeBlock consumes at least one byte on success -/
+theorem decodeBlock_consumes (s : List Char) :
+  ∀ s' t, decodeBlock s = some (s', t) → s'.length < s.length := by
+  intro s' t h
+  unfold decodeBlock at h
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
+  obtain ⟨⟨s'', m, n⟩, hdh, h⟩ := h
+  split at h
+  · have h_head := decodeHead_consumes s s'' m n hdh
+    have h_bytes := decodeBytes_consumes n s'' s' t h
+    omega
+  · simp at h
+
+/-- Helper theorem: decodeIndef consumes exactly one byte on success -/
+theorem decodeIndef_consumes (s : List Char) :
+  ∀ s' n, decodeIndef s = some (s', n) → s'.length + 1 = s.length := by
+  intro s' n h
+  unfold decodeIndef at h
+  cases s with
+  | nil => simp at h
+  | cons head tail =>
+    split at h
+    · rename_i b t heq
+      simp at h
+      obtain ⟨h1, h2⟩ := h
+      obtain ⟨h2a, h2b⟩ := h2
+      subst h2a
+      cases heq
+      simp
+    · simp at h
+
+def decodeBlocksLoop (acc : List Char) : (s : List Char) → Option (List Char × List Char)
+  | '\xFF' :: s' => .some (s', List.reverse acc)
+  | s => match h : decodeBlock s with
+      | some (s', t) => decodeBlocksLoop ((List.reverse t) ++ acc) s'
+      | none => none
+termination_by s => s.length
+decreasing_by
+  simp_wf
+  have : s'.length < s.length := decodeBlock_consumes s s' t h
+  exact this
+
+/-- Decodes an indefinite number of blocks. -/
 -- Spec B.5. D_blocks
 def decodeBlocks := decodeBlocksLoop []
+
+/-- Helper theorem: decodeBlocksLoop consumes bytes when recursing. -/
+theorem decodeBlocksLoop_consumes :
+  ∀ (n : Nat) (acc s s' : List Char) (t : List Char),
+    s.length ≤ n → decodeBlocksLoop acc s = some (s', t) → s'.length < s.length := by
+  intro n
+  induction n with
+  | zero =>
+    intro acc s s' t hs h
+    cases s with
+    | nil =>
+      unfold decodeBlocksLoop at h
+      split at h <;> contradiction
+    | cons _ _ => simp at hs
+  | succ n' ih =>
+    intro acc s s' t hs h
+    match s with
+    | [] =>
+      unfold decodeBlocksLoop at h
+      split at h <;> contradiction
+    | c :: rest =>
+      unfold decodeBlocksLoop at h
+      split at h
+      · -- Case: c = '\xFF'
+        rename_i s'' heq
+        simp at h
+        obtain ⟨h1, h2⟩ := h
+        subst h1
+        injection heq with heq_c heq_rest
+        subst heq_rest
+        simp
+      · -- Case: c ≠ '\xFF', must use decodeBlock
+        split at h
+        · -- decodeBlock succeeds and recurses
+          rename_i s'' t' hdb
+          have h_block : s''.length < (c :: rest).length := decodeBlock_consumes (c :: rest) s'' t' hdb
+          have hs'' : s''.length ≤ n' := by
+            have : (c :: rest).length = rest.length + 1 := by simp
+            rw [this] at hs
+            omega
+          have h_rec : s'.length < s''.length := ih ((List.reverse t') ++ acc) s'' s' t hs'' h
+          omega
+        · -- decodeBlock fails
+          contradiction
+
+/-- Helper theorem: decodeBlocks consumes at least one byte on success. -/
+theorem decodeBlocks_consumes : ∀ s s' t, decodeBlocks s = some (s', t) → s'.length < s.length := by
+  intro s s' t h
+  unfold decodeBlocks at h
+  exact decodeBlocksLoop_consumes s.length [] s s' t (Nat.le_refl _) h
 
 /-- Decodes a bytestring from the input `s`. -/
 -- Spec B.5. D_B*
@@ -245,6 +460,35 @@ def decodeBytestring (s : String) : Option (String × String) :=
         then Prod.map String.mk String.mk <$> decodeBlocks s'
         else .none
 
+/-- Helper theorem: decodeBytestring consumes at least one byte on success -/
+theorem decodeBytestring_consumes (s : String) :
+  ∀ s' t, decodeBytestring s = some (s', t) → s'.data.length < s.data.length := by
+  intro s' t h
+  unfold decodeBytestring at h
+  split at h
+  · -- Case: decodeBlock succeeds
+    rename_i s'' t' hdb
+    simp at h
+    obtain ⟨h1, h2⟩ := h
+    rw [← h1]
+    simp
+    exact decodeBlock_consumes s.data s'' t' hdb
+  · -- Case: decodeBlock fails, try decodeIndef + decodeBlocks
+    simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
+    obtain ⟨⟨s'', n⟩, hdi, h_rest⟩ := h
+    split at h_rest
+    · cases h_blocks : decodeBlocks s'' with
+      | none => simp [h_blocks] at h_rest
+      | some res =>
+        simp [Prod.map, h_blocks] at h_rest
+        obtain ⟨h_eq1, h_eq2⟩ := h_rest
+        rw [← h_eq1]
+        simp
+        have h1 := decodeIndef_consumes s.data s'' n hdi
+        have h2 := decodeBlocks_consumes s'' res.1 res.2 h_blocks
+        omega
+    · simp at h_rest
+
 /-- Decodes a "large" block, which can have a length larger than 64 bytes. -/
 def decodeLargeBlock (s : List Char) : Option (List Char × List Char) := do
   let (s', m, n) ← decodeHead s
@@ -252,11 +496,29 @@ def decodeLargeBlock (s : List Char) : Option (List Char × List Char) := do
     then decodeBytes n s'
     else .none
 
-partial def decodeLargeBlocksLoop (acc : List Char) : List Char → Option (List Char × List Char)
+/-- Helper theorem: decodeLargeBlock consumes at least one byte on success -/
+theorem decodeLargeBlock_consumes (s : List Char) :
+  ∀ s' t, decodeLargeBlock s = some (s', t) → s'.length < s.length := by
+  intro s' t h
+  unfold decodeLargeBlock at h
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
+  obtain ⟨⟨s'', m, n⟩, hdh, h⟩ := h
+  split at h
+  · have h_head := decodeHead_consumes s s'' m n hdh
+    have h_bytes := decodeBytes_consumes n s'' s' t h
+    omega
+  · simp at h
+
+def decodeLargeBlocksLoop (acc : List Char) : List Char → Option (List Char × List Char)
   | '\xFF' :: s' => .some (s', List.reverse acc)
-  | s            => do
-      let (s' , t ) ← decodeLargeBlock s
-      decodeLargeBlocksLoop ((List.reverse t) ++ acc) s'
+  | s            => match h : decodeLargeBlock s with
+      | some (s', t) => decodeLargeBlocksLoop ((List.reverse t) ++ acc) s'
+      | none => none
+termination_by s => s.length
+decreasing_by
+  simp_wf
+  have := decodeLargeBlock_consumes s s' t h
+  omega
 
 /-- Decodes a sequence of "large" blocks. -/
 def decodeLargeBlocks := decodeLargeBlocksLoop []
@@ -289,6 +551,55 @@ def decodeInt (s : String) : Option (String × Integer) :=
   | .some (s', 6, 3) => (λ (s'', b) => (s'', -(Int.ofNat (stoi b) - 1))) <$> decodeBytestring ⟨s'⟩
   | _                => .none
 
+/-- Helper theorem: decodeInt consumes at least one byte on success -/
+theorem decodeInt_consumes (s : String) :
+  ∀ s' i, decodeInt s = some (s', i) → s'.data.length < s.data.length := by
+  intro s' i h
+  unfold decodeInt at h
+  split at h
+  · -- Case: decodeHead s.data = some (k, 0, n)
+    rename_i k n hdh
+    simp at h
+    obtain ⟨h1, h2⟩ := h
+    rw [← h1]
+    simp
+    exact decodeHead_consumes s.data k 0 n hdh
+  · -- Case: decodeHead s.data = some (k, 1, n)
+    rename_i k n hdh
+    simp at h
+    obtain ⟨h1, h2⟩ := h
+    rw [← h1]
+    simp
+    exact decodeHead_consumes s.data k 1 n hdh
+  · -- Case: decodeHead s.data = some (k, 6, 2), calls decodeBytestring
+    rename_i k hdh
+    cases h_db : decodeBytestring ⟨k⟩ with
+    | none => simp [h_db] at h
+    | some res =>
+      simp [h_db] at h
+      obtain ⟨h1, h2⟩ := h
+      have h_head := decodeHead_consumes s.data k 6 2 hdh
+      have h_bs := decodeBytestring_consumes ⟨k⟩ res.1 res.2 h_db
+      simp at h_bs
+      rw [← h1]
+      simp
+      omega
+  · -- Case: decodeHead s.data = some (k, 6, 3), calls decodeBytestring
+    rename_i k hdh
+    cases h_db : decodeBytestring ⟨k⟩ with
+    | none => simp [h_db] at h
+    | some res =>
+      simp [h_db] at h
+      obtain ⟨h1, h2⟩ := h
+      have h_head := decodeHead_consumes s.data k 6 3 hdh
+      have h_bs := decodeBytestring_consumes ⟨k⟩ res.1 res.2 h_db
+      simp at h_bs
+      rw [← h1]
+      simp
+      omega
+  · -- Case: decodeHead fails or other cases
+    simp at h
+
 /- Decodes a ctag from input `s`. -/
 -- Spec B.7. D_ctag
 def decodeCtag (s : List Char) : Option (List Char × Integer) :=
@@ -309,54 +620,134 @@ def decodeAlternative {α β : Type} (f : List Char → Option (List Char × α)
   | .some (s', a) => .some (s', .inl a)
   | .none         => (λ (s', b) => (s', .inr b)) <$> g s
 
+/-- Helper theorem: decodeAlternative consumes at least one byte on success -/
+theorem decodeAlternative_indef_head_consumes (s : List Char) :
+  ∀ s' r, decodeAlternative decodeIndef decodeHead s = some (s', r) → s'.length < s.length := by
+  intro s' r h
+  unfold decodeAlternative at h
+  split at h
+  · rename_i s'' n hdi
+    simp at h
+    obtain ⟨h1, h2⟩ := h
+    rw [← h1]
+    have := decodeIndef_consumes s s'' n hdi
+    omega
+  · simp [Option.map_eq_some_iff] at h
+    obtain ⟨b, hdh, hb, heq_head, heq_pair⟩ := h
+    obtain ⟨heq_s, heq_r⟩ := heq_pair
+    rw [← heq_s]
+    exact decodeHead_consumes s b hdh hb heq_head
+
+/-- Helper theorem: decodeCtag consumes at least one byte on success -/
+theorem decodeCtag_consumes (s : List Char) :
+  ∀ s' i, decodeCtag s = some (s', i) → s'.length < s.length := by
+  intro s' i h
+  unfold decodeCtag at h
+  split at h
+  · -- Case: decodeHead s = some (k, 6, 102)
+    rename_i k hdh
+    simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
+    obtain ⟨⟨s''', m, n⟩, hdh2, h_rest⟩ := h
+    split at h_rest
+    · -- decodeInt succeeds (split confirms m = 4 and n = 2)
+      rename_i heq_mn
+      cases h_int : decodeInt ⟨s'''⟩ with
+      | none => simp [h_int] at h_rest
+      | some res =>
+        simp [h_int, Prod.map] at h_rest
+        obtain ⟨h_eq_s', h_eq_i⟩ := h_rest
+        have h_head1 := decodeHead_consumes s k 6 102 hdh
+        -- Use heq_mn to show m = 4 and n = 2
+        have ⟨hm, hn⟩ : m = 4 ∧ n = 2 := heq_mn
+        subst hm hn
+        have h_head2 := decodeHead_consumes k s''' 4 2 hdh2
+        have h_int_cons := decodeInt_consumes ⟨s'''⟩ res.1 res.2 h_int
+        simp at h_int_cons
+        rw [← h_eq_s']
+        simp
+        omega
+    · simp at h_rest
+  · -- Case: decodeHead s = some (s'', 6, i_val) with i_val ≠ 102
+    rename_i s'' i_val hne hdh
+    split at h
+    · simp at h
+      obtain ⟨h1, h2⟩ := h
+      rw [← h1]
+      exact decodeHead_consumes s s'' 6 i_val hdh
+    · split at h
+      · simp at h
+        obtain ⟨h1, h2⟩ := h
+        rw [← h1]
+        exact decodeHead_consumes s s'' 6 i_val hdh
+      · simp at h
+  · -- Case: decodeHead fails or doesn't match pattern
+    simp at h
+
+-- Mutually recursive functions for decoding Data. These are defined at the top level
+-- to allow explicit signatures and mutual termination proofs.
+-- Note: These functions use `partial` because the mutual recursion termination proof
+-- requires lemmas about byte consumption that create circular dependencies.
+mutual
+  -- Main decoder loop for Data values
+  partial def decodeDataLoop (s : List Char) : Option (List Char × Data) :=
+    match decodeAlternative decodeIndef decodeHead s with
+    | .some (_ , .inl 2     ) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
+    | .some (s', .inl 4     ) => Prod.map id          .List                <$> decodeListIndef s'
+    | .some (_ , .inr (0, _))
+    | .some (_ , .inr (1, _))
+    | .some (_ , .inr (6, 2))
+    | .some (_ , .inr (6, 3)) => Prod.map String.data .I                   <$> decodeInt ⟨s⟩
+    | .some (_ , .inr (2, _)) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
+    | .some (s', .inr (4, n)) => Prod.map id          .List                <$> decodeList n s'
+    | .some (s', .inr (5, n)) => Prod.map id          .Map                 <$> decodePairList n s'
+    | .some (_ , .inr (6, _)) =>                                               decodeConstr s
+    | _ => .none
+
+  -- Decode a fixed-length list of Data values
+  partial def decodeList : Nat → List Char → Option (List Char × List Data)
+    | .zero  , s => .some (s, [])
+    | .succ p, s => match decodeDataLoop s with
+        | some (s', d) => match decodeList p s' with
+            | some (s'', l) => some (s'', d :: l)
+            | none => none
+        | none => none
+
+  -- Decode an indefinite-length list of Data values
+  partial def decodeListIndef : List Char → Option (List Char × List Data)
+    | '\xFF' :: s' => .some (s', [])
+    | s            => match decodeDataLoop s with
+        | some (s', d) => match decodeListIndef s' with
+            | some (s'', l) => some (s'', d :: l)
+            | none => none
+        | none => none
+
+  -- Decode a fixed-length list of Data pairs (for Map)
+  partial def decodePairList : Nat → List Char → Option (List Char × List (Data × Data))
+    | .zero  , s => .some (s, [])
+    | .succ p, s => match decodeDataLoop s with
+        | some (s', k) => match decodeDataLoop s' with
+            | some (s'', d) => match decodePairList p s'' with
+                | some (s''', l) => some (s''', (k, d) :: l)
+                | none => none
+            | none => none
+        | none => none
+
+  -- Decode a constructor (Constr tag + list of Data values)
+  partial def decodeConstr (s : List Char) : Option (List Char × Data) :=
+    match decodeCtag s with
+    | some (s', i) => match decodeAlternative decodeIndef decodeHead s' with
+        | some (s'', r) => match r with
+            | .inl 4      => Prod.map id (.Constr i) <$> decodeListIndef s''
+            | .inr (4, n) => Prod.map id (.Constr i) <$> decodeList n s''
+            | _           => .none
+        | none => none
+    | none => none
+end
+
 /- Decodes a builtin data from input `s`. -/
 -- Spec B.7. D_data
-partial def decodeData (s : String) : Option (String × Data) :=
-    Prod.map String.mk id <$> decodeDataLoop s.data
-  where
-    decodeDataLoop (s : List Char) : Option (List Char × Data) :=
-      match decodeAlternative decodeIndef decodeHead s with
-      | .some (_ , .inl 2     ) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
-      | .some (s', .inl 4     ) => Prod.map id          .List                <$> decodeListIndef s'
-      | .some (_ , .inr (0, _))
-      | .some (_ , .inr (1, _))
-      | .some (_ , .inr (6, 2))
-      | .some (_ , .inr (6, 3)) => Prod.map String.data .I                   <$> decodeInt ⟨s⟩
-      | .some (_ , .inr (2, _)) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
-      | .some (s', .inr (4, n)) => Prod.map id          .List                <$> decodeList n s'
-      | .some (s', .inr (5, n)) => Prod.map id          .Map                 <$> decodePairList n s'
-      | .some (_ , .inr (6, _)) =>                                               decodeConstr s
-      | _ => .none
-
-    decodeList : Nat → List Char → Option (List Char × List Data)
-      | .zero  , s => .some (s, [])
-      | .succ p, s => do
-          let (s' , d) ← decodeDataLoop s
-          let (s'', l) ← decodeList p s'
-          .some (s'', d :: l)
-
-    decodeListIndef : List Char → Option (List Char × List Data)
-      | '\xFF' :: s' => .some (s', [])
-      | s            => do
-          let (s' , d) ← decodeDataLoop s
-          let (s'', l) ← decodeListIndef s'
-          .some (s'', d :: l)
-
-    decodePairList : Nat → List Char → Option (List Char × List (Data × Data))
-      | .zero  , s => .some (s, [])
-      | .succ p, s => do
-          let (s'  , k) ← decodeDataLoop s
-          let (s'' , d) ← decodeDataLoop s'
-          let (s''', l) ← decodePairList p s''
-          .some (s''', (k, d) :: l)
-
-    decodeConstr (s : List Char) : Option (List Char × Data) := do
-      let (s' , i) ← decodeCtag s
-      let (s'', r) ← decodeAlternative decodeIndef decodeHead s'
-      match r with
-      | .inl 4      => Prod.map id (.Constr i) <$> decodeListIndef s''
-      | .inr (4, n) => Prod.map id (.Constr i) <$> decodeList n s''
-      | _           => .none
+def decodeData (s : String) : Option (String × Data) :=
+  Prod.map String.mk id <$> decodeDataLoop s.data
 
 end CborInternal
 
