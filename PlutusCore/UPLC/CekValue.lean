@@ -8,16 +8,16 @@ open PlutusCore.UPLC.Builtins
 
 mutual
   inductive CekValue
-  | VCon     : Const                                              → CekValue
-  | VDelay   : Term       → Environment                          → CekValue
-  | VLam     : String     → Term          → Environment         → CekValue
-  | VConstr  : Nat        → List CekValue                        → CekValue
+  | VCon     : Const → CekValue
+  | VDelay   : Term → Environment → CekValue
+  | VLam     : String → Term → Environment → CekValue
+  | VConstr  : Nat → List CekValue → CekValue
   | VBuiltin : BuiltinFun → List CekValue → ExpectedBuiltinArgs → CekValue
   deriving Repr
 
   inductive Environment
   | NonEmptyEvironment : Environment → String → CekValue → Environment
-  | EmptyEnvironment   :                                      Environment
+  | EmptyEnvironment   : Environment
   deriving Repr
 end
 
