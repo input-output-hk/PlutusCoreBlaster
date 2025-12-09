@@ -153,8 +153,8 @@ partial def termToExpr : PlutusCore.UPLC.Term.Term → Expr
   | .Apply   f x => mkApp2 (.const ``Term.Apply   []) (termToExpr f) (termToExpr x)
   | .Delay   t   =>  .app  (.const ``Term.Delay   []) (termToExpr t)
   | .Force   t   =>  .app  (.const ``Term.Force   []) (termToExpr t)
-  | .Constr  i f => mkApp2 (.const ``Term.Constr  []) (toExpr i)     (listToExpr (α := UPLC.Term.Term) (.const ``UPLC.Term.Term []) termToExpr f)
-  | .Case    t c => mkApp2 (.const ``Term.Case    []) (termToExpr t) (listToExpr (α := UPLC.Term.Term) (.const ``UPLC.Term.Term []) termToExpr c)
+  | .Constr  i f => mkApp2 (.const ``Term.Constr  []) (toExpr i)     (listToExpr (α := PlutusCore.UPLC.Term.Term) (.const ``Term.Term []) termToExpr f)
+  | .Case    t c => mkApp2 (.const ``Term.Case    []) (termToExpr t) (listToExpr (α := PlutusCore.UPLC.Term.Term) (.const ``Term.Term []) termToExpr c)
   | .Error       =>         .const ``Term.Error   []
 
 instance : ToExpr PlutusCore.UPLC.Term.Term where
