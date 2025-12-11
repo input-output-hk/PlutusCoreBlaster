@@ -130,17 +130,28 @@ syntax (name := flatEncodedScriptFromHexMacro) "flatEncodedScriptFromHexM" str :
 @[term_elab flatEncodedScriptFromHexMacro]
 def elabFlatEncodedScriptFromHexM : TermElab := fromStringTermElaborator flatEncodedScriptFromHex?
 
-/-- Syntax for importing flat UPLC files -/
-syntax (name := import_flat_uplc) "#import_flat_uplc" str ident : command
+/--
+Imports a UPLC program from a file at compile time.
 
-/-- Elaboration for the #import_flat_uplc command -/
-@[command_elab import_flat_uplc]
-def importFlatUplcImp : CommandElab := fun stx => do
+Syntax: `#import_uplc <format> <filepath> <identifier>`
+
+Supported formats: `textual` (stub), `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
+
+Example:
+```lean4
+#import_uplc flat "scripts/validator.flat" myValidator
+```
+-/
+syntax (name := import_uplc) "#import_uplc" ident str ident : command
+
+/-- Elaboration for the #import_uplc command -/
+@[command_elab import_uplc]
+def importUplcImp : CommandElab := fun stx => do
   let decl ← withoutModifyingEnv $ runTermElabM fun _ => do
     let progExpr ← parseUplcFile stx
     let t        ← inferType progExpr
     return Declaration.defnDecl {
-             name        := ← validVariableName stx[2],
+             name        := ← validVariableName stx[3],
              levelParams := [],
              type        := t,
              value       := progExpr,
@@ -154,14 +165,57 @@ def importFlatUplcImp : CommandElab := fun stx => do
   validVariableName (stx : Syntax) : TermElabM Name := do
     return stx.getId
 
+  /-- Extracts the format identifier from syntax -/
+  getFormat (stx : Syntax) : TermElabM Name := do
+    return stx.getId
+
   /-- Extracts a filename string from syntax -/
   validFilename (f : Syntax) : TermElabM String := do
     let some s := f.isStrLit? | throwErrorAt f m!"string literal expected for filename"
     return s
 
-  /-- Parses a UPLC file and returns the resulting expression -/
-  parseUplcFile (stx : Syntax) : TermElabM Expr := do
-    let filename ← validFilename stx[1]
+  /-- Tries to decode content with all formats and returns the first one that succeeds -/
+  findWorkingFormat (content : String) : Option Name :=
+    -- Try flat
+    if (decodeProgramFromByteString content).isSome then
+      some `flat
+    -- Try flat_hex
+    else if (flatEncodedScriptFromHex? content).isOk then
+      some `flat_hex
+    -- Try single_cbor_hex
+    else if (singleCborEncodedScriptFromHex? content).isOk then
+      some `single_cbor_hex
+    -- Try double_cbor_hex
+    else if (doubleCborEncodedScriptFromHex? content).isOk then
+      some `double_cbor_hex
+    else
+      none
+
+  /-- Formats a list of format names as a suggestion string -/
+  formatSuggestions (formats : List Name) : String :=
+    let formatName (n : Name) : String := n.toString (escape := false)
+    match formats with
+    | []     => ""
+    | [f]    => s!"Did you mean '{formatName f}'?"
+    | [f, g] => s!"Did you mean '{formatName f}' or '{formatName g}'?"
+    | _      => s!"Did you mean one of: {", ".intercalate (formats.map formatName)}?"
+
+  /-- Creates an error message with format suggestions for decoding failures -/
+  decodingErrorWithSuggestion (content : String) (excludeFormat : Name) (filename : String) (errorMsg? : Option String := none) : String :=
+    let suggestion := match findWorkingFormat content with
+      | some fmt => if fmt != excludeFormat then formatSuggestions [fmt] else ""
+      | none => ""
+    let baseMsg := match errorMsg? with
+      | some msg => s!"Decoding error in '{filename}': {msg}"
+      | none => s!"Decoding error in '{filename}'"
+    if suggestion.isEmpty then baseMsg else s!"{baseMsg}. {suggestion}"
+
+  /-- Parses a textual UPLC file and returns the resulting expression (STUB) -/
+  parseTextualUplc (filename : String) : TermElabM Expr := do
+    throwError s!"Textual UPLC parser not yet implemented for '{filename}'"
+
+  /-- Parses a flat-encoded UPLC file and returns the resulting expression -/
+  parseFlatUplc (filename : String) : TermElabM Expr := do
     -- Read file content
     let content ← liftM $ do
       let path := System.FilePath.mk filename
@@ -171,7 +225,55 @@ def importFlatUplcImp : CommandElab := fun stx => do
         logInfo s!"Successfully decoded '{filename}'"
         return (toExpr p)
     | .none =>
-        throwError s!"Decoding error in '{filename}'"
+        throwError (decodingErrorWithSuggestion content `flat filename)
+
+  /-- Parses a flat hex-encoded UPLC file and returns the resulting expression -/
+  parseFlatHexUplc (filename : String) : TermElabM Expr := do
+    let content ← liftM $ do
+      let path := System.FilePath.mk filename
+      IO.FS.readFile path
+    match flatEncodedScriptFromHex? content with
+    | .ok p =>
+        logInfo s!"Successfully decoded flat hex '{filename}'"
+        return (toExpr p)
+    | .error msg =>
+        throwError (decodingErrorWithSuggestion content `flat_hex filename (some msg))
+
+  /-- Parses a single CBOR hex-encoded UPLC file and returns the resulting expression -/
+  parseSingleCborHexUplc (filename : String) : TermElabM Expr := do
+    let content ← liftM $ do
+      let path := System.FilePath.mk filename
+      IO.FS.readFile path
+    match singleCborEncodedScriptFromHex? content with
+    | .ok p =>
+        logInfo s!"Successfully decoded single CBOR hex '{filename}'"
+        return (toExpr p)
+    | .error msg =>
+        throwError (decodingErrorWithSuggestion content `single_cbor_hex filename (some msg))
+
+  /-- Parses a double CBOR hex-encoded UPLC file and returns the resulting expression -/
+  parseDoubleCborHexUplc (filename : String) : TermElabM Expr := do
+    let content ← liftM $ do
+      let path := System.FilePath.mk filename
+      IO.FS.readFile path
+    match doubleCborEncodedScriptFromHex? content with
+    | .ok p =>
+        logInfo s!"Successfully decoded double CBOR hex '{filename}'"
+        return (toExpr p)
+    | .error msg =>
+        throwError (decodingErrorWithSuggestion content `double_cbor_hex filename (some msg))
+
+  /-- Parses a UPLC file and returns the resulting expression based on format -/
+  parseUplcFile (stx : Syntax) : TermElabM Expr := do
+    let format   ← getFormat stx[1]
+    let filename ← validFilename stx[2]
+    match format with
+    | `textual         => parseTextualUplc filename
+    | `flat            => parseFlatUplc filename
+    | `flat_hex        => parseFlatHexUplc filename
+    | `single_cbor_hex => parseSingleCborHexUplc filename
+    | `double_cbor_hex => parseDoubleCborHexUplc filename
+    | _                => throwErrorAt stx[1] m!"unsupported format '{format}', expected 'textual', 'flat', 'flat_hex', 'single_cbor_hex', or 'double_cbor_hex'"
 
 
 end Internal
