@@ -133,16 +133,16 @@ def elabFlatEncodedScriptFromHexM : TermElab := fromStringTermElaborator flatEnc
 /--
 Imports a UPLC program from a file at compile time.
 
-Syntax: `#import_uplc <format> <filepath> <identifier>`
+Syntax: `#import_uplc <identifier> <format> <filepath>`
 
 Supported formats: `textual` (stub), `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
 
 Example:
 ```lean4
-#import_uplc flat "scripts/validator.flat" myValidator
+#import_uplc myValidator flat "scripts/validator.flat"
 ```
 -/
-syntax (name := import_uplc) "#import_uplc" ident str ident : command
+syntax (name := import_uplc) "#import_uplc" ident ident str : command
 
 /-- Elaboration for the #import_uplc command -/
 @[command_elab import_uplc]
@@ -151,7 +151,7 @@ def importUplcImp : CommandElab := fun stx => do
     let progExpr ← parseUplcFile stx
     let t        ← inferType progExpr
     return Declaration.defnDecl {
-             name        := ← validVariableName stx[3],
+             name        := ← validVariableName stx[1],
              levelParams := [],
              type        := t,
              value       := progExpr,
@@ -261,15 +261,15 @@ def importUplcImp : CommandElab := fun stx => do
 
   /-- Parses a UPLC file and returns the resulting expression based on format -/
   parseUplcFile (stx : Syntax) : TermElabM Expr := do
-    let format   ← getFormat stx[1]
-    let filename ← validFilename stx[2]
+    let format   ← getFormat stx[2]
+    let filename ← validFilename stx[3]
     match format with
     | `textual         => parseTextualUplc filename
     | `flat            => parseFlatUplc filename
     | `flat_hex        => parseFlatHexUplc filename
     | `single_cbor_hex => parseSingleCborHexUplc filename
     | `double_cbor_hex => parseDoubleCborHexUplc filename
-    | _                => throwErrorAt stx[1] m!"unsupported format '{format}', expected 'textual', 'flat', 'flat_hex', 'single_cbor_hex', or 'double_cbor_hex'"
+    | _                => throwErrorAt stx[2] m!"unsupported format '{format}', expected 'textual', 'flat', 'flat_hex', 'single_cbor_hex', or 'double_cbor_hex'"
 
 
 end Internal
