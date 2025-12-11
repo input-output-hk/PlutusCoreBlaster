@@ -191,19 +191,15 @@ def importUplcImp : CommandElab := fun stx => do
     else
       none
 
-  /-- Formats a list of format names as a suggestion string -/
-  formatSuggestions (formats : List Name) : String :=
-    let formatName (n : Name) : String := n.toString (escape := false)
-    match formats with
-    | []     => ""
-    | [f]    => s!"Did you mean '{formatName f}'?"
-    | [f, g] => s!"Did you mean '{formatName f}' or '{formatName g}'?"
-    | _      => s!"Did you mean one of: {", ".intercalate (formats.map formatName)}?"
+  /-- Formats a format name as a suggestion string -/
+  formatSuggestion (format : Name) : String :=
+    let formatName := format.toString (escape := false)
+    s!"Did you mean '{formatName}'?"
 
   /-- Creates an error message with format suggestions for decoding failures -/
   decodingErrorWithSuggestion (content : String) (excludeFormat : Name) (filename : String) (errorMsg? : Option String := none) : String :=
     let suggestion := match findWorkingFormat content with
-      | some fmt => if fmt != excludeFormat then formatSuggestions [fmt] else ""
+      | some fmt => if fmt != excludeFormat then formatSuggestion fmt else ""
       | none => ""
     let baseMsg := match errorMsg? with
       | some msg => s!"Decoding error in '{filename}': {msg}"
