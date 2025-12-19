@@ -56,7 +56,7 @@ instance : Inhabited Fq1 where
   default := 0
 
 instance : LE Fq1 where
-  le x y := LE.le x.t y.t
+  le x y := x.t ≤ y.t
 
 instance (a b : Fq1) : Decidable (a ≤ b) :=
   inferInstanceAs (Decidable (a.t ≤ b.t))
@@ -119,12 +119,12 @@ def Fq2.inv (x : Fq2) : Fq2 :=
 
 instance : Field Fq2 where
   ofNat       := Fq2.ofNat
-  add x y     := { u1 := x.u1 + y.u1, u0 := x.u0 + y.u0 }
-  sub x y     := { u1 := x.u1 - y.u1, u0 := x.u0 - y.u0 }
-  neg x       := { u1 := neg x.u1   , u0 := neg x.u0    }
-  mul x y     := { u1 := x.u1 * y.u0 + x.u0 * y.u1, u0 := x.u0 * y.u0 - x.u1 * y.u1 }
+  add x y     := ⟨x.u1 + y.u1, x.u0 + y.u0⟩
+  sub x y     := ⟨x.u1 - y.u1, x.u0 - y.u0⟩
+  neg x       := ⟨neg x.u1, neg x.u0⟩
+  mul x y     := ⟨x.u1 * y.u0 + x.u0 * y.u1, x.u0 * y.u0 - x.u1 * y.u1⟩
   inv         := Fq2.inv
-  mulNonRed x := { u1 := x.u1 + x.u0, u0 := x.u0 - x.u1 }
+  mulNonRed x := ⟨x.u1 + x.u0, x.u0 - x.u1⟩
 
 def Fq6.mul (x y : Fq6) : Fq6 :=
   let t0 := x.v0 * y.v0
@@ -132,37 +132,37 @@ def Fq6.mul (x y : Fq6) : Fq6 :=
   let t2 := x.v0 * y.v2 + x.v1 * y.v1 + x.v2 * y.v0
   let t3 := mulNonRed (x.v1 * y.v2 + x.v2 * y.v1)
   let t4 := mulNonRed (x.v2 * y.v2)
-  { v2 := t2, v1 := t1 + t4, v0 := t0 + t3 }
+  ⟨t2, t1 + t4, t0 + t3⟩
 
 def Fq6.inv (x : Fq6) : Fq6 :=
   let t0 := x.v0 * x.v0 + mulNonRed (x.v1 * x.v2)
   let t1 := mulNonRed (x.v2 * x.v2) - x.v0 * x.v1
   let t2 := x.v1 * x.v1 - x.v0 * x.v2
   let f  := (x.v0 * t0 + mulNonRed (x.v2 * t1) + mulNonRed (x.v1 * t2))⁻¹
-  { v2 := t2 * f, v1 := t1 * f, v0 := t0 * f }
+  ⟨t2 * f, t1 * f, t0 * f⟩
 
 instance : Field Fq6 where
   ofNat       := Fq6.ofNat
-  add x y     := { v2 := x.v2 + y.v2, v1 := x.v1 + y.v1, v0 := x.v0 + y.v0 }
-  sub x y     := { v2 := x.v2 - y.v2, v1 := x.v1 - y.v1, v0 := x.v0 - y.v0 }
-  neg x       := { v2 := neg x.v2   , v1 := neg x.v1   , v0 := neg x.v0    }
+  add x y     := ⟨x.v2 + y.v2, x.v1 + y.v1, x.v0 + y.v0⟩
+  sub x y     := ⟨x.v2 - y.v2, x.v1 - y.v1, x.v0 - y.v0⟩
+  neg x       := ⟨neg x.v2   , neg x.v1   , neg x.v0   ⟩
   mul         := Fq6.mul
   inv         := Fq6.inv
-  mulNonRed x := { v2 := x.v1, v1 := x.v0, v0 := mulNonRed x.v2 }
+  mulNonRed x := ⟨x.v1, x.v0, mulNonRed x.v2⟩
 
 instance : Inhabited Fq12 where
   default := Fq12.ofNat 0
 
 def Fq12.inv (x : Fq12) : Fq12 :=
   let f := (x.w0 * x.w0 - mulNonRed (x.w1 * x.w1))⁻¹
-  { w1 := -x.w1 * f, w0 := x.w0 * f }
+  ⟨-x.w1 * f, x.w0 * f⟩
 
 instance : Field Fq12 where
   ofNat       := Fq12.ofNat
-  add x y     := { w1 := x.w1 + y.w1, w0 := x.w0 + y.w0 }
-  sub x y     := { w1 := x.w1 - y.w1, w0 := x.w0 - y.w0 }
-  neg x       := { w1 := neg x.w1   , w0 := neg x.w0    }
-  mul x y     := { w1 := x.w1 * y.w0 + x.w0 * y.w1, w0 := x.w0 * y.w0 + mulNonRed (x.w1 * y.w1) }
+  add x y     := ⟨x.w1 + y.w1, x.w0 + y.w0⟩
+  sub x y     := ⟨x.w1 - y.w1, x.w0 - y.w0⟩
+  neg x       := ⟨neg x.w1, neg x.w0⟩
+  mul x y     := ⟨x.w1 * y.w0 + x.w0 * y.w1, x.w0 * y.w0 + mulNonRed (x.w1 * y.w1)⟩
   inv         := Fq12.inv
   mulNonRed _ := panic! "Should not try to calculate mulNonRed for Fq12!"
 
@@ -176,10 +176,10 @@ def g1 : Point Fq1 :=
           0x08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1
 
 def g2 : Point Fq2 :=
-  .affine { u1 := 0x13e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e,
-            u0 := 0x024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8 }
-          { u1 := 0x0606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be,
-            u0 := 0x0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801 }
+  .affine { u1 := 0x13e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e
+          , u0 := 0x024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8 }
+          { u1 := 0x0606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be
+          , u0 := 0x0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801 }
 
 /-- Checks whether a given point is on the curve.
     BLS12-381 curve equations are `y^2 = x^3 + 4` and `y^2 = x^3 + 4(u+1)` -/
@@ -216,6 +216,9 @@ def pointNegate {α} [Field α] : Point α → Point α
   | .infinity   => .infinity
   | .affine x y => .affine x (-y)
 
+instance {α} [Field α] : Neg (Point α) where
+  neg := pointNegate
+
 partial def pointBinaryMul {α} [DecidableEq α] [Field α] (acc : Point α) : Nat → Point α → Point α
   | 0, _ => acc
   | n, b =>
@@ -226,7 +229,7 @@ partial def pointBinaryMul {α} [DecidableEq α] [Field α] (acc : Point α) : N
 def pointMul {α} [DecidableEq α] [Field α] (scalar : Int) (p : Point α) : Point α :=
   match scalar with
   | .ofNat   n => pointBinaryMul .infinity n       p
-  | .negSucc n => pointBinaryMul .infinity (n + 1) (pointNegate p)
+  | .negSucc n => pointBinaryMul .infinity (n + 1) (-p)
 
 instance {α} [DecidableEq α] [Field α] : HMul Nat (Point α) (Point α) where
   hMul n := pointMul (.ofNat n)
