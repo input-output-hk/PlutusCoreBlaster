@@ -8,23 +8,23 @@ open Neg (neg)
 /-- The field modulus of the BLS12-381 curve. -/
 @[simp] def fieldPrime : Nat := 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab
 
-/-- `fieldPrime` be represented with a minimum of 381 bits. -/
+/-- `fieldPrime` can be represented with a minimum of 381 bits. -/
 theorem fieldPrime_is_381_bits : 1 + Nat.log2 fieldPrime = 381 := by rfl
 
 /-- The group order of the BLS12-381 curve. -/
 def groupOrder : Nat := 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
 
-/-- `groupOrder` be represented with a minimum of 255 bits. -/
+/-- `groupOrder` can be represented with a minimum of 255 bits. -/
 theorem groupOrder_is_255_bits : 1 + Nat.log2 groupOrder = 255 := by rfl
 
 /-- The number of iterations the Miller loop must take.  -/
-def millerLoopIter       : BitVec 64 := 0xd201000000010000
+def millerLoopIter : BitVec 64 := 0xd201000000010000
 /-- The binary representation of the number of iterations for the Miller loop. -/
-def millerLoopIterBinary : List Bool := List.tail! (millerLoopIter.getMsbD <$> List.range 64)
+def millerLoopIterBinary : List Bool := millerLoopIter.getMsbD <$> List.range 64
 
-/-- The exonent used in calculating the final verification.
+/-- The final exponent used in calculating the pairing.
     Note: this number is huge. -/
-def finalVerifyExponent : Nat := (fieldPrime ^ 12 - 1) / groupOrder
+def finalExponent : Nat := (fieldPrime ^ 12 - 1) / groupOrder
 
 /-- Tower extension fields in t, u, v and w -/
 structure Fq1 where
@@ -75,7 +75,7 @@ instance (n : Nat) : OfNat Fq12 n where
 
 class Field (α : Type) extends Add α, Sub α, Neg α, Mul α, Inv α where
   ofNat     : Nat → α
-  /- multiply by a non-reducible polynomial -/
+  /- Multiply by the chosen non-reducible polynomial in the field. -/
   mulNonRed : α → α
 
 open Field (mulNonRed)
@@ -169,7 +169,7 @@ instance : Field Fq12 where
 inductive Point (α : Type) where
   | affine   : α → α → Point α
   | infinity : Point α
-  deriving DecidableEq
+  deriving Repr, DecidableEq
 
 def g1 : Point Fq1 :=
   .affine 0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb
@@ -209,6 +209,9 @@ def pointAdd {α} [DecidableEq α] [Field α] : Point α → Point α → Point 
            let y₃    := slope * (x₁ - x₃) - y₁
            .affine x₃ y₃
 
+instance {α} [DecidableEq α] [Field α] : Add (Point α) where
+  add := pointAdd
+
 def pointNegate {α} [Field α] : Point α → Point α
   | .infinity   => .infinity
   | .affine x y => .affine x (-y)
@@ -220,14 +223,19 @@ partial def pointBinaryMul {α} [DecidableEq α] [Field α] (acc : Point α) : N
       if 2 ∣ n then pointBinaryMul acc              (n / 2) double
                else pointBinaryMul (pointAdd acc b) (n / 2) double
 
-def pointMul {α} [DecidableEq α] [Field α] (scalar : Int) (p : Point α) : Option (Point α) :=
-  match isOnCurve p, scalar with
-  | false, _          => .none
-  | true , .ofNat   n => .some (pointBinaryMul .infinity n       p              )
-  | true , .negSucc n => .some (pointBinaryMul .infinity (n + 1) (pointNegate p))
+def pointMul {α} [DecidableEq α] [Field α] (scalar : Int) (p : Point α) : Point α :=
+  match scalar with
+  | .ofNat   n => pointBinaryMul .infinity n       p
+  | .negSucc n => pointBinaryMul .infinity (n + 1) (pointNegate p)
+
+instance {α} [DecidableEq α] [Field α] : HMul Nat (Point α) (Point α) where
+  hMul n := pointMul (.ofNat n)
+
+instance {α} [DecidableEq α] [Field α] : HMul Int (Point α) (Point α) where
+  hMul := pointMul
 
 def isInSubGroup {α} [Field α] [DecidableEq α] (p : Point α) : Bool :=
-  pointMul groupOrder p = .some .infinity
+  pointMul groupOrder p = .infinity
 
 def untwistRoot    : Fq6  := ⟨0, 1, 0⟩
 def untwistXFactor : Fq12 := ⟨0, untwistRoot⟩⁻¹
@@ -263,12 +271,13 @@ def millerLoop (p : Point Fq1) (q : Point Fq2) (r : Point Fq2) (acc : Fq12) : Li
       let md ← millerDouble r p
       let ma ← millerAdd dr q p
       millerLoop p q (pointAdd dr q) (acc * acc * md * ma) t
-  | false :: t =>
+  | false :: t => do
       let dr := pointDouble r
-      millerLoop p q dr acc t
+      let md ← millerDouble r p
+      millerLoop p q dr (acc * acc * md) t
 
 def calculateMillerLoop (p : Point Fq1) (q : Point Fq2) : Option Fq12 :=
-  millerLoop p q q 1 millerLoopIterBinary
+  millerLoop p q q 1 (List.tail! millerLoopIterBinary)
 
 partial def binaryPowLoop {α} [Field α] (a acc : α) : Nat → α
   | 0 => acc
@@ -278,8 +287,12 @@ partial def binaryPowLoop {α} [Field α] (a acc : α) : Nat → α
 
 def binaryPow {α} [Field α] (a : α) : Nat → α := binaryPowLoop a (Field.ofNat 1)
 
+def calculatePairing (p : Point Fq1) (q : Point Fq2) : Option Fq12 := do
+  let r ← calculateMillerLoop p q
+  pure (binaryPow r finalExponent)
+
 def finalVerify (a b : Fq12) : Bool :=
-  binaryPow (a * b⁻¹) finalVerifyExponent = Fq12.ofNat 1
+  binaryPow (a * b⁻¹) finalExponent = Fq12.ofNat 1
 
 end Internal
 
