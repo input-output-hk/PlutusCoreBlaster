@@ -4,25 +4,25 @@ namespace Cryptograph.BLS12_381
 
 open Cryptograph.BLS12_381.Internal
 
-theorem g1_times_groupOrder : pointMul groupOrder g1 = .infinity := by native_decide
-theorem g2_times_groupOrder : pointMul groupOrder g2 = .infinity := by native_decide
+theorem g1_times_groupOrder : groupOrder * g1 = .infinity := by native_decide
+theorem g2_times_groupOrder : groupOrder * g2 = .infinity := by native_decide
 
 namespace Tests
 
-example : pointMul 0x49abcbaa08d87d1cba8fd9c0ea04df30b94df934827a7383098ac39e1aafc218 g1 =
+example : 0x49abcbaa08d87d1cba8fd9c0ea04df30b94df934827a7383098ac39e1aafc218 * g1 =
   .affine 0x019906b4953328ec688ffc9e41ea7d79d295c7de6249eb0397680306c5fe3aa3bbb45324bdbc379e8e4116166f2a0d40
           0x165f11693959e7193af31b99b724f95d7b49baa2394b758c2455ef725f32abd56361e1e151f2bbd7a7efc6f3bb5652d4 := by native_decide
 
-example : pointMul 0x49abcbaa08d87d1cba8fd9c0ea04df30b94df934827a7383098ac39e1aafc218 g2 =
+example : 0x49abcbaa08d87d1cba8fd9c0ea04df30b94df934827a7383098ac39e1aafc218 * g2 =
   .affine { u1 := 0x02433912fa403e0d19d39c7687eb1041f474a82fdd646b1a35afb4d088f11469467468f1ba16c3e5838503919bdbfa24
           , u0 := 0x14906db96db027e17449a1323198cfccde4d15456ce09f3fef4c7baed5495463b7cc750300e0e2918d5680d97a567122 }
           { u1 := 0x0e82e52250625e4c0864645fba3b36e24c36dbc3d4bae0ca40b0c28b0e3780bf6b8d022c032727e8195e2a2b547be84b
           , u0 := 0x0f240b0ffee3ac62cd5576f012a92cd78c9ded14c11c7637caff4daf885c9a258783a7aef4dc1815737a5b606e03868e } := by native_decide
 
-example : (31 * g1) + (-21 * g1) = pointMul 10 g1 := by native_decide
-example : (31 * g1) + (-30 * g1) =             g1 := by native_decide
-example : (31 * g2) + (-21 * g2) = pointMul 10 g2 := by native_decide
-example : (31 * g2) + (-30 * g2) =             g2 := by native_decide
+example : (31 * g1) + (-21 * g1) = 10 * g1 := by native_decide
+example : (31 * g1) + (-30 * g1) =      g1 := by native_decide
+example : (31 * g2) + (-21 * g2) = 10 * g2 := by native_decide
+example : (31 * g2) + (-30 * g2) =      g2 := by native_decide
 
 def p1 : Point Fq1 :=
   .affine 0x14ade5f375a7e7194bf5244ace032817f63ff854f22654e3c0855511156fe98ba5c092ad9d68011f783e0f418619b2f2
@@ -61,15 +61,18 @@ example : calculatePairing p1 q1 = calculatePairing p2 q2 := by native_decide
 
 example : calculatePairing (123 * g1) (3224 * g2) = calculatePairing (3224 * g1) (123 * g2) := by native_decide
 
+def Option.mul {α} [Mul α] (a b : Option α) : Option α := (· * ·) <$> a <*> b
+
+instance {α} [Mul α] : Mul (Option α) where
+  mul := Option.mul
+
 example : (calculatePairing (((12 + 34) * 56) * g1) (78 * g2) |> Option.isSome) = true := by native_decide
-example : calculatePairing (((12 + 34) * 56) * g1) (78 * g2) =
-          (· * ·) <$> calculatePairing (78 * g1) ((12 * 56) * g2)
-                  <*> calculatePairing (78 * g1) ((34 * 56) * g2) := by native_decide
+example : calculatePairing (((12 + 34) * 56) * g1) (78 * g2)
+          = calculatePairing (78 * g1) ((12 * 56) * g2) * calculatePairing (78 * g1) ((34 * 56) * g2) := by native_decide
 
 example : (calculatePairing ((12 + 34 + 56) * g1) (78 * g2) |> Option.isSome) = true := by native_decide
-example : calculatePairing ((12 + 34 + 56) * g1) (78 * g2) =
-          (· * ·) <$> calculatePairing (78 * g1) ((12 * g2) + (34 * g2))
-                  <*> calculatePairing (78 * g1) (56 * g2) := by native_decide
+example : calculatePairing ((12 + 34 + 56) * g1) (78 * g2)
+          = calculatePairing (78 * g1) ((12 * g2) + (34 * g2)) * calculatePairing (78 * g1) (56 * g2) := by native_decide
 
 end Tests
 
