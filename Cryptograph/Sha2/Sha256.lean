@@ -103,8 +103,6 @@ def hash (x : String) : String :=
   let hashed  := hashMessage message
   hashToHex hashed
 
-#eval padMessage (Char.toUInt8 <$> String.data "abc")
-
 end Internal
 
 export Internal
