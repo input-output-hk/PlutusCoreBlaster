@@ -181,6 +181,35 @@ namespace Tests
 --          = "01a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534 + I * 11fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d01569; "
 --         ++ "0b6798718c8aed24bc19cb27f866f1c9effcdbf92397ad6448b5c9db90d2b9da6cbabf48adc1adf59a1a28344e79d57e + I * 03a47f8e6d1763ba0cad63d6114c0accbef65707825a511b251a660a9b3994249ae4e63fac38b23da0c398689ee2ab52" := by native_decide
 
+theorem Residuals.mkTwo_orders_correctly {α} [LE α] [DecidableLE α] : ∀ (x₁ x₂ y₁ y₂ : α), Residuals.mkTwo x₁ x₂ = .two y₁ y₂ → y₁ ≤ y₂ := by
+  intros x₁ x₂
+  simp [Residuals.mkTwo]
+  match Hr₁ : decide (x₁ ≤ x₂), Hr₂ : decide (x₂ ≤ x₁) with
+  | true , _     => simp at *; intros; assumption
+  | false, true  => simp at *; intros; assumption
+  | false, false => simp
+
+theorem Fq1.sqrtMod_some_le : ∀ (a x₁ x₂ : Fq1), Fq1.sqrtMod a = .two x₁ x₂ → x₁ ≤ x₂ := by
+  intros a x₁ x₂
+  simp [Fq1.sqrtMod]; split <;> try simp
+  apply Residuals.mkTwo_orders_correctly
+
+example : Fq1.sqrtMod 4 = .two 2 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559785 := by native_decide
+
+def ax : Fq2 := { u1 := 0x13e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e
+                , u0 := 0x024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8 }
+def ay : Fq2 := { u1 := 0x0606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be
+                , u0 := 0x0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801 }
+
+-- !! TODO: !!!
+
+#eval (ax * ax * ax + Field.mulByNonResidual (Field.ofNat 4))
+#eval ay * ay
+
+def ay2 := ay * ay
+
+#eval (Fq2.sqrtMod ay2)
+
 end Tests
 
 end Cryptograph.BLS12_381
