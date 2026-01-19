@@ -384,6 +384,8 @@ theorem decodeIndef_consumes (s : List Char) :
       simp
     · simp at h
 
+set_option linter.unusedVariables false
+
 def decodeBlocksLoop (acc : List Char) : (s : List Char) → Option (List Char × List Char)
   | '\xFF' :: s' => .some (s', List.reverse acc)
   | s => match h : decodeBlock s with
@@ -394,6 +396,8 @@ decreasing_by
   simp_wf
   have : s'.length < s.length := decodeBlock_consumes s s' t h
   exact this
+
+set_option linter.unusedVariables true
 
 /-- Decodes an indefinite number of blocks. -/
 -- Spec B.5. D_blocks
@@ -509,6 +513,8 @@ theorem decodeLargeBlock_consumes (s : List Char) :
     omega
   · simp at h
 
+set_option linter.unusedVariables false
+
 def decodeLargeBlocksLoop (acc : List Char) : List Char → Option (List Char × List Char)
   | '\xFF' :: s' => .some (s', List.reverse acc)
   | s            => match h : decodeLargeBlock s with
@@ -519,6 +525,8 @@ decreasing_by
   simp_wf
   have := decodeLargeBlock_consumes s s' t h
   omega
+
+set_option linter.unusedVariables true
 
 /-- Decodes a sequence of "large" blocks. -/
 def decodeLargeBlocks := decodeLargeBlocksLoop []
