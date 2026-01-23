@@ -5,6 +5,7 @@ import PlutusCore.ByteString
 import PlutusCore.Cbor
 import PlutusCore.Crypto
 import PlutusCore.Data
+import PlutusCore.Default
 import PlutusCore.Integer
 import PlutusCore.List
 import PlutusCore.Pair

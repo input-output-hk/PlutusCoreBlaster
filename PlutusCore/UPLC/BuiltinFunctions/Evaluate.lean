@@ -1,3 +1,4 @@
+import PlutusCore.Default
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Bool
@@ -12,11 +13,12 @@ import PlutusCore.UPLC.BuiltinFunctions.Unit
 
 
 namespace PlutusCore.UPLC.Evaluate
+open PlutusCore.Default
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
 -- Evaluate a builtin function based on its type.
-def evaluateBuiltinFunction (b : BuiltinFun) : List CekValue → Option CekValue :=
+def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : BuiltinFun) : List CekValue → Option CekValue :=
   match b with
   | .AddInteger => addInteger
   | .SubtractInteger => subtractInteger
@@ -29,7 +31,7 @@ def evaluateBuiltinFunction (b : BuiltinFun) : List CekValue → Option CekValue
   | .LessThanInteger => lessThanInteger
   | .LessThanEqualsInteger => lessThanEqualsInteger
   | .AppendByteString => appendByteString
-  | .ConsByteString => consByteString
+  | .ConsByteString => consByteString semanticsVariant
   | .SliceByteString => sliceByteString
   | .LengthOfByteString => lengthOfByteString
   | .IndexByteString => indexByteString

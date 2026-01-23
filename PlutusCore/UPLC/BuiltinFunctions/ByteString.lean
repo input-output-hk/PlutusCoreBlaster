@@ -1,4 +1,5 @@
 import PlutusCore.ByteString
+import PlutusCore.Default
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
@@ -17,6 +18,10 @@ namespace PLC
     lessThanByteString
     lessThanEqualsByteString
   )
+  open PlutusCore.Default
+  export PlutusCore.Default (
+    BuiltinSemanticsVariant
+  )
 end PLC
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
@@ -29,13 +34,11 @@ def appendByteString (Vs : List CekValue) : Option CekValue :=
   | _ => none
 
 -- Define consByteString
--- TODO: Consider program version to trigger right variant
--- For the time being we are considering variant 2
-def consByteString (Vs : List CekValue) : Option CekValue :=
-  match Vs with
-  | [CekValue.VCon (Const.Integer x), CekValue.VCon (Const.ByteString bs)] =>
-      tryCatchSome (PLC.consByteStringV2 x bs) (CekValue.VCon ∘ Const.ByteString)
-  | _ => none
+def consByteString (semanticsVersion : PLC.BuiltinSemanticsVariant) (Vs : List CekValue) : Option CekValue :=
+  match semanticsVersion, Vs with
+  | .defaultFunSemanticsVariantC, [CekValue.VCon (Const.Integer x), CekValue.VCon (Const.ByteString bs)] => tryCatchSome (PLC.consByteStringV2 x bs) (CekValue.VCon ∘ Const.ByteString)
+  | _,                            [CekValue.VCon (Const.Integer x), CekValue.VCon (Const.ByteString bs)] => PLC.consByteStringV1 x bs             |> (CekValue.VCon ∘ Const.ByteString)
+  | _, _                                                                                                 => none
 
 -- Define sliceByteString
 def sliceByteString (Vs : List CekValue) : Option CekValue :=

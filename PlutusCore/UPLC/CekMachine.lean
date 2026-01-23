@@ -1,3 +1,4 @@
+import PlutusCore.Default
 import PlutusCore.UPLC.Builtins
 import PlutusCore.UPLC.BuiltinFunctions.Evaluate
 import PlutusCore.UPLC.CekValue
@@ -5,6 +6,7 @@ import PlutusCore.UPLC.Term
 
 namespace PlutusCore.UPLC.CekMachine
 
+open PlutusCore.Default
 open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.Builtins
 open PlutusCore.UPLC.Evaluate
@@ -60,8 +62,8 @@ def unfoldCase (s : Stack) (i : Nat) (Ms : List Term) (Vs : List CekValue) (p : 
       State.Eval sOut p mi
   | none => State.Error
 
-def evalBuiltin (s : Stack) (b : BuiltinFun) (Vs : List CekValue) : State :=
-  match UPLC.Evaluate.evaluateBuiltinFunction b Vs with
+def evalBuiltin (semanticsVariant : BuiltinSemanticsVariant) (s : Stack) (b : BuiltinFun) (Vs : List CekValue) : State :=
+  match UPLC.Evaluate.evaluateBuiltinFunction semanticsVariant b Vs with
   | some V => State.Return s V
   | none => State.Error
 
@@ -69,7 +71,7 @@ open UPLC.Builtins
 open ExpectedBuiltinArgs
 open BuiltinNotations
 
-def step (Sigma : State) : State :=
+def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
   match Sigma with
   | State.Eval s ρ (Term.Var x) =>
       ifBoundOtherwiseError s ρ x
@@ -106,15 +108,15 @@ def step (Sigma : State) : State :=
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VBuiltin b Vs (ι ⊙ η)) =>
       ifArgVOtherwiseError (State.Return s (CekValue.VBuiltin b (Vs ++ [V]) η)) ι
   | State.Return (Frame.RightApplicationOfValue (CekValue.VBuiltin b Vs (a[ι])) :: s) V =>
-      ifArgVOtherwiseError (evalBuiltin s b (Vs ++ [V])) ι
+      ifArgVOtherwiseError (evalBuiltin semanticsVariant s b (Vs ++ [V])) ι
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VBuiltin b Vs (a[ι])) =>
-      ifArgVOtherwiseError (evalBuiltin s b (Vs ++ [V])) ι
+      ifArgVOtherwiseError (evalBuiltin semanticsVariant s b (Vs ++ [V])) ι
   | State.Return (Frame.ForceFrame :: s) (CekValue.VDelay M ρ) =>
       State.Eval s ρ M
   | State.Return (Frame.ForceFrame :: s) (CekValue.VBuiltin b Vs (ι ⊙ η)) =>
       ifArgQOtherwiseError (State.Return s (CekValue.VBuiltin b Vs η)) ι
   | State.Return (Frame.ForceFrame :: s) (CekValue.VBuiltin b Vs (a[ι])) =>
-      ifArgQOtherwiseError (evalBuiltin s b Vs) ι
+      ifArgQOtherwiseError (evalBuiltin semanticsVariant s b Vs) ι
   | State.Return (Frame.ConstructorArgument i Vs (M :: Ms) ρ :: s) V =>
       State.Eval (Frame.ConstructorArgument i (Vs ++ [V]) Ms ρ :: s) ρ M
   | State.Return (Frame.ConstructorArgument i Vs [] ρ :: s) V =>
@@ -124,12 +126,12 @@ def step (Sigma : State) : State :=
   | _ => State.Error
 
 -- Define Run Steps
-def runSteps (Sigma : State) (n : Nat) : State :=
+def runSteps (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) : State :=
   match n, Sigma with
   | _, State.Halt V => Sigma
   | _, State.Error => Sigma
   | 0, _ => State.Error -- change to error when num steps exhausted
-  | Nat.succ n, _ => runSteps (step Sigma) n
+  | Nat.succ n, _ => runSteps semanticsVariant (step semanticsVariant Sigma) n
 
 -- Define Apply Params
 def applyParams (body : Term) (params : List Term) : Term :=
@@ -141,13 +143,13 @@ def applyParams (body : Term) (params : List Term) : Term :=
 def initialState (t : Term) : State :=
   State.Eval [] Environment.EmptyEnvironment t
 
--- Define CEK Execution
-def cekExecuteProgram (p : Program) (params : List Term) (n : Nat) : State :=
+def cekExecuteProgramWithSemanticVariant (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State :=
   match p with
   | Program.Program _ body =>
-      -- considering all UPLC version
-      -- TODO: consider version when evaluating builtins
-      runSteps (initialState (applyParams body params)) n
+      runSteps semanticVariant (initialState (applyParams body params)) n
+
+-- Define CEK Execution
+def cekExecuteProgram : Program → List Term →  Nat → State := cekExecuteProgramWithSemanticVariant default
 
 set_option linter.unusedVariables true
 
