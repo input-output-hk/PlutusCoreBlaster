@@ -1,10 +1,12 @@
+import Cryptograph.Integer
+import Cryptograph.String
 
 namespace Cryptograph.Sha2.Sha256
 
 namespace Internal
 
-def rotr (n : Fin 32) (x : UInt32) : UInt32 := let n' := UInt32.ofNat n; x >>> n' ||| x <<< (32 - n')
-def shr  (n : Fin 32) (x : UInt32) : UInt32 := let n' := UInt32.ofNat n; x >>> n'
+open Cryptograph.Integer
+open Cryptograph.String
 
 def k : Vector UInt32 64 :=
   #v[ 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5
@@ -16,20 +18,6 @@ def k : Vector UInt32 64 :=
     , 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3
     , 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     ]
-
-def UInt32.toUInt8BE (x : UInt32) : List UInt8 :=
-  let x₀ := x
-  let x₁ := x₀ >>> 8
-  let x₂ := x₁ >>> 8
-  let x₃ := x₂ >>> 8
-  [ UInt32.toUInt8 x₃, UInt32.toUInt8 x₂, UInt32.toUInt8 x₁, UInt32.toUInt8 x₀ ]
-
-def UInt64.toUInt8BE (x : UInt64) : List UInt8 :=
-  let x₁ := x >>> 32
-  UInt32.toUInt8BE (UInt64.toUInt32 x₁) ++ UInt32.toUInt8BE (UInt64.toUInt32 x)
-
-def UInt32.ofUInt8BE (x : Vector UInt8 4) : UInt32 :=
-  (UInt8.toUInt32 x[0]) <<< 24 ||| (UInt8.toUInt32 x[1]) <<< 16 ||| (UInt8.toUInt32 x[2]) <<< 8 ||| UInt8.toUInt32 x[3]
 
 def List.pairs {α} (x : List α) : List (α × α) :=
   let rec loop (acc : List (α × α)) : List α → List (α × α)
@@ -85,7 +73,7 @@ def processChunks (v : Vector UInt32 8) (x : List UInt8) : Vector UInt32 8 :=
              let h  := hashLoop m v 0
              let v' := h + v
              processChunks v' x'
-        else panic! s!"Programming error!"
+        else unreachable!
   termination_by (List.length x)
   decreasing_by simp; omega
 
@@ -95,13 +83,10 @@ def hashMessage (x : List UInt8) : Vector UInt32 8 :=
   let padded := padMessage x
   processChunks initial padded
 
-def hashToHex (x : Vector UInt32 8) : String :=
-  Array.foldl (· ++ ·) "" (BitVec.toHex <$> UInt32.toBitVec <$> Vector.toArray x)
-
 def hash (x : String) : String :=
-  let message := List.foldl (· ++ ·) [] (String.utf8EncodeChar <$> String.data x)
+  let message := String.toByteList x
   let hashed  := hashMessage message
-  hashToHex hashed
+  uint32ListToHex (Vector.toList hashed)
 
 end Internal
 
