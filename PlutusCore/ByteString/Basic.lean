@@ -168,14 +168,14 @@ def lengthOfByteString (bs : ByteString) : Integer := Int.ofNat bs.length
          - return ⊥
 -/
 def indexByteString (bs : ByteString) (j : Integer) : Except String Integer :=
-  if j < 0 then throw s!"indexByteString: index out of bounds: {j}"
+  if j < 0 then throw s!"indexByteString: index out of bounds"
   else
     match bs.data.toList[j.toNat]? with
-    | none => throw s!"indexByteString: index out of bounds: {j}"
+    | none => throw s!"indexByteString: index out of bounds"
     | some c => pure c.toNat
 
 
-def equalsByteString (b1 : ByteString) (b2 : ByteString) : Bool := BEqByteString.beq b1 b2
+def equalsByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 == b2
 def lessThanByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 < b2
 def lessThanEqualsByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 <= b2
 
