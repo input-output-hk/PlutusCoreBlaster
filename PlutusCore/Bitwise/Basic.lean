@@ -230,6 +230,13 @@ def replicateByte : Integer → Integer → Except String String
       else if 255             < b then throw "replicateByte: requested byte is out of range (maximum is 255)"
       else pure ⟨List.replicate l (Char.ofNat b)⟩
 
+/-- `repr256_le a` returns `n`, if `a` is the little-endian representation of `n`. -/
+def repr256_le (a : List Char) : Nat :=
+   a |> List.mapIdx (λ i c => (Char.toNat c) * 256 ^ i) |> List.sum
+
+/-- `repr256_be a` returns `n`, if `a` is the big-endian representation of `n`. -/
+def repr256_be (a : List Char) : Nat := repr256_le (List.reverse a)
+
 end BitwiseInternal
 
 export BitwiseInternal
@@ -247,6 +254,8 @@ export BitwiseInternal
     readBit
     writeBits
     replicateByte
+    repr256_le
+    repr256_be
   )
 
 end PlutusCore.Bitwise
