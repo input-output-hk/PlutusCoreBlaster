@@ -34,22 +34,25 @@ def millerLoopIterBinary : List Bool := millerLoopIter.getMsbD <$> List.range 64
     Note: this number is huge. -/
 def finalExponent : Nat := (fieldPrime ^ 12 - 1) / groupOrder
 
-/-- Tower extension fields in t, u, v and w -/
+/-- Field Fq1 -/
 structure Fq1 where
   t : Fin fieldPrime
   deriving Repr, DecidableEq
 
+/-- Field Fq2 -/
 structure Fq2 where
   u1 : Fq1
   u0 : Fq1
   deriving Repr, DecidableEq
 
+/-- Tower extension Fq6 -/
 structure Fq6 where
   v2 : Fq2
   v1 : Fq2
   v0 : Fq2
   deriving Repr, DecidableEq
 
+/-- Field Fq12 -/
 structure Fq12 where
   w1 : Fq6
   w0 : Fq6
@@ -84,12 +87,15 @@ def Fq12.ofNat (n : Nat) : Fq12 := ⟨0, Fq6.ofNat n⟩
 instance (n : Nat) : OfNat Fq12 n where
   ofNat := Fq12.ofNat n
 
+/-- Field operations necessary for the curve calculations. -/
 class Field (α : Type) extends Add α, Sub α, Neg α, Mul α, Inv α, LE α where
   ofNat            : Nat → α
   mulByNonResidual : α → α
 
 open Field (mulByNonResidual)
 
+/-- Calculating the multiplicative inverse of `a` over the cyclic
+    `p` field. -/
 partial def binaryInversion (a p : Nat) : Nat :=
   if a == 0
     then panic! "inv of 0"
@@ -120,6 +126,7 @@ instance : Field Fq1 where
   le x y  := x.t ≤ y.t
   mulByNonResidual x := x
 
+/-- Lexicographical ordering of Prod. -/
 def leProd {α β} [LE α] [LE β] [DecidableLE α] [DecidableLE β] : (α × β) → (α × β) → Bool
   | (x₁, x₂), (y₁, y₂) =>
       match decide (x₁ ≤ y₁), decide (y₁ ≤ x₁) with
@@ -195,15 +202,22 @@ instance : Field Fq12 where
   le x y  := (x.w1, x.w0) ≤ (y.w1, y.w0)
   mulByNonResidual x := ⟨mulByNonResidual x.w1, mulByNonResidual x.w0⟩
 
+/-- Represents a point on the 2 dimensional space over `α`.
+    Not all points are on the elliptic curve. -/
 inductive Point (α : Type) where
   | affine   : α → α → Point α
   | infinity : Point α
   deriving Repr, DecidableEq
 
+instance : Inhabited (Point α) where
+  default := .infinity
+
+/-- The canonical generator point of G1. -/
 def g1 : Point Fq1 :=
   .affine 0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb
           0x08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1
 
+/-- The canonical generator point of G2. -/
 def g2 : Point Fq2 :=
   .affine { u1 := 0x13e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e
           , u0 := 0x024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8 }
@@ -211,7 +225,7 @@ def g2 : Point Fq2 :=
           , u0 := 0x0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801 }
 
 /-- Checks whether a given point is on the curve.
-    BLS12-381 curve equations are `y^2 = x^3 + 4` and `y^2 = x^3 + 4(u+1)` -/
+    BLS12-381 curve equations are `y^2 = x^3 + 4` and `y^2 = x^3 + 4(u+1)`. -/
 def isOnCurve {α} [Field α] [DecidableEq α] : Point α → Bool
   | .infinity     => false
   | .affine ax ay => (ay * ay) = (ax * ax * ax + mulByNonResidual (Field.ofNat 4))
@@ -219,6 +233,7 @@ def isOnCurve {α} [Field α] [DecidableEq α] : Point α → Bool
 theorem g1_on_curve : isOnCurve g1 = true := by rfl
 theorem g2_on_curve : isOnCurve g2 = true := by rfl
 
+/-- Calculates adding a point to itself on the elliptic curve. -/
 def pointDouble {α} [Field α] : Point α → Point α
   | .infinity     => .infinity
   | .affine x₁ y₁ =>
@@ -227,6 +242,7 @@ def pointDouble {α} [Field α] : Point α → Point α
       let y₂    := slope * (x₁ - x₂) - y₁
       .affine x₂ y₂
 
+/-- Calculates the addition of two points on the elliptic curve. -/
 def pointAdd {α} [DecidableEq α] [Field α] : Point α → Point α → Point α
   | .infinity    , p             => p
   | p            , .infinity     => p
@@ -241,6 +257,7 @@ def pointAdd {α} [DecidableEq α] [Field α] : Point α → Point α → Point 
 instance {α} [DecidableEq α] [Field α] : Add (Point α) where
   add := pointAdd
 
+/-- Calculates the additive inverse of a point on the curve. -/
 def pointNegate {α} [Field α] : Point α → Point α
   | .infinity   => .infinity
   | .affine x y => .affine x (-y)
@@ -248,6 +265,7 @@ def pointNegate {α} [Field α] : Point α → Point α
 instance {α} [Field α] : Neg (Point α) where
   neg := pointNegate
 
+/-- Calculates adding a point to itself `n` times on the curve. -/
 partial def pointBinaryMul {α} [DecidableEq α] [Field α] (acc : Point α) : Nat → Point α → Point α
   | 0, _ => acc
   | n, b =>
@@ -255,6 +273,7 @@ partial def pointBinaryMul {α} [DecidableEq α] [Field α] (acc : Point α) : N
       if 2 ∣ n then pointBinaryMul acc              (n / 2) double
                else pointBinaryMul (pointAdd acc b) (n / 2) double
 
+/-- Calculates the multiplication of point `p` with a `scalar` on the curve. -/
 def pointMul {α} [DecidableEq α] [Field α] (scalar : Int) (p : Point α) : Point α :=
   match scalar with
   | .ofNat   n => pointBinaryMul .infinity n       p
@@ -266,17 +285,23 @@ instance {α} [DecidableEq α] [Field α] : HMul Nat (Point α) (Point α) where
 instance {α} [DecidableEq α] [Field α] : HMul Int (Point α) (Point α) where
   hMul := pointMul
 
+/-- Determines if point `p` is in the subgroup. -/
 def isInSubGroup {α} [Field α] [DecidableEq α] (p : Point α) : Bool :=
   pointMul groupOrder p = .infinity
 
+/-- Root factor used in the "sextic twist". -/
 def untwistRoot    : Fq6  := ⟨0, 1, 0⟩
+/-- Untwist factor for the `x` coordinate. -/
 def untwistXFactor : Fq12 := ⟨0, untwistRoot⟩⁻¹
+/-- Untwist factor for the `y` coordinate. -/
 def untwistYFactor : Fq12 := ⟨untwistRoot, 0⟩⁻¹
 
+/-- Untwists a point to the 12 dimensional Fq12 curve. -/
 def untwist : Point Fq2 → Option (Fq12 × Fq12)
   | .affine x y => .some ((⟨0, ⟨0, 0, x⟩⟩ * untwistXFactor), (⟨0, ⟨0, 0, y⟩⟩ * untwistYFactor))
   | .infinity   => .none
 
+/-- "Doubling" operation of the Miller loop. -/
 def millerDouble (r : Point Fq2) : Point Fq1 → Option Fq12
   | .infinity     => .none
   | .affine px py => do
@@ -285,6 +310,7 @@ def millerDouble (r : Point Fq2) : Point Fq1 → Option Fq12
       let v      := y - slope * x
       pure ((Fq12.ofNat (Fin.val py.t)) - ((Fq12.ofNat (Fin.val px.t)) * slope) - v)
 
+/-- "Addition" operation of the Miller loop. -/
 def millerAdd (r q : Point Fq2) : Point Fq1 → Option Fq12
   | .infinity     => .none
   | .affine px py => do
@@ -296,6 +322,7 @@ def millerAdd (r q : Point Fq2) : Point Fq1 → Option Fq12
              let v     := ((qy * rx) - (ry * qx)) * (rx - qx)⁻¹
              pure ((Fq12.ofNat (Fin.val py.t)) - (Fq12.ofNat (Fin.val px.t) * slope) - v)
 
+/-- The Miller loop is used to calculate the pairing of points `p` and `q`. -/
 def millerLoop (p : Point Fq1) (q : Point Fq2) (r : Point Fq2) (acc : Fq12) : List Bool → Option Fq12
   | []        => pure acc
   | true :: t => do
@@ -308,37 +335,42 @@ def millerLoop (p : Point Fq1) (q : Point Fq2) (r : Point Fq2) (acc : Fq12) : Li
       let md ← millerDouble r p
       millerLoop p q dr (acc * acc * md) t
 
+/-- Calculates the value of the pairing (E) for point `p` and `q` without the final exponentiation.
+    Implementation uses the canonical Miller loop. -/
 def calculateMillerLoop (p : Point Fq1) (q : Point Fq2) : Option Fq12 :=
   millerLoop p q q 1 (List.tail! millerLoopIterBinary)
 
-partial def binaryPowLoop {α} [Field α] (a acc : α) : Nat → α
-  | 0 => acc
-  | n =>
+/-- Tail-recursive implementation of the binary power. -/
+def binaryPowLoop {α} [Field α] (a acc : α) (n : Nat) : α :=
+  match h : n with
+  | 0     => acc
+  | p + 1 =>
       if 2 ∣ n then binaryPowLoop (a * a) acc       (n       / 2)
                else binaryPowLoop (a * a) (a * acc) ((n - 1) / 2)
+  termination_by n
+  decreasing_by omega; omega
 
+/-- Optimized way to calculate the power `a ^ n`. -/
 def binaryPow {α} [Field α] (a : α) : Nat → α := binaryPowLoop a (Field.ofNat 1)
 
+/-- Calculates the value of the pairing (E) for point `p` and `q` via Miller loop. -/
 def calculatePairing (p : Point Fq1) (q : Point Fq2) : Option Fq12 := do
   let r ← calculateMillerLoop p q
   pure (binaryPow r finalExponent)
 
+/-- Verifies that `(a / b) ^ ((q ^ 12 - 1) / r)` is equal to 1. -/
 def finalVerify (a b : Fq12) : Bool :=
   binaryPow (a * b⁻¹) finalExponent = Fq12.ofNat 1
 
-inductive Residuals α where
-  | zero : Residuals α
-  | one  : α → Residuals α
-  | two  : α → α → Residuals α
+/-- Represents quadratic residue values (calculated by `sqrtMod`). -/
+inductive Residues α where
+  | zero : Residues α
+  | one  : α → Residues α
+  | two  : α → α → Residues α
   deriving DecidableEq
 
-instance {α} [Repr α] : Repr (Residuals α) where
-  reprPrec
-    | .zero     , _ => ".zero"
-    | .one x    , _ => ".one " ++ (repr x)
-    | .two x₁ x₂, _ => ".two " ++ (repr x₁) ++ " " ++ (repr x₂)
-
-def Residuals.mkTwo {α} [LE α] [DecidableLE α] (x₁ x₂ : α) : Residuals α :=
+/-- Specialized constructor function that ensures that the residues `x₁` and `x₂` are ordered. -/
+def Residues.mkTwo {α} [LE α] [DecidableLE α] (x₁ x₂ : α) : Residues α :=
   match decide (x₁ ≤ x₂), decide (x₂ ≤ x₁) with
   | true , _     => .two x₁ x₂
   | false, true  => .two x₂ x₁
@@ -348,22 +380,27 @@ def Residuals.mkTwo {α} [LE α] [DecidableLE α] (x₁ x₂ : α) : Residuals �
     Valid exponent, since `fieldPrime` is of the form `4 * p + 3`. -/
 def Fq1.sqrtModExponent : Nat := (fieldPrime + 1) / 4
 
-def Fq1.sqrtMod (a : Fq1) : Residuals Fq1 :=
+/-- Calculates the quadratic residues of `a`.
+    The calculation is done using a simplified analytical method, since `fieldPrime = 4 * i + 3`. -/
+def Fq1.sqrtMod (a : Fq1) : Residues Fq1 :=
   let x := binaryPow a Fq1.sqrtModExponent
   match decide (a = 0), decide (x * x = a) with
   | true , _     => .one 0
-  | false, true  => Residuals.mkTwo x (-x)
+  | false, true  => Residues.mkTwo x (-x)
   | false, false => .zero
 
+/-- Determines if `n` is a square in Fq. -/
 def Fq1.isSquare (n : Fq1) : Bool := Fq1.sqrtMod n ≠ .zero
 
-/-- Exponent used for quadratic residue testing  -/
+/-- Exponent used for quadratic residue testing. -/
 def Fq2.quadraticTestExponent : Nat := (fieldPrime ^ 2 - 1) / 2
 
+/-- Determines if `n` is square in Fq2 using Euler's Criterion. -/
 def Fq2.isSquare (n : Fq2) : Bool :=
   let e := binaryPow n Fq2.quadraticTestExponent
   e = 1 ∨ e = 0
 
+/- Constants used by the Tonelli-Shanks algorithm. -/
 def Fq2.algoTSValS  := 3
 def Fq2.algoTSValQ  := 2002410280966213176492968580539871577211890012416319082482798067123247093561419642925082009912774178746869298192521341316387985567463363242025025302629554476386626629283976594752050996187041457677317627959721862496428249186185671
 def Fq2.algoTSValZ  := Fq2.mk 1 1
@@ -385,7 +422,8 @@ partial def Fq2.algoTSLoop (m : Nat) (c t r : Fq2) : Fq2 :=
        let b₂ := b * b
        Fq2.algoTSLoop i b₂ (t * b₂) (r * b)
 
-def Fq2.sqrtMod (n : Fq2) : Residuals Fq2 :=
+/-- Calculate the quadratic residue of `n` using the Tonelli-Shanks algorithm. -/
+def Fq2.sqrtMod (n : Fq2) : Residues Fq2 :=
   if ¬ Fq2.isSquare n
     then .zero
     else let q := Fq2.algoTSValQ
@@ -394,28 +432,36 @@ def Fq2.sqrtMod (n : Fq2) : Residuals Fq2 :=
          let t := binaryPow n q
          let r := binaryPow n ((q + 1) / 2)
          let x := Fq2.algoTSLoop m c t r
-         Residuals.mkTwo x (-x)
+         Residues.mkTwo x (-x)
 
+/- "Hashing to Elliptic Curves" specification: (RFC9380) https://datatracker.ietf.org/doc/rfc9380/ -/
+
+/- RFC9380: I2OSP functions -/
 def i2osp₁ (n : Nat) : UInt8      := UInt8.ofNat n
 def i2osp₂ (n : Nat) : List UInt8 := [ UInt8.ofNat (n >>> 8), UInt8.ofNat n ]
 
+/- RFC9380: OS2IP function -/
 def os2ip (x : List UInt8) : Nat :=
   let rec loop (acc : Nat) : List UInt8 → Nat
     | []     => acc
     | h :: t => loop (acc * 256 + (UInt8.toNat h)) t
   loop 0 x
 
+/- RFC9380: strxor function -/
 def strxor (a b : List UInt8) : List UInt8 :=
   let rec loop (acc : List UInt8) : List UInt8 → List UInt8 → List UInt8
     | h₁ :: t₁, h₂ :: t₂ => loop ((h₁ ^^^ h₂) :: acc) t₁ t₂
     | _       , _        => List.reverse acc
   loop [] a b
 
+/- RFC9380: sgn0 function for G1 -/
 def Fq1.sgn₀ (x : Fq1) : Fin 2 := ⟨x.t % 2, by omega⟩
 
+/- Performs SHA256 hashing on the input message and produces the output as a byte list. -/
 def sha256 (x : List UInt8) : List UInt8 :=
   List.flatMap UInt32.toUInt8BE (Vector.toList (Sha256.hashMessage x))
 
+/-- Helper function to calculate running hashes of the message. -/
 def expandMessageXmdLoop (acc : List (List UInt8)) (b₀ prev dst' : List UInt8) (ell i : Nat) : List UInt8 :=
   if i > ell
     then List.flatten (List.reverse acc)
@@ -424,13 +470,14 @@ def expandMessageXmdLoop (acc : List (List UInt8)) (b₀ prev dst' : List UInt8)
   termination_by (ell + 1 - i)
   decreasing_by omega
 
-/-- Produces a uniformly random byte string using a cryptographic hash function SHA256. -/
-def expandMessageXmd (msg dst : List UInt8) (l : Nat) : List UInt8 :=
+/-- Produces a uniformly random byte string using a cryptographic hash function SHA256.
+    (RFC9380: expand_message_xmd). -/
+def expandMessageXmd (msg dst : List UInt8) (l : Nat) : Option (List UInt8) :=
   let b   := 32
   let s   := 64
   let ell := Int.toNat (((l : Rat) / b).ceil)
   if ell > 255 ∨ l > 65535 ∨ (List.length dst) > 255
-    then panic! "expandMessageXmd: length outside of range"
+    then .none
     else
       let dst'   := dst ++ [i2osp₁ (List.length dst)]
       let zPad   := List.replicate s (0 : UInt8)
@@ -439,16 +486,19 @@ def expandMessageXmd (msg dst : List UInt8) (l : Nat) : List UInt8 :=
       let b₀     := sha256 msg'
       let b₁     := sha256 (b₀ ++ [i2osp₁ 1] ++ dst')
       let uBytes := b₁ ++ expandMessageXmdLoop [] b₀ b₁ dst' ell 2
-      List.take l uBytes
+      .some (List.take l uBytes)
 
-/-- Hashes arbitrary-length byte strings to a list of one or more elements of a finite field Fq1. -/
-def Fq1.hashToField (message dst : List UInt8) : Fq1 × Fq1 :=
+/-- Hashes arbitrary-length byte strings to a pair of Fq1 values.
+    (RFC9380: hash_to_field) -/
+def Fq1.hashToField (message dst : List UInt8) : Option (Fq1 × Fq1) := do
   let l      := 2 * 64
-  let uBytes := expandMessageXmd message dst l
+  let uBytes ← expandMessageXmd message dst l
   let u₀     := os2ip (List.take 64 uBytes)
   let u₁     := os2ip (List.drop 64 uBytes)
   (Fq1.ofNat u₀, Fq1.ofNat u₁)
 
+/-- Maps a Fq1 value to the modified curve E'.
+    (RFC9380: map_to_curve_simple_swu) -/
 def Fq1.mapToCurveSimpleSWU (u : Fq1) : Fq1 × Fq1 :=
   let z      := Fq1.ofNat 11
   let a'     := Fq1.ofNat 0x00144698a3b8e9433d693a02c96d4982b0ea985383ee66a8d8e8981aefd881ac98936f8da0e0f97f5cf428082d584c1d
@@ -473,6 +523,7 @@ def Fq1.mapToCurveSimpleSWU (u : Fq1) : Fq1 × Fq1 :=
   let y' := if Fq1.sgn₀ u = Fq1.sgn₀ y then y else -y
   (x, y')
 
+/-- Calculates all the (integer) powers of 'x' up to (and including) 'n' -/
 def powersTo {α} [Field α] [OfNat α 1] (x : α) (n : Nat) : Vector α (n + 1) :=
   let rec loop (i : Nat) (acc : Vector α (i + 1)) (xp : α) (hi : i ≤ n) : Vector α (n + 1) :=
     if h : i = n
@@ -482,7 +533,8 @@ def powersTo {α} [Field α] [OfNat α 1] (x : α) (n : Nat) : Vector α (n + 1)
            loop (i + 1) (Vector.push acc xp') xp' (by omega)
   loop 0 #v[1] 1 (by simp)
 
-/-- The 11-isogeny map from (x', y') on E' to (x, y) on E for Fq1. -/
+/-- The 11-isogeny map from (x', y') on E' to (x, y) on E for Fq1.
+    (RFC9380: 11-Isogeny Map for BLS12-381 G1). -/
 def Fq1.isoMap (x y : Fq1) : Fq1 × Fq1 :=
   let xp   := powersTo x 15
   let xNum :=
@@ -546,46 +598,54 @@ def Fq1.isoMap (x y : Fq1) : Fq1 × Fq1 :=
     +                                                                                                                xp[15]
   (xNum * xDen⁻¹, y * yNum * yDen⁻¹)
 
-/-- Calculates a point on the elliptic curve from an element of the finite field Fq1. -/
+/-- Calculates a point on the elliptic curve from an element of the finite field Fq1.
+    (RFC9380: Simplified SWU for AB == 0) -/
 def Fq1.mapToCurve (u : Fq1) : Point Fq1 :=
   let (x', y') := Fq1.mapToCurveSimpleSWU u
   let (x , y ) := Fq1.isoMap x' y'
   .affine x y
 
-/-- Sends any point on the curve to the subgroup. -/
+/-- Sends any point in Fq1 to the subgroup G1.
+    (RFC9380: clear_cofactor) -/
 def Fq1.clearCofactor (q : Point Fq1) : Point Fq1 :=
   let hEff := 0xd201000000010001
   hEff * q
 
-/-- Uniform encoding from byte strings to points in Fq1. That is, the distribution of its output is statistically
-    close to uniform in the subgroup.
-    See: https://datatracker.ietf.org/doc/rfc9380/ BLS12381G1_XMD:SHA-256_SSWU_RO_ -/
-def Fq1.hashToCurve (message dst : List UInt8) : Point Fq1 :=
-  let (u₀, u₁) := Fq1.hashToField message dst
+/-- Uniform encoding from byte strings to points on the curve E₁.
+    That is, the distribution of its output is statistically close to uniform in the subgroup.
+    (RFC9380: hash_to_curve, BLS12381G1_XMD:SHA-256_SSWU_RO_) -/
+def Fq1.hashToCurve (message dst : List UInt8) : Option (Point Fq1) := do
+  let (u₀, u₁) ← Fq1.hashToField message dst
   let q₀       := Fq1.mapToCurve u₀
   let q₁       := Fq1.mapToCurve u₁
   let r        := q₀ + q₁
   let p        := Fq1.clearCofactor r
   p
 
+/- RFC9380: sgn0 function for Fq2 -/
 def Fq2.sgn₀ (x : Fq2) : Fin 2 :=
   let sign₀ := ¬ 2 ∣ (Fin.toNat x.u0.t)
   let zero₀ := x.u0 = 0
   let sign₁ := ¬ 2 ∣ (Fin.toNat x.u1.t)
   if sign₀ ∨ (zero₀ ∧ sign₁) then 1 else 0
 
+/-- Creates an Fq2 value from 128 bytes. -/
 def Fq2.ofBytes (x : List UInt8) : Fq2 :=
   let x₀ := os2ip (x |> List.take 64)
   let x₁ := os2ip (x |> List.drop 64 |> List.take 64)
   ⟨Fq1.ofNat x₁, Fq1.ofNat x₀⟩
 
-def Fq2.hashToField (message dst : List UInt8) : Fq2 × Fq2 :=
+/-- Hashes arbitrary-length byte strings to a pair of Fq2 values.
+    (RFC9380: hash_to_field) -/
+def Fq2.hashToField (message dst : List UInt8) : Option (Fq2 × Fq2) := do
   let l      := 2 * 2 * 64
-  let uBytes := expandMessageXmd message dst l
+  let uBytes ← expandMessageXmd message dst l
   let u₀     := Fq2.ofBytes uBytes
   let u₁     := Fq2.ofBytes (List.drop 128 uBytes)
   (u₀, u₁)
 
+/-- Maps a G2 value to the modified curve E'.
+    (RFC9380: map_to_curve_simple_swu) -/
 def Fq2.mapToCurveSimpleSWU (u : Fq2) : Fq2 × Fq2 :=
   let z      := -⟨1, 2⟩
   let a'     := ⟨240, 0⟩
@@ -609,6 +669,8 @@ def Fq2.mapToCurveSimpleSWU (u : Fq2) : Fq2 × Fq2 :=
   let y' := if Fq2.sgn₀ u = Fq2.sgn₀ y then y else -y
   (x, y')
 
+/-- The 11-isogeny map from (x', y') on E' to (x, y) on E for Fq1.
+    (RFC9380: 3-Isogeny Map for BLS12-381 G2). -/
 def Fq2.isoMap (x y : Fq2) : Fq2 × Fq2 :=
   let xp   := powersTo x 3
   let I    := ⟨1, 0⟩
@@ -633,23 +695,128 @@ def Fq2.isoMap (x y : Fq2) : Fq2 × Fq2 :=
     +                                                                                                                                                                                                                                     xp[3]
   (xNum * xDen⁻¹, y * yNum * yDen⁻¹)
 
+/-- Calculates a point on the elliptic curve from an element of the finite field Fq2.
+    (RFC9380: Simplified SWU for AB == 0) -/
 def Fq2.mapToCurve (u : Fq2) : Point Fq2 :=
   let (x', y') := Fq2.mapToCurveSimpleSWU u
   let (x , y ) := Fq2.isoMap x' y'
   .affine x y
 
+/-- Sends any point on the curve to the subgroup G2.
+    (RFC9380: clear_cofactor) -/
 def Fq2.clearCofactor (q : Point Fq2) : Point Fq2 :=
   let hEff := 0xbc69f08f2ee75b3584c6a0ea91b352888e2a8e9145ad7689986ff031508ffe1329c2f178731db956d82bf015d1212b02ec0ec69d7477c1ae954cbc06689f6a359894c0adebbf6b4e8020005aaa95551
   hEff * q
 
-def Fq2.hashToCurve (message dst : List UInt8) : Point Fq2 :=
-  let (u₀, u₁) := Fq2.hashToField message dst
+/-- Uniform encoding from byte strings to points in E₂.
+    That is, the distribution of its output is statistically close to uniform in the subgroup.
+    (RFC9380: hash_to_curve, BLS12381G2_XMD:SHA-256_SSWU_RO_) -/
+def Fq2.hashToCurve (message dst : List UInt8) : Option (Point Fq2) := do
+  let (u₀, u₁) ← Fq2.hashToField message dst
   let q₀       := Fq2.mapToCurve u₀
   let q₁       := Fq2.mapToCurve u₁
   let r        := q₀ + q₁
   let p        := Fq2.clearCofactor r
   p
 
+def Fq1.ofBytesWithCheck (b : List UInt8) : Option Fq1 :=
+  let n := os2ip b
+  let x := Fq1.ofNat n
+  if x.t.val = n
+    then .some x
+    else .none
+
+def Fq1.findY (x : Fq1) (bigger : Bool) : Option Fq1 :=
+  match Fq1.sqrtMod (binaryPow x 3 + 4) with
+  | .zero      => .none
+  | .one y     => .some y
+  | .two y₁ y₂ => if bigger then y₂ else y₁
+
+def Fq2.ofBytesWithCheck (b : List UInt8) : Option Fq2 :=
+  let u₁' := os2ip (List.take 48 b)
+  let u₀' := os2ip (List.drop 48 b)
+  let u₁  := Fq1.ofNat u₁'
+  let u₀  := Fq1.ofNat u₀'
+  if u₁.t.val = u₁' ∧ u₀.t.val = u₀'
+    then .some ⟨u₁, u₀⟩
+    else .none
+
+def Fq2.findY (x : Fq2) (bigger : Bool) : Option Fq2 :=
+  match Fq2.sqrtMod (binaryPow x 3 + ⟨4, 4⟩) with
+  | .zero      => .none
+  | .one y     => .some y
+  | .two y₁ y₂ => if bigger then y₂ else y₁
+
+def compressG1 : Point Fq1 → List UInt8
+  | .infinity   => 0b11000000 :: List.replicate 47 0
+  | .affine x y =>
+      let y' := Option.get! (Fq1.findY x false)
+      let b  := UInt64.toUInt8BE (UInt64.ofNat x.t)
+      let b0 := List.head b (by subst b; simp [UInt64.toUInt8BE, UInt32.toUInt8BE])
+      let b' := List.tail b
+      if y ≤ y'
+        then (0b10000000 ||| b0) :: b'
+        else (0b10100000 ||| b0) :: b'
+
+def compressG2 : Point Fq2 → List UInt8
+  | .infinity   => 0b11000000 :: List.replicate 95 0
+  | .affine x y =>
+      let y' := Option.get! (Fq2.findY x false)
+      let b  := UInt64.toUInt8BE (UInt64.ofNat x.u1.t) ++ UInt64.toUInt8BE (UInt64.ofNat x.u0.t)
+      let b0 := List.head b (by subst b; simp [UInt64.toUInt8BE, UInt32.toUInt8BE])
+      let b' := List.tail b
+      if y ≤ y'
+        then (0b10000000 ||| b0) :: b'
+        else (0b10100000 ||| b0) :: b'
+
+def uncompress {α} [Field α] [DecidableEq α] (ofBytes : List UInt8 → Option α) (findY : α → Bool → Option α) (b : List UInt8) : Option (Point α) :=
+  if h : List.length b ≠ 48
+    then .none
+    else let b0   := List.head b (by grind)
+         let b₃₈₃ := decide (b0 &&& 0b10000000 > 0)
+         let b₃₈₂ := decide (b0 &&& 0b01000000 > 0)
+         let b₃₈₁ := decide (b0 &&& 0b00100000 > 0)
+         let b0'  := b0 &&& 0b00011111
+         let b'   := b0' :: List.tail b
+         match b₃₈₃, b₃₈₂, b₃₈₁ with
+         | true , true , false => if List.all b' (· = 0) then .some .infinity else .none
+         | true , false, _     => do
+             let x  ← ofBytes b'
+             let y  ← findY x b₃₈₁
+             let p  := .affine x y
+             if isInSubGroup p
+               then .some p
+               else .none
+         | _, _, _ => .none
+
+def uncompressG1 : List UInt8 → Option (Point Fq1) := uncompress Fq1.ofBytesWithCheck Fq1.findY
+def uncompressG2 : List UInt8 → Option (Point Fq2) := uncompress Fq2.ofBytesWithCheck Fq2.findY
+
 end Internal
+
+export Internal
+  ( -- types
+    Fq1
+    Fq2
+    Fq6
+    Fq12
+    Point
+    Residues
+    -- constants
+    g1
+    g2
+    -- classes
+    Field
+    -- functions
+    calculateMillerLoop
+    calculatePairing
+    finalVerify
+    Fq1.hashToCurve
+    Fq2.hashToCurve
+    compressG1
+    compressG2
+    uncompressG1
+    uncompressG2
+  )
 
 end Cryptograph.BLS12_381
