@@ -138,7 +138,7 @@ def decompress (bytes : List UInt8) : Option Secp256k1Point :=
       if Fp.square y ≠ yy then none
       else
         -- Adjust sign based on prefix byte
-        let yIsEven := (y % 2 = 0)
+        let yIsEven := (y.val % 2 = 0)
         let shouldBeEven := (prefixByte = 0x02)
         let y := if yIsEven = shouldBeEven then y else Fp.neg y
         some (fromAffine x y)
@@ -148,7 +148,7 @@ def compress (p : Secp256k1Point) : Option (List UInt8) :=
   match toAffine p with
   | none => none
   | some (x, y) =>
-    let prefixByte := if y % 2 = 0 then 0x02 else 0x03
+    let prefixByte := if y.val % 2 = 0 then 0x02 else 0x03
     let xBytes := Fp.toBytesBE x
     some (prefixByte :: xBytes)
 
