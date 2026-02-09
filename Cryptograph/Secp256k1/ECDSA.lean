@@ -53,7 +53,7 @@ def verifyWithPoint (q : Secp256k1Point) (r s : Nat) (message : List UInt8) : Bo
   | none => false
   | some (x, _) =>
     -- Check if x (mod n) = r
-    (x % curveOrder) = r
+    (x.val % curveOrder) = r
 
 -- Verify ECDSA signature
 def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=

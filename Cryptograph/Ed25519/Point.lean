@@ -122,11 +122,11 @@ def decompress (yBytes : List UInt8) : Option EdPoint :=
       if check != xx then none
       else
         -- Adjust sign of x
-        let x := if (x % 2 == xSign.toNat) then x else Fp.neg x
+        let x := if (x.val % 2 == xSign.toNat) then x else Fp.neg x
         some (fromAffine x y)
     else
       -- Adjust sign of x
-      let x := if (x % 2 == xSign.toNat) then x else Fp.neg x
+      let x := if (x.val % 2 == xSign.toNat) then x else Fp.neg x
       some (fromAffine x y)
 
 -- Compress a point to 32 bytes (y-coordinate + sign bit)
@@ -135,7 +135,7 @@ def compress (p : EdPoint) : List UInt8 :=
   let yBytes := Fp.toBytesLE y
   -- Set high bit of last byte to sign of x
   let lastByte := yBytes[31]!
-  let xSign := if x % 2 = 0 then 0 else 0x80
+  let xSign := if x.val % 2 = 0 then 0 else 0x80
   let yBytes := yBytes.set 31 (lastByte ||| xSign)
   yBytes
 

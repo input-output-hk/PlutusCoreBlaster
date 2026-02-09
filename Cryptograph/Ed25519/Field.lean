@@ -7,20 +7,25 @@ namespace Cryptograph.Ed25519.Field
 -- The Curve25519 prime: 2^255 - 19
 def p : Nat := 2^255 - 19
 
--- Field element: Nat modulo p (using plain Nat for simplicity)
-abbrev Fp := Nat
+-- Field element: Nat modulo p wrapped in a structure
+structure Fp where
+  val : Nat
+  deriving DecidableEq, Repr
+
+-- Enable numeric literal syntax for Fp
+instance : OfNat Fp n := ⟨⟨n % p⟩⟩
 
 namespace Fp
 
 -- Zero element
-def zero : Fp := 0
+def zero : Fp := ⟨0⟩
 
 -- One element
-def one : Fp := 1
+def one : Fp := ⟨1⟩
 
 -- Normalize to range [0, p)
 def normalize (n : Nat) : Fp :=
-  n % p
+  ⟨n % p⟩
 
 -- Convert from Nat (with modular reduction)
 def ofNat (n : Nat) : Fp :=
@@ -34,32 +39,32 @@ def ofInt (z : Int) : Fp :=
 
 -- Addition modulo p
 def add (a b : Fp) : Fp :=
-  normalize (a + b)
+  normalize (a.val + b.val)
 
 instance : Add Fp := ⟨add⟩
 
 -- Subtraction modulo p
 def sub (a b : Fp) : Fp :=
-  if a ≥ b then normalize (a - b)
-  else normalize (p + a - b)
+  if a.val ≥ b.val then normalize (a.val - b.val)
+  else normalize (p + a.val - b.val)
 
 instance : Sub Fp := ⟨sub⟩
 
 -- Negation modulo p
 def neg (a : Fp) : Fp :=
-  if a = 0 then 0 else normalize (p - a)
+  if a.val = 0 then ⟨0⟩ else normalize (p - a.val)
 
 instance : Neg Fp := ⟨neg⟩
 
 -- Multiplication modulo p
 def mul (a b : Fp) : Fp :=
-  normalize (a * b)
+  normalize (a.val * b.val)
 
 instance : Mul Fp := ⟨mul⟩
 
 -- Squaring (optimized multiplication by self)
 def square (a : Fp) : Fp :=
-  normalize (a * a)
+  normalize (a.val * a.val)
 
 -- Power by natural number (using binary exponentiation)
 def pow (a : Fp) (n : Nat) : Fp :=
@@ -93,7 +98,7 @@ partial def toBytesLE (a : Fp) : List UInt8 :=
     else
       let byte := (n % 256).toUInt8
       byte :: loop (n / 256) (count - 1)
-  loop a 32
+  loop a.val 32
 
 end Fp
 

@@ -53,14 +53,14 @@ def liftX (xBytes : List UInt8) : Option Secp256k1Point :=
     if Fp.square y ≠ yy then none
     else
       -- Choose even y
-      let y := if y % 2 = 0 then y else Fp.neg y
+      let y := if y.val % 2 = 0 then y else Fp.neg y
       some (Secp256k1Point.fromAffine x y)
 
 -- Check if point has even y coordinate
 def hasEvenY (p : Secp256k1Point) : Bool :=
   match Secp256k1Point.toAffine p with
   | none => false
-  | some (_, y) => y % 2 = 0
+  | some (_, y) => y.val % 2 = 0
 
 -- Verify BIP-340 Schnorr signature
 def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=
@@ -95,6 +95,6 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
         else
           match Secp256k1Point.toAffine R with
           | none => false
-          | some (rx, _) => rx = r
+          | some (rx, _) => rx.val = r
 
 end Cryptograph.Secp256k1.Schnorr
