@@ -135,11 +135,31 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
       let (s', t) ← decodeBytestring s
       let (_ , d) ← decodeData t
       .some (s', .Data d)
-  | .TypeOperator (.TypeList t)     => Prod.map id .ConstList <$> decodeList (flip decodeConstValue t) s
+  | .TypeOperator (.TypeList t)     =>
+       match t with
+       | .AtomicType .TypeData =>
+             let decodeConstData (xs : List Bool) : Option (List Bool × Data) :=
+               match decodeConstValue xs t with
+               | some (xs', Const.Data d) => some (xs', d)
+               | _ => none -- don't produce anything on type mismatched
+             Prod.map id Const.ConstDataList <$> decodeList decodeConstData s
+       | .TypeOperator (.TypePair (.AtomicType .TypeData) (.AtomicType .TypeData)) =>
+             let decodeConstPairData (xs : List Bool) : Option (List Bool × (Data × Data)) :=
+               match decodeConstValue xs t with
+               | some (xs', Const.PairData p) => some (xs', p)
+               | _ => none -- don't produce anything on type mismatched
+             Prod.map id .ConstPairDataList <$> decodeList decodeConstPairData s
+       | _ => Prod.map id Const.ConstList <$> decodeList (flip decodeConstValue t) s -- heterogenous list
   | .TypeOperator (.TypePair t₁ t₂) => do
       let (s₁, c₁) ← decodeConstValue s  t₁
       let (s₂, c₂) ← decodeConstValue s₁ t₂
-      .some (s₂, .Pair (c₁, c₂))
+      match t₁, t₂ with
+      | .AtomicType .TypeData, .AtomicType .TypeData =>
+          match c₁, c₂ with
+          | Const.Data d₁, Const.Data d₂ => some (s₂, Const.PairData (d₁, d₂))
+          | _, _ => none
+      | _, _ => some (s₂, Const.Pair (c₁, c₂))
+
 
 /- Decodes a constant. -/
 def decodeConst (s : List Bool) : Option (List Bool × Const) := do
