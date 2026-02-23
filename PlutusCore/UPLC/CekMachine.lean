@@ -42,7 +42,7 @@ def ifBoundOtherwiseError (s : Stack) (p : Environment) (x : String) : State :=
   match p with
   | Environment.EmptyEnvironment => State.Error
   | Environment.NonEmptyEvironment p' x' V =>
-      if x == x' then State.Return s V else ifBoundOtherwiseError s p' x
+      if x = x' then State.Return s V else ifBoundOtherwiseError s p' x
 
 -- Define ifArgVOtherwiseError
 def ifArgVOtherwiseError (Sigma : State) (l : ExpectedBuiltinArg) : State :=
@@ -54,13 +54,6 @@ def ifArgQOtherwiseError (Sigma : State) (l : ExpectedBuiltinArg) : State :=
   match l with
   | ExpectedBuiltinArg.ArgQ => Sigma
   | ExpectedBuiltinArg.ArgV => State.Error
-
-def unfoldCase (s : Stack) (i : Nat) (Ms : List Term) (Vs : List CekValue) (p : Environment) : State :=
-  match Ms[i]? with
-  | some mi =>
-      let sOut := Vs.foldr (fun V sAcc => Frame.LeftApplicationToValue V :: sAcc) s
-      State.Eval sOut p mi
-  | none => State.Error
 
 def evalBuiltin (semanticsVariant : BuiltinSemanticsVariant) (s : Stack) (b : BuiltinFun) (Vs : List CekValue) : State :=
   match UPLC.Evaluate.evaluateBuiltinFunction semanticsVariant b Vs with
@@ -104,13 +97,13 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VLam x M ρ) =>
       State.Eval s (Environment.NonEmptyEvironment ρ x V) M
   | State.Return (Frame.RightApplicationOfValue (CekValue.VBuiltin b Vs (ι ⊙ η)) :: s) V =>
-      ifArgVOtherwiseError (State.Return s (CekValue.VBuiltin b (Vs ++ [V]) η)) ι
+      ifArgVOtherwiseError (State.Return s (CekValue.VBuiltin b (V :: Vs) η)) ι
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VBuiltin b Vs (ι ⊙ η)) =>
-      ifArgVOtherwiseError (State.Return s (CekValue.VBuiltin b (Vs ++ [V]) η)) ι
+      ifArgVOtherwiseError (State.Return s (CekValue.VBuiltin b (V :: Vs) η)) ι
   | State.Return (Frame.RightApplicationOfValue (CekValue.VBuiltin b Vs (a[ι])) :: s) V =>
-      ifArgVOtherwiseError (evalBuiltin semanticsVariant s b (Vs ++ [V])) ι
+      ifArgVOtherwiseError (evalBuiltin semanticsVariant s b (V :: Vs)) ι -- considering args reversal when calling builtin
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VBuiltin b Vs (a[ι])) =>
-      ifArgVOtherwiseError (evalBuiltin semanticsVariant s b (Vs ++ [V])) ι
+      ifArgVOtherwiseError (evalBuiltin semanticsVariant s b (V :: Vs)) ι -- considering args reversal when calling builtin
   | State.Return (Frame.ForceFrame :: s) (CekValue.VDelay M ρ) =>
       State.Eval s ρ M
   | State.Return (Frame.ForceFrame :: s) (CekValue.VBuiltin b Vs (ι ⊙ η)) =>
@@ -118,12 +111,20 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
   | State.Return (Frame.ForceFrame :: s) (CekValue.VBuiltin b Vs (a[ι])) =>
       ifArgQOtherwiseError (evalBuiltin semanticsVariant s b Vs) ι
   | State.Return (Frame.ConstructorArgument i Vs (M :: Ms) ρ :: s) V =>
-      State.Eval (Frame.ConstructorArgument i (Vs ++ [V]) Ms ρ :: s) ρ M
+      State.Eval (Frame.ConstructorArgument i (V :: Vs) Ms ρ :: s) ρ M
   | State.Return (Frame.ConstructorArgument i Vs [] ρ :: s) V =>
-      State.Return s (CekValue.VConstr i (Vs ++ [V]))
+      State.Return s (CekValue.VConstr i (List.reverse (V :: Vs)))
   | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VConstr i Vs) =>
-      unfoldCase s i Ms Vs ρ
+        match List.get?Internal Ms i with
+        | some mi => State.Eval (folding Vs s) ρ mi
+        | none => State.Error
   | _ => State.Error
+
+  where
+    folding (xs : List CekValue) (init : Stack) : Stack :=
+      match xs with
+      | [] => init
+      | x :: xs' => Frame.LeftApplicationToValue x :: (folding xs' init)
 
 -- Define Run Steps
 def runSteps (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) : State :=

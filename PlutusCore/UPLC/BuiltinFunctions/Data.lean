@@ -28,17 +28,19 @@ end PLC
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
+-- NOTE: Args are deliberately reversed on the Cek machine stack for performance
+
 -- Define chooseData
 def chooseData (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.Data d), constrCase, mapCase, listCase, iCase, bCase] =>
+  | [bCase, iCase, listCase, mapCase, constrCase, CekValue.VCon (Const.Data d)] =>
       some (UPLC.chooseData d constrCase mapCase listCase iCase bCase)
   | _ => none
 
 -- Define constrData
 def constrData (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.Integer i), CekValue.VCon (Const.ConstDataList xs)] =>
+  | [CekValue.VCon (Const.ConstDataList xs), CekValue.VCon (Const.Integer i)] =>
       some (CekValue.VCon (Const.Data (PLC.constrData i xs)))
   | _ => none
 
@@ -76,7 +78,7 @@ def unConstrData (Vs : List CekValue) : Option CekValue :=
   | [CekValue.VCon (Const.Data d)] =>
       tryCatchSome (PLC.unConstrData d)
       (fun (i, xs) =>
-        CekValue.VCon $ Const.Pair ((Const.Integer i), Const.ConstDataList xs))
+        CekValue.VCon (Const.Pair ((Const.Integer i), Const.ConstDataList xs)))
   | _ => none
 
 -- Define unMapData
@@ -111,14 +113,14 @@ def unBData (Vs : List CekValue) : Option CekValue :=
 -- Define equalsData
 def equalsData (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.Data d1), CekValue.VCon (Const.Data d2)] =>
-      CekValue.VCon $ Const.Bool (PLC.equalsData d1 d2)
+  | [CekValue.VCon (Const.Data op2), CekValue.VCon (Const.Data op1)] =>
+      CekValue.VCon $ Const.Bool (PLC.equalsData op1 op2)
   | _ => none
 
 -- Define mkPairData
 def mkPairData (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.Data f), CekValue.VCon (Const.Data s)] =>
+  | [CekValue.VCon (Const.Data s), CekValue.VCon (Const.Data f)] =>
       CekValue.VCon $ Const.PairData (PLC.mkPairData f s)
   | _ => none
 

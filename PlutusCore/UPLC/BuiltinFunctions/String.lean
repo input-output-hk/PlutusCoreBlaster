@@ -16,18 +16,20 @@ end PLC
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
+-- NOTE: Args are deliberately reversed on the Cek machine stack for performance
+
 -- Define appendString
 def appendString (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.String x), CekValue.VCon (Const.String y)] =>
-      some (CekValue.VCon (Const.String (PLC.appendString x y)))
+  | [CekValue.VCon (Const.String op2), CekValue.VCon (Const.String op1)] =>
+      some (CekValue.VCon (Const.String (PLC.appendString op1 op2)))
   | _ => none
 
 -- Define equalsString
 def equalsString (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.String x), CekValue.VCon (Const.String y)] =>
-      some (CekValue.VCon (Const.Bool (PLC.equalsString x y)))
+  | [CekValue.VCon (Const.String op2), CekValue.VCon (Const.String op1)] =>
+      some (CekValue.VCon (Const.Bool (PLC.equalsString op1 op2)))
   | _ => none
 
 

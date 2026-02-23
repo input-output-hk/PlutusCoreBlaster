@@ -12,10 +12,12 @@ end PLC
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
+-- NOTE: Args are deliberately reversed on the Cek machine stack for performance
+
 -- Define trace
 def trace (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.String s), v] => some (PLC.trace s v)
+  | [v, CekValue.VCon (Const.String s)] => some (PLC.trace s v)
   | _ => none
 
 end PlutusCore.UPLC.CekValue

@@ -26,24 +26,28 @@ end PLC
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
+-- NOTE: Args are deliberately reversed on the Cek machine stack for performance
+
 -- Define appendByteString
 def appendByteString (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.ByteString x), CekValue.VCon (Const.ByteString y)] =>
-      some (CekValue.VCon (Const.ByteString (PLC.appendByteString x y)))
+  | [CekValue.VCon (Const.ByteString op2), CekValue.VCon (Const.ByteString op1)] =>
+      some (CekValue.VCon (Const.ByteString (PLC.appendByteString op1 op2)))
   | _ => none
 
 -- Define consByteString
 def consByteString (semanticsVersion : PLC.BuiltinSemanticsVariant) (Vs : List CekValue) : Option CekValue :=
-  match semanticsVersion, Vs with
-  | .defaultFunSemanticsVariantC, [CekValue.VCon (Const.Integer x), CekValue.VCon (Const.ByteString bs)] => tryCatchSome (PLC.consByteStringV2 x bs) (CekValue.VCon ∘ Const.ByteString)
-  | _,                            [CekValue.VCon (Const.Integer x), CekValue.VCon (Const.ByteString bs)] => PLC.consByteStringV1 x bs             |> (CekValue.VCon ∘ Const.ByteString)
-  | _, _                                                                                                 => none
+  match Vs with
+  | [CekValue.VCon (Const.ByteString bs), CekValue.VCon (Const.Integer x)] =>
+       match semanticsVersion with
+       | .defaultFunSemanticsVariantC => tryCatchSome (PLC.consByteStringV2 x bs) (CekValue.VCon ∘ Const.ByteString)
+       | _ => some (CekValue.VCon (Const.ByteString (PLC.consByteStringV1 x bs)))
+  | _ => none
 
 -- Define sliceByteString
 def sliceByteString (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.Integer s), CekValue.VCon (Const.Integer k), CekValue.VCon (Const.ByteString bs)] =>
+  | [CekValue.VCon (Const.ByteString bs), CekValue.VCon (Const.Integer k), CekValue.VCon (Const.Integer s)] =>
       some (CekValue.VCon (Const.ByteString (PLC.sliceByteString s k bs)))
   | _ => none
 
@@ -57,29 +61,29 @@ def lengthOfByteString (Vs : List CekValue) : Option CekValue :=
 -- Define indexByteString
 def indexByteString (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.ByteString bs), CekValue.VCon (Const.Integer j)] =>
+  | [CekValue.VCon (Const.Integer j), CekValue.VCon (Const.ByteString bs)] =>
       tryCatchSome (PLC.indexByteString bs j) (CekValue.VCon ∘ Const.Integer)
   | _ => none
 
 -- Define equalsByteString
 def equalsByteString (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.ByteString x), CekValue.VCon (Const.ByteString y)] =>
-      some (CekValue.VCon (Const.Bool (PLC.equalsByteString x y)))
+  | [CekValue.VCon (Const.ByteString op2), CekValue.VCon (Const.ByteString op1)] =>
+      some (CekValue.VCon (Const.Bool (PLC.equalsByteString op1 op2)))
   | _ => none
 
 -- Define lessThanByteString
 def lessThanByteString (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.ByteString x), CekValue.VCon (Const.ByteString y)] =>
-      some (CekValue.VCon (Const.Bool (PLC.lessThanByteString x y)))
+  | [CekValue.VCon (Const.ByteString op2), CekValue.VCon (Const.ByteString op1)] =>
+      some (CekValue.VCon (Const.Bool (PLC.lessThanByteString op1 op2)))
   | _ => none
 
 -- Define lessThanEqualsByteString
 def lessThanEqualsByteString (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.ByteString x), CekValue.VCon (Const.ByteString y)] =>
-      some (CekValue.VCon (Const.Bool (PLC.lessThanEqualsByteString x y)))
+  | [CekValue.VCon (Const.ByteString op2), CekValue.VCon (Const.ByteString op1)] =>
+      some (CekValue.VCon (Const.Bool (PLC.lessThanEqualsByteString op1 op2)))
   | _ => none
 
 end PlutusCore.UPLC.CekValue

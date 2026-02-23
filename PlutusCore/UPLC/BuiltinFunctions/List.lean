@@ -17,31 +17,27 @@ end PLC
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
+-- NOTE: Args are deliberately reversed on the Cek machine stack for performance
+
 -- Define chooseList
 def chooseList (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.ConstList l), nullCase, listCase]
-  | [CekValue.VCon (Const.ConstDataList l), nullCase, listCase]
-  | [CekValue.VCon (Const.ConstPairDataList l), nullCase, listCase] =>
-    -- TODO: Need to check how we can enforce that nullCase and
-    -- listCase are of the same type
-      some (UPLC.chooseList l nullCase listCase)
+  | [listCase, nullCase, CekValue.VCon (Const.ConstList l)]
+  | [listCase, nullCase, CekValue.VCon (Const.ConstDataList l)]
+  | [listCase, nullCase, CekValue.VCon (Const.ConstPairDataList l)] => some (UPLC.chooseList l nullCase listCase)
   | _ => none
 
 -- Define mkCons
 def mkCons (Vs : List CekValue) : Option CekValue :=
-  -- TODO: Need to check how we can enforce that x and xs are of the same type.
-  -- With this current version we can built heterogeneous list,
-  -- which does not correspond to what the specification says.
   match Vs with
-  | [CekValue.VCon x, CekValue.VCon (Const.ConstList xs)] =>
+  | [CekValue.VCon (Const.ConstList xs), CekValue.VCon x] =>
       some (CekValue.VCon (Const.ConstList (PLC.mkCons x xs)))
 
-  | [CekValue.VCon (Const.Data x), CekValue.VCon (Const.ConstDataList xs)] =>
+  | [CekValue.VCon (Const.ConstDataList xs), CekValue.VCon (Const.Data x)] =>
       -- case for ConstDataList
       some (CekValue.VCon (Const.ConstDataList (PLC.mkCons x xs)))
 
-  | [CekValue.VCon (Const.PairData p), CekValue.VCon (Const.ConstPairDataList xs)] =>
+  | [CekValue.VCon (Const.ConstPairDataList xs), CekValue.VCon (Const.PairData p)] =>
       -- case for ConsPairDataList
       some (CekValue.VCon (Const.ConstPairDataList (PLC.mkCons p xs)))
   | _ => none

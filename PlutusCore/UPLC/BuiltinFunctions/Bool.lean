@@ -12,10 +12,12 @@ end PLC
 open PlutusCore.UPLC.Term
 open CekValue
 
+-- NOTE: Args are deliberately reversed on the Cek machine stack for performance
+
 -- Define ifThenElse
 def ifThenElse (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.Bool b), caseTrue, caseFalse] =>
+  | [caseFalse, caseTrue, CekValue.VCon (Const.Bool b)] =>
         some (PLC.ifThenElse b caseTrue caseFalse)
   | _ => none
 
