@@ -3,6 +3,8 @@ import PlutusCore.UPLC.Builtins
 import PlutusCore.UPLC.BuiltinFunctions.Evaluate
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.ExBudget
+import PlutusCore.UPLC.CostModels
 
 namespace PlutusCore.UPLC.CekMachine
 
@@ -11,6 +13,8 @@ open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.Builtins
 open PlutusCore.UPLC.Evaluate
 open PlutusCore.UPLC.Term
+open PlutusCore.UPLC.ExBudget
+open PlutusCore.UPLC.CostModels
 
 set_option linter.unusedVariables false
 -- setting this option to avoid warning on marco rules format and unused variables
@@ -35,6 +39,14 @@ inductive State where
   | Error   : State
   | Halt    : CekValue → State
 deriving Repr
+
+-- Result tyupe for budget aware execution
+inductive EvaluationResult where
+    | Success : CekValue → ExBudget → EvaluationResult
+    | BudgetExhausted : ExBudget → EvaluationResult
+    | EvaluationError : EvaluationResult
+deriving Repr
+
 
 -- Define Helper Functions
 -- Define ifBoundOtherwiseError
@@ -152,6 +164,95 @@ def cekExecuteProgramWithSemanticVariant (semanticVariant : BuiltinSemanticsVari
 -- Define CEK Execution
 def cekExecuteProgram : Program → List Term →  Nat → State := cekExecuteProgramWithSemanticVariant default
 
-set_option linter.unusedVariables true
+
+-- Budget aware CEK execution
+-- Calculate the cost of a single CEK machine step based on the current state
+def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
+  match Sigma with
+    | State.Eval _ _ (Term.Var _)           => costs.stepCostVar
+    | State.Eval _ _ (Term.Term.Const _)    => costs.stepCostConst
+    | State.Eval _ _ (Term.Lam _ _)         => costs.stepCostLam
+    | State.Eval _ _ (Term.Delay _)         => costs.stepCostDelay
+    | State.Eval _ _ (Term.Force _)         => costs.stepCostForce
+    | State.Eval _ _ (Term.Apply _ _)       => costs.stepCostApply
+    | State.Eval _ _ (Term.Builtin _)       => costs.stepCostBuiltin
+    | State.Eval _ _ (Term.Constr _ _)      => costs.stepCostConstr
+    | State.Eval _ _ (Term.Case _ _)        => costs.stepCostCase
+    | State.Eval _ _ Term.Error             => ExBudget.zero
+    | State.Return _ _                      => ExBudget.zero
+    | State.Error                           => ExBudget.zero
+    | State.Halt _ => ExBudget.zero
+
+def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) : ExBudget :=
+    match Sigma with
+    -- Check Return states that will call evalBuiltin with final argument
+    -- We need to include the final argument being applied in the cost calculation
+    | State.Return (Frame.RightApplicationOfValue (CekValue.VBuiltin b Vs (a[_])) :: _) V =>
+        builtinCostSelected semVar b (Vs ++ [V])
+    | State.Return (Frame.LeftApplicationToValue V :: _) (CekValue.VBuiltin b Vs (a[_])) =>
+        builtinCostSelected semVar b (Vs ++ [V])
+    | State.Return (Frame.ForceFrame :: _) (CekValue.VBuiltin b Vs (a[_])) =>
+        builtinCostSelected semVar b Vs
+    | _ => ExBudget.zero
+
+def stepWithBudget
+    (semanticsVariant : BuiltinSemanticsVariant)
+    (costs : CekMachineCosts)
+    (Sigma : State)
+    (budget : ExBudget) : Option (State × ExBudget) :=
+    let stepCost := calculateStepCostr costs Sigma
+    let builtinCost := getBuiltinCostIfExecuted semanticsVariant Sigma
+    let totalCost := stepCost + builtinCost
+    if budget.canAfford totalCost then
+        some (step semanticsVariant Sigma, budget - totalCost)
+    else
+        none
+
+def runStepsWithBudget
+    (semanticsVariant : BuiltinSemanticsVariant)
+    (costs : CekMachineCosts)
+    (Sigma : State)
+    (budget : ExBudget)
+    (initialBudget : ExBudget) : EvaluationResult :=
+    match Sigma with
+    | State.Halt V  => EvaluationResult.Success V (initialBudget - budget)
+    | State.Error   => EvaluationResult.EvaluationError
+    | State.Eval _ _ Term.Error => EvaluationResult.EvaluationError -- Not the cleanest but I can't do decreasing proof without this
+    | _ =>
+        match stepWithBudget semanticsVariant costs Sigma budget with
+        | none => EvaluationResult.BudgetExhausted budget
+        | some (newState, newBudget) => runStepsWithBudget semanticsVariant costs newState newBudget initialBudget
+    termination_by budget.exBudgetCPU.unExCPU + budget.exBudgetMemory.unExMemory
+    decreasing_by
+        sorry
+
+-- UPLC version 1.0.0 = PlutusV1/V2; 1.1.0 = PlutusV3 (Conway+).
+-- TOCHECK
+def versionToSemanticsVariant (version : Version): BuiltinSemanticsVariant :=
+    match version with
+    | Version.Version 1 0 _ => .defaultFunSemanticsVariantC
+    | Version.Version 1 1 _ => .defaultFunSemanticsVariantC
+    | _ => .defaultFunSemanticsVariantC
+
+def versionToCosts (version : Version) : CekMachineCosts :=
+    match version with
+    | Version.Version 1 0 _ => defaultCekMachineCostsC
+    | Version.Version 1 1 _ => defaultCekMachineCostsC
+    | _ => defaultCekMachineCostsC
+
+def cekExecuteProgramWithBudget
+    (p : Program)
+    (params : List Term)
+    (budget : ExBudget) : EvaluationResult :=
+    match p with
+    | Program.Program version body =>
+        let semVar := versionToSemanticsVariant version
+        let costs  := versionToCosts version
+        -- Startup cost is charged once up front, matching the Plutus reference
+        if budget.canAfford costs.startupCost then
+            runStepsWithBudget semVar costs (initialState (applyParams body params))
+                (budget - costs.startupCost) budget
+        else
+            EvaluationResult.BudgetExhausted budget
 
 end PlutusCore.UPLC.CekMachine
