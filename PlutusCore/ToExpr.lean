@@ -1,7 +1,11 @@
-import Lean.Expr
-import Lean.ToLevel
+import Lean
 
 open Lean
+
+def integerToExpr (n : Int) : Expr :=
+  match n with
+  | Int.ofNat n => mkApp (mkConst ``Int.ofNat) (mkRawNatLit n)
+  | Int.negSucc n => mkApp (mkConst ``Int.negSucc) (mkRawNatLit n)
 
 def listToExprLoop {α} (aToExpr : α → Expr) (consFn : Expr) (acc : Expr) : List α → Expr
   | []      => acc
@@ -12,5 +16,5 @@ def listToExpr {α : Type u} [ToLevel.{u}] (aType : Expr) (aToExpr : α → Expr
   let cons := .app (.const ``List.cons [toLevel.{u}]) aType
   listToExprLoop aToExpr cons nil (List.reverse as)
 
-def pairToExpr {α : Type u} [ToLevel.{u}] (aToExpr : α → Expr) (p : α × α) : Expr :=
-  mkApp2 (.const ``Prod.mk []) (aToExpr p.1) (aToExpr p.2)
+def pairToExpr {α : Type u} [ToLevel.{u}] {β : Type v} [ToLevel.{v}] (aType: Expr) (bType : Expr) (aToExpr : α → Expr) (bToExpr : β → Expr) (p : α × β) : Expr :=
+  mkApp4 (.const ``Prod.mk [toLevel.{u}, toLevel.{v}]) aType bType (aToExpr p.1) (bToExpr p.2)

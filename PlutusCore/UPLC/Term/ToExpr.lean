@@ -42,7 +42,7 @@ partial def constToExpr : Const → Expr
   | .ConstList            l => .app (.const ``Const.ConstList            []) (listToExpr (α := Const) (.const ``Const []) constToExpr l)
   | .ConstDataList        l => .app (.const ``Const.ConstDataList        []) (toExpr l)
   | .ConstPairDataList    l => .app (.const ``Const.ConstPairDataList    []) (toExpr l)
-  | .Pair                 p => .app (.const ``Const.Pair                 []) (pairToExpr (α := Const) constToExpr p)
+  | .Pair                 p => .app (.const ``Const.Pair                 []) (pairToExpr (α := Const) (β := Const) (.const ``Const []) (.const ``Const []) constToExpr constToExpr p)
   | .PairData             p => .app (.const ``Const.PairData             []) (toExpr p)
   | .Data                 d => .app (.const ``Const.Data                 []) (toExpr d)
   | .Bls12_381_G1_element   =>       .const ``Const.Bls12_381_G1_element []
@@ -163,7 +163,7 @@ instance : ToExpr PlutusCore.UPLC.Term.Term where
 
 instance : ToExpr Version where
   toTypeExpr := .const ``Version []
-  toExpr v   := mkApp3 (.const ``Version.Version []) (toExpr v.1) (toExpr v.2) (toExpr v.3)
+  toExpr v   := mkApp3 (.const ``Version.Version []) (mkRawNatLit v.1) (mkRawNatLit v.2) (mkRawNatLit v.3)
 
 instance : ToExpr Program where
   toTypeExpr := .const ``Program []

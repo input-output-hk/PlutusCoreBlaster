@@ -7,7 +7,7 @@ import PlutusCore.ToExpr
 
 namespace PlutusCore.Data
 
-open Lean (Expr mkApp2 ToExpr toExpr)
+open Lean (Expr mkApp2 ToExpr toExpr mkApp mkConst mkRawNatLit)
 open PlutusCore.Integer PlutusCore.ByteString
 
 /-! ## Formalisation for PlutusCore Data representation and Builtin functions. -/
@@ -58,13 +58,13 @@ instance : ToString Data where
 instance : Repr Data where
   reprPrec x _ := dataStr x
 
-def dataPairsType := mkApp2 (.const ``Prod.mk [.zero, .zero]) (.const ``Data []) (.const ``Data [])
+def dataPairsType := mkApp2 (.const ``Prod [.zero, .zero]) (.const ``Data []) (.const ``Data [])
 
 partial def dataToExpr : Data → Expr
-  | .Constr i ds => mkApp2 (.const ``Data.Constr []) (toExpr i) (listToExpr (α := Data) (.const ``Data []) dataToExpr ds)
-  | .Map    ps   =>  .app  (.const ``Data.Map    []) (listToExpr (α := Data × Data) dataPairsType (pairToExpr (α := Data) dataToExpr) ps)
+  | .Constr i ds => mkApp2 (.const ``Data.Constr []) (integerToExpr i) (listToExpr (α := Data) (.const ``Data []) dataToExpr ds)
+  | .Map    ps   =>  .app  (.const ``Data.Map    []) (listToExpr (α := Data × Data) dataPairsType (pairToExpr (α := Data) (β := Data) (.const ``Data []) (.const ``Data []) dataToExpr dataToExpr) ps)
   | .List   ds   =>  .app  (.const ``Data.List   []) (listToExpr (α := Data) (.const ``Data []) dataToExpr ds)
-  | .I      i    =>  .app  (.const ``Data.I      []) (toExpr i)
+  | .I      i    =>  .app  (.const ``Data.I      []) (integerToExpr i)
   | .B      b    =>  .app  (.const ``Data.B      []) (toExpr b)
 
 instance : ToExpr Data where
