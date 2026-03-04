@@ -82,23 +82,14 @@ def defaultCekMachineCostsC : CekMachineCosts :=
 /-- Blaster friendly Integer size-/
 def integerSize (i : Integer) : Nat :=
   let n := i.natAbs
-  if n < 256 then 1
-  else if n < 65536 then 2
-  else if n < 16777216 then 3
-  else if n < 4294967296 then 4
-  else if n < 1099511627776 then 5
-  else if n < 281474976710656 then 6
-  else if n < 72057594037927936 then 7
-  else if n < 18446744073709551616 then 8
-  else if n < 4722366482869645213696 then 9
-  else if n < 1208925819614629174706176 then 10
-  else if n < 309485009821345068724781056 then 11
-  else if n < 79228162514264337593543950336 then 12
-  else if n < 20282409603651670423947251286016 then 13
-  else if n < 5192296858534827628530496329220096 then 14
-  else if n < 1329227995784915872903807060280344576 then 15
-  else if n < 340282366920938463463374607431768211456 then 16
-  else 17
+  if n < 18446744073709551616 then 1                                                                                                                                                                                                    --  2^64
+  else if n < 340282366920938463463374607431768211456 then 2                                                                                                                                                                            --  2^128
+  else if n < 6277101735386680763835789423207666416102355444464034512896 then 3                                                                                                                                                         --  2^192
+  else if n < 115792089237316195423570985008687907853269984665640564039457584007913129639936 then 4                                                                                                                                     --  2^256
+  else if n < 2135987035920910082395021706169552114602704522356652769947041607822219725780640550022962086936576 then 5                                                                                                                  --  2^320
+  else if n < 39402006196394479212279040100143613805079739270465446667948293404245721771497210611414266254884915640806627990306816 then 6                                                                                               --  2^384
+  else if n < 726838724295606890549323807888004534353641360687318060281490199180639288113397923326191050713763565560762521606266177933534601628614656 then 7                                                                           --  2^448
+  else 8
 
 
 /-- Calculate the size ofa bytestring -/
@@ -107,7 +98,6 @@ def byteStringSize (bs : ByteString) : Nat :=
   byteLen
 
 /-- Size of a data value -/
--- TOCHECK: Is that how to calculate data size?
 def dataSize (d : Data) : Nat :=
   match d with
   | Data.Constr n ds => 1 + ds.foldl (fun acc d => acc + dataSize d) 0
@@ -119,7 +109,6 @@ def dataSize (d : Data) : Nat :=
   decreasing_by all_goals sorry
 
 /-- Size of a const value-/
--- TOCHECK: Is that how to calculate const size?
 def constSize (c : Const) : Nat :=
   match c with
   | Const.Integer i => integerSize i
@@ -141,7 +130,6 @@ def cekValueSize (v : CekValue) : Nat :=
   match v with
     | CekValue.VCon c => constSize c
     | _ => 1
-
 
 def argSize (args : List CekValue) (i : Nat) : Nat :=
   if h : i < args.length then cekValueSize (args.get ⟨i, h⟩) else 1 -- 1?
