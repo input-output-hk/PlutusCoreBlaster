@@ -769,8 +769,8 @@ def compressG2 : Point Fq2 → List UInt8
         then (0b10000000 ||| b0) :: b'
         else (0b10100000 ||| b0) :: b'
 
-def uncompress {α} [Field α] [DecidableEq α] (ofBytes : List UInt8 → Option α) (findY : α → Bool → Option α) (b : List UInt8) : Option (Point α) :=
-  if h : List.length b ≠ 48
+def uncompress {α} [Field α] [DecidableEq α] (expectedLength : Nat) (he : expectedLength > 0) (ofBytes : List UInt8 → Option α) (findY : α → Bool → Option α) (b : List UInt8) : Option (Point α) :=
+  if h : List.length b ≠ expectedLength
     then .none
     else let b0   := List.head b (by grind)
          let b₃₈₃ := decide (b0 &&& 0b10000000 > 0)
@@ -789,8 +789,8 @@ def uncompress {α} [Field α] [DecidableEq α] (ofBytes : List UInt8 → Option
                else .none
          | _, _, _ => .none
 
-def uncompressG1 : List UInt8 → Option (Point Fq1) := uncompress Fq1.ofBytesWithCheck Fq1.findY
-def uncompressG2 : List UInt8 → Option (Point Fq2) := uncompress Fq2.ofBytesWithCheck Fq2.findY
+def uncompressG1 : List UInt8 → Option (Point Fq1) := uncompress 48 (by simp) Fq1.ofBytesWithCheck Fq1.findY
+def uncompressG2 : List UInt8 → Option (Point Fq2) := uncompress 96 (by simp) Fq2.ofBytesWithCheck Fq2.findY
 
 end Internal
 

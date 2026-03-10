@@ -2,7 +2,7 @@ namespace Cryptograph.String
 
 namespace Internal
 
-def String.toByteList (x : String) : List UInt8 := (String.toUTF8 x).toList
+def String.toByteList (x : String) : List UInt8 := Char.toUInt8 <$> x.data
 
 def byteListToHex {α} {n} (f : α → BitVec n) (x : List α) : String :=
   let rec loop (acc : List Char) : List α → String
