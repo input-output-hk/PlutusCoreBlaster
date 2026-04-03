@@ -116,14 +116,19 @@ partial def binaryInversion (a p : Nat) : Nat :=
          if u' ≥ v' then loop (u' - v') v' (if x₁' ≥ x₂' then x₁' - x₂' else x₁' + p - x₂') x₂'
                     else loop u' (v' - u') x₁' (if x₂' ≥ x₁' then x₂' - x₁' else x₂' + p - x₁')
 
+def Fq1.add (x y : Fq1) : Fq1 := Fq1.ofNat (x.t + y.t)
+def Fq1.sub (x y : Fq1) : Fq1 := Fq1.ofNat ((Fin.val x.t) + fieldPrime - (Fin.val y.t))
+def Fq1.neg (x   : Fq1) : Fq1 := Fq1.ofNat (fieldPrime - (Fin.val x.t))
+def Fq1.mul (x y : Fq1) : Fq1 := Fq1.ofNat (x.t * y.t)
+
 instance : Field Fq1 where
-  ofNat   := Fq1.ofNat
-  add x y := Fq1.ofNat (x.t + y.t)
-  sub x y := Fq1.ofNat ((Fin.val x.t) + fieldPrime - (Fin.val y.t))
-  neg x   := Fq1.ofNat (fieldPrime - (Fin.val x.t))
-  mul x y := Fq1.ofNat (x.t * y.t)
-  inv x   := Fq1.ofNat (binaryInversion (Fin.val x.t) fieldPrime)
-  le x y  := x.t ≤ y.t
+  ofNat  := Fq1.ofNat
+  add    := Fq1.add
+  sub    := Fq1.sub
+  neg    := Fq1.neg
+  mul    := Fq1.mul
+  inv x  := Fq1.ofNat (binaryInversion (Fin.val x.t) fieldPrime)
+  le x y := x.t ≤ y.t
   mulByNonResidual x := x
 
 /-- Lexicographical ordering of Prod. -/
@@ -144,18 +149,28 @@ def Fq2.inv (x : Fq2) : Fq2 :=
   let f := (x.u1 * x.u1 + x.u0 * x.u0)⁻¹
   { u1 := -x.u1 * f, u0 := x.u0 * f }
 
+def Fq2.add (x y : Fq2) : Fq2 := ⟨x.u1 + y.u1, x.u0 + y.u0⟩
+def Fq2.sub (x y : Fq2) : Fq2 := ⟨x.u1 - y.u1, x.u0 - y.u0⟩
+def Fq2.neg (x   : Fq2) : Fq2 := ⟨Fq1.neg x.u1, Fq1.neg x.u0⟩
+def Fq2.mul (x y : Fq2) : Fq2 := ⟨x.u1 * y.u0 + x.u0 * y.u1, x.u0 * y.u0 - x.u1 * y.u1⟩
+def Fq2.mulByNonResidual (x : Fq2) : Fq2 := ⟨x.u1 + x.u0, x.u0 - x.u1⟩
+
 instance : Field Fq2 where
-  ofNat   := Fq2.ofNat
-  add x y := ⟨x.u1 + y.u1, x.u0 + y.u0⟩
-  sub x y := ⟨x.u1 - y.u1, x.u0 - y.u0⟩
-  neg x   := ⟨neg x.u1, neg x.u0⟩
-  mul x y := ⟨x.u1 * y.u0 + x.u0 * y.u1, x.u0 * y.u0 - x.u1 * y.u1⟩
-  inv     := Fq2.inv
-  le x y  := (x.u1, x.u0) ≤ (y.u1, y.u0)
-  mulByNonResidual x := ⟨x.u1 + x.u0, x.u0 - x.u1⟩
+  ofNat  := Fq2.ofNat
+  add    := Fq2.add
+  sub    := Fq2.sub
+  neg    := Fq2.neg
+  mul    := Fq2.mul
+  inv    := Fq2.inv
+  le x y := (x.u1, x.u0) ≤ (y.u1, y.u0)
+  mulByNonResidual := Fq2.mulByNonResidual
 
 instance : (x y : Fq2) → Decidable (x ≤ y) :=
   fun x y => inferInstanceAs (Decidable ((x.u1, x.u0) ≤ (y.u1, y.u0)))
+
+def Fq6.add (x y : Fq6) : Fq6 := ⟨x.v2 + y.v2, x.v1 + y.v1, x.v0 + y.v0⟩
+def Fq6.sub (x y : Fq6) : Fq6 := ⟨x.v2 - y.v2, x.v1 - y.v1, x.v0 - y.v0⟩
+def Fq6.neg (x : Fq6) : Fq6   := ⟨Fq2.neg x.v2, Fq2.neg x.v1, Fq2.neg x.v0⟩
 
 def Fq6.mul (x y : Fq6) : Fq6 :=
   let t0 := x.v0 * y.v0
@@ -172,15 +187,17 @@ def Fq6.inv (x : Fq6) : Fq6 :=
   let f  := (x.v0 * t0 + mulByNonResidual (x.v2 * t1) + mulByNonResidual (x.v1 * t2))⁻¹
   ⟨t2 * f, t1 * f, t0 * f⟩
 
+def Fq6.mulByNonResidual (x : Fq6) : Fq6 := ⟨x.v1, x.v0, Fq2.mulByNonResidual x.v2⟩
+
 instance : Field Fq6 where
-  ofNat   := Fq6.ofNat
-  add x y := ⟨x.v2 + y.v2, x.v1 + y.v1, x.v0 + y.v0⟩
-  sub x y := ⟨x.v2 - y.v2, x.v1 - y.v1, x.v0 - y.v0⟩
-  neg x   := ⟨neg x.v2   , neg x.v1   , neg x.v0   ⟩
-  mul     := Fq6.mul
-  inv     := Fq6.inv
-  le x y  := (x.v2, x.v1, x.v0) ≤ (y.v2, y.v1, y.v0)
-  mulByNonResidual x := ⟨x.v1, x.v0, mulByNonResidual x.v2⟩
+  ofNat  := Fq6.ofNat
+  add    := Fq6.add
+  sub    := Fq6.sub
+  neg    := Fq6.neg
+  mul    := Fq6.mul
+  inv    := Fq6.inv
+  le x y := (x.v2, x.v1, x.v0) ≤ (y.v2, y.v1, y.v0)
+  mulByNonResidual := Fq6.mulByNonResidual
 
 instance : (x y : Fq6) → Decidable (x ≤ y) :=
   fun x y => inferInstanceAs (Decidable ((x.v2, x.v1, x.v0) ≤ (y.v2, y.v1, y.v0)))
@@ -192,15 +209,21 @@ def Fq12.inv (x : Fq12) : Fq12 :=
   let f := (x.w0 * x.w0 - mulByNonResidual (x.w1 * x.w1))⁻¹
   ⟨-x.w1 * f, x.w0 * f⟩
 
+def Fq12.add (x y : Fq12) : Fq12 := ⟨x.w1 + y.w1, x.w0 + y.w0⟩
+def Fq12.sub (x y : Fq12) : Fq12 := ⟨x.w1 - y.w1, x.w0 - y.w0⟩
+def Fq12.neg (x   : Fq12) : Fq12 := ⟨Fq6.neg x.w1, Fq6.neg x.w0⟩
+def Fq12.mul (x y : Fq12) : Fq12 := ⟨x.w1 * y.w0 + x.w0 * y.w1, x.w0 * y.w0 + Fq6.mulByNonResidual (x.w1 * y.w1)⟩
+def Fq12.mulByNonResidual (x : Fq12) : Fq12 := ⟨Fq6.mulByNonResidual x.w1, Fq6.mulByNonResidual x.w0⟩
+
 instance : Field Fq12 where
-  ofNat   := Fq12.ofNat
-  add x y := ⟨x.w1 + y.w1, x.w0 + y.w0⟩
-  sub x y := ⟨x.w1 - y.w1, x.w0 - y.w0⟩
-  neg x   := ⟨neg x.w1, neg x.w0⟩
-  mul x y := ⟨x.w1 * y.w0 + x.w0 * y.w1, x.w0 * y.w0 + mulByNonResidual (x.w1 * y.w1)⟩
-  inv     := Fq12.inv
-  le x y  := (x.w1, x.w0) ≤ (y.w1, y.w0)
-  mulByNonResidual x := ⟨mulByNonResidual x.w1, mulByNonResidual x.w0⟩
+  ofNat  := Fq12.ofNat
+  add    := Fq12.add
+  sub    := Fq12.sub
+  neg    := Fq12.neg
+  mul    := Fq12.mul
+  inv    := Fq12.inv
+  le x y := (x.w1, x.w0) ≤ (y.w1, y.w0)
+  mulByNonResidual := Fq12.mulByNonResidual
 
 /-- Represents a point on the 2 dimensional space over `α`.
     Not all points are on the elliptic curve. -/
