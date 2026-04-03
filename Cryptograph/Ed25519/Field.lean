@@ -88,7 +88,7 @@ instance : Div Fp := ⟨div⟩
 
 -- Convert from bytes (little-endian, 32 bytes)
 def fromBytesLE (bytes : List UInt8) : Fp :=
-  let n := bytes.foldl (fun acc b => acc * 256 + b.toNat) 0
+  let n := bytes.foldr (fun b acc => b.toNat + acc * 256) 0
   normalize n
 
 -- Convert to bytes (little-endian, 32 bytes)

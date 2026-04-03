@@ -31,10 +31,8 @@ def bytesToNat (bytes : List UInt8) : Nat :=
 
 -- Helper: verify with parsed point
 def verifyWithPoint (q : Secp256k1Point) (r s : Nat) (message : List UInt8) : Bool :=
-  -- Hash the message
-  let hashVec := Internal.hashMessage message
-  let hashBytes := Vector.toList hashVec |>.flatMap Cryptograph.Integer.UInt32.toUInt8BE
-  let h := bytesToNat hashBytes
+  -- message is already a 32-byte hash (per Plutus ECDSA spec)
+  let h := bytesToNat message
 
   -- Compute u1 = h * s^-1 (mod n)
   let sInv := invModN s
@@ -66,8 +64,11 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
     let r := bytesToNat rBytes
     let s := bytesToNat sBytes
 
-    -- Check r, s are in valid range
+    -- Check r, s are in valid range [1, n-1] and low-s (s ≤ n/2)
+    -- Note: r = 0, r ≥ n, s = 0, s ≥ n are handled as errors in Basic.lean
     if r = 0 || r ≥ curveOrder || s = 0 || s ≥ curveOrder then false
+    -- Plutus enforces low-s: reject signatures with s > n/2
+    else if s > curveOrder / 2 then false
     else
       -- Parse public key
       match Secp256k1Point.decompress publicKey with

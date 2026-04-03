@@ -13,14 +13,13 @@ open Cryptograph.Sha2.Sha512
 -- L = 2^252 + 27742317777372353535851937790883648493
 def curveOrder : Nat := 2^252 + 27742317777372353535851937790883648493
 
--- Reduce a 512-bit hash to a scalar modulo L
-def reduceModL (hash : List UInt8) : Nat :=
-  let n := hash.foldl (fun acc b => acc * 256 + b.toNat) 0
-  n % curveOrder
-
 -- Convert bytes (little-endian) to Nat
 def bytesToNat (bytes : List UInt8) : Nat :=
   bytes.foldr (fun b acc => b.toNat + acc * 256) 0
+
+-- Reduce a 512-bit hash to a scalar modulo L (little-endian bytes)
+def reduceModL (hash : List UInt8) : Nat :=
+  bytesToNat hash % curveOrder
 
 -- Verify Ed25519 signature
 -- Returns true if signature is valid

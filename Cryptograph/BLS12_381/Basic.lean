@@ -440,6 +440,13 @@ def Fq2.sqrtMod (n : Fq2) : Residues Fq2 :=
 def i2osp₁ (n : Nat) : UInt8      := UInt8.ofNat n
 def i2osp₂ (n : Nat) : List UInt8 := [ UInt8.ofNat (n >>> 8), UInt8.ofNat n ]
 
+/- Encode natural number n as exactly len big-endian bytes (i2osp generalised). -/
+def i2ospN (n : Nat) (len : Nat) : List UInt8 :=
+  let rec loop (n : Nat) : Nat → List UInt8
+    | 0     => []
+    | k + 1 => loop (n / 256) k ++ [UInt8.ofNat (n % 256)]
+  loop n len
+
 /- RFC9380: OS2IP function -/
 def os2ip (x : List UInt8) : Nat :=
   let rec loop (acc : Nat) : List UInt8 → Nat
@@ -751,9 +758,9 @@ def compressG1 : Point Fq1 → List UInt8
   | .infinity   => 0b11000000 :: List.replicate 47 0
   | .affine x y =>
       let y' := Option.get! (Fq1.findY x false)
-      let b  := UInt64.toUInt8BE (UInt64.ofNat x.t)
-      let b0 := List.head b (by subst b; simp [UInt64.toUInt8BE, UInt32.toUInt8BE])
-      let b' := List.tail b
+      let b  := i2ospN x.t.val 48
+      let b0 := b.headD 0
+      let b' := b.tail
       if y ≤ y'
         then (0b10000000 ||| b0) :: b'
         else (0b10100000 ||| b0) :: b'
@@ -762,9 +769,9 @@ def compressG2 : Point Fq2 → List UInt8
   | .infinity   => 0b11000000 :: List.replicate 95 0
   | .affine x y =>
       let y' := Option.get! (Fq2.findY x false)
-      let b  := UInt64.toUInt8BE (UInt64.ofNat x.u1.t) ++ UInt64.toUInt8BE (UInt64.ofNat x.u0.t)
-      let b0 := List.head b (by subst b; simp [UInt64.toUInt8BE, UInt32.toUInt8BE])
-      let b' := List.tail b
+      let b  := i2ospN x.u1.t.val 48 ++ i2ospN x.u0.t.val 48
+      let b0 := b.headD 0
+      let b' := b.tail
       if y ≤ y'
         then (0b10000000 ||| b0) :: b'
         else (0b10100000 ||| b0) :: b'

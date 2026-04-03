@@ -116,7 +116,8 @@ def decompress (yBytes : List UInt8) : Option EdPoint :=
     let check := Fp.square x
     if check != xx then
       -- Try x * sqrt(-1) if x^2 ≠ xx
-      let sqrt_m1 := Fp.pow (Fp.ofInt (-1)) ((p - 1) / 4)
+      -- For p ≡ 5 mod 8, sqrt(-1) = 2^((p-1)/4) mod p (NOT (-1)^((p-1)/4))
+      let sqrt_m1 := Fp.pow (Fp.ofNat 2) ((p - 1) / 4)
       let x := Fp.mul x sqrt_m1
       let check := Fp.square x
       if check != xx then none
