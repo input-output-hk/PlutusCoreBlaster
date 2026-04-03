@@ -40,7 +40,11 @@ def taggedHash (tag : String) (msg : List UInt8) : List UInt8 :=
 def liftX (xBytes : List UInt8) : Option Secp256k1Point :=
   if xBytes.length ≠ 32 then none
   else
-    let x := Fp.fromBytesBE xBytes
+    -- BIP-340: reject if x ≥ p (raw integer must be a valid field element)
+    let xNat := bytesToNat xBytes
+    if xNat ≥ p then none
+    else
+    let x := Fp.ofNat xNat
 
     -- Compute y² = x³ + 7
     let x3 := Fp.mul (Fp.square x) x

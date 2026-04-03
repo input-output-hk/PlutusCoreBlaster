@@ -50,11 +50,11 @@ partial def double (p : Secp256k1Point) : Secp256k1Point :=
       let yy := Fp.square y
       let yyyy := Fp.square yy
       let zz := Fp.square z
-      let s := Fp.mul (Fp.ofNat 2) (Fp.square (Fp.sub (Fp.add x yy) xx))
+      let s := Fp.mul (Fp.ofNat 2) (Fp.sub (Fp.sub (Fp.square (Fp.add x yy)) xx) yyyy)
       let m := Fp.add (Fp.mul (Fp.ofNat 3) xx) (Fp.mul (Fp.square (Fp.square z)) (Fp.ofNat 0))  -- a=0 for secp256k1
       let x3 := Fp.sub (Fp.square m) (Fp.add s s)
       let y3 := Fp.sub (Fp.mul m (Fp.sub s x3)) (Fp.mul (Fp.ofNat 8) yyyy)
-      let z3 := Fp.mul (Fp.mul (Fp.add y z) (Fp.add y z)) (Fp.sub (Fp.square (Fp.add y z)) (Fp.add yy zz))
+      let z3 := Fp.sub (Fp.sub (Fp.square (Fp.add y z)) yy) zz
       point x3 y3 z3
 
 -- Point addition in Jacobian coordinates
@@ -86,7 +86,7 @@ partial def add (p q : Secp256k1Point) : Secp256k1Point :=
         let v := Fp.mul u1 i
         let x3 := Fp.sub (Fp.sub (Fp.square r) j) (Fp.add v v)
         let y3 := Fp.sub (Fp.mul r (Fp.sub v x3)) (Fp.add (Fp.mul s1 j) (Fp.mul s1 j))
-        let z3 := Fp.mul (Fp.mul (Fp.add (Fp.add z1 z2) (Fp.add z1 z2)) (Fp.sub (Fp.square (Fp.add z1 z2)) (Fp.add z1z1 z2z2))) h
+        let z3 := Fp.mul (Fp.sub (Fp.sub (Fp.square (Fp.add z1 z2)) z1z1) z2z2) h
         point x3 y3 z3
 
 instance : Add Secp256k1Point := ⟨add⟩
