@@ -1,2 +1,1 @@
 import Cryptograph.Keccak.Keccak256
-import Cryptograph.Keccak.Keccak256TestVectors
