@@ -1,5 +1,12 @@
 {"version": "1.1.0",
  "packagesDir": ".lake/packages",
- "packages": [],
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "Cryptograph",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "../Cryptograph",
+   "configFile": "lakefile.lean"}],
  "name": "PlutusCore",
  "lakeDir": ".lake"}

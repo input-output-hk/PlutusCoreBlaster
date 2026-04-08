@@ -1,4 +1,4 @@
-/- Cost model for UPLC DEK Machine evaluation-/
+/- Cost model for UPLC CEK Machine evaluation -/
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.ExBudget
 import PlutusCore.UPLC.CekValue
@@ -28,8 +28,6 @@ structure CekMachineCosts where
   stepCostBuiltin : ExBudget
   stepCostConstr : ExBudget
   stepCostCase : ExBudget
-  -- return cost
-  returnCost : ExBudget
 deriving Repr, Inhabited
 
 -- Default CEK machine costs
@@ -45,7 +43,6 @@ def defaultCekMachineCostsA : CekMachineCosts :=
     stepCostBuiltin := { exBudgetCPU := ⟨23000⟩ , exBudgetMemory := ⟨100⟩},
     stepCostConstr  := { exBudgetCPU := ⟨23000⟩ , exBudgetMemory := ⟨100⟩},
     stepCostCase    := { exBudgetCPU := ⟨23000⟩ , exBudgetMemory := ⟨100⟩},
-    returnCost      := { exBudgetCPU := ⟨23000⟩ , exBudgetMemory := ⟨100⟩}
   }
 
 def defaultCekMachineCostsB : CekMachineCosts :=
@@ -59,7 +56,6 @@ def defaultCekMachineCostsB : CekMachineCosts :=
     stepCostBuiltin := { exBudgetCPU := ⟨16000⟩ , exBudgetMemory := ⟨100⟩},
     stepCostConstr  := { exBudgetCPU := ⟨16000⟩ , exBudgetMemory := ⟨100⟩},
     stepCostCase    := { exBudgetCPU := ⟨16000⟩ , exBudgetMemory := ⟨100⟩},
-    returnCost      := { exBudgetCPU := ⟨16000⟩ , exBudgetMemory := ⟨100⟩}
   }
 
 def defaultCekMachineCostsC : CekMachineCosts :=
@@ -73,7 +69,6 @@ def defaultCekMachineCostsC : CekMachineCosts :=
     stepCostBuiltin := { exBudgetCPU := ⟨16000⟩ , exBudgetMemory := ⟨100⟩},
     stepCostConstr  := { exBudgetCPU := ⟨16000⟩ , exBudgetMemory := ⟨100⟩},
     stepCostCase    := { exBudgetCPU := ⟨16000⟩ , exBudgetMemory := ⟨100⟩},
-    returnCost      := { exBudgetCPU := ⟨16000⟩ , exBudgetMemory := ⟨100⟩}
   }
 
 -- Helpers
@@ -82,31 +77,34 @@ def defaultCekMachineCostsC : CekMachineCosts :=
 /-- Blaster friendly Integer size-/
 def integerSize (i : Integer) : Nat :=
   let n := i.natAbs
-  if n < 18446744073709551616 then 1                                                                                                                                                                                                    --  2^64
-  else if n < 340282366920938463463374607431768211456 then 2                                                                                                                                                                            --  2^128
-  else if n < 6277101735386680763835789423207666416102355444464034512896 then 3                                                                                                                                                         --  2^192
-  else if n < 115792089237316195423570985008687907853269984665640564039457584007913129639936 then 4                                                                                                                                     --  2^256
-  else if n < 2135987035920910082395021706169552114602704522356652769947041607822219725780640550022962086936576 then 5                                                                                                                  --  2^320
-  else if n < 39402006196394479212279040100143613805079739270465446667948293404245721771497210611414266254884915640806627990306816 then 6                                                                                               --  2^384
-  else if n < 726838724295606890549323807888004534353641360687318060281490199180639288113397923326191050713763565560762521606266177933534601628614656 then 7                                                                           --  2^448
-  else 8
+  if n == 0 then 1
+  else n.log2 / 64 + 1
 
 
-/-- Calculate the size ofa bytestring -/
+/-- Calculate the size of a bytestring in 8-byte words (minimum 1).
+    Matches Haskell's `((n-1) `quot` 8) + 1` — empty bytestring has size 1. -/
 def byteStringSize (bs : ByteString) : Nat :=
-  let byteLen := (bs.data.length + 7) / 8 -- round up
-  byteLen
+  let n := bs.data.length
+  (n - 1) / 8 + 1  -- saturating subtraction: n=0 gives (0/8)+1 = 1
 
-/-- Size of a data value -/
-def dataSize (d : Data) : Nat :=
-  match d with
-  | Data.Constr n ds => 1 + ds.foldl (fun acc d => acc + dataSize d) 0
-  | Data.Map kvs => 1 + kvs.foldl (fun acc (k, v) => acc + dataSize k + dataSize v) 0
-  | Data.List ds => 1 + ds.foldl (fun acc d => acc + dataSize d) 0
-  | Data.I i => 1 + integerSize i
-  | Data.B bs => 1 + byteStringSize bs
-  termination_by d -- Dummy, what's decreasing is the nesting of data structures
-  decreasing_by all_goals sorry
+
+mutual
+  def dataSize (d : Data) : Nat :=
+    match d with
+    | Data.Constr _ ds => 4 + dataSizeList ds
+    | Data.Map kvs => 4 + dataSizeMap kvs
+    | Data.List ds => 4 + dataSizeList ds
+    | Data.I i => 4 + integerSize i
+    | Data.B bs => 4 + byteStringSize bs
+
+  def dataSizeList : List Data → Nat
+    | [] => 0
+    | d :: ds => dataSize d + dataSizeList ds
+
+  def dataSizeMap : List (Data × Data) → Nat
+    | [] => 0
+    | (k, v) :: kvs => dataSize k + dataSize v + dataSizeMap kvs
+end
 
 /-- Size of a const value-/
 def constSize (c : Const) : Nat :=
@@ -122,9 +120,9 @@ def constSize (c : Const) : Nat :=
   | Const.Pair (c1, c2) => constSize c1 + constSize c2
   | Const.PairData (d1, d2) => dataSize d1 + dataSize d2
   | Const.Data d => dataSize d
-  | Const.Bls12_381_G1_element => 48
-  | Const.Bls12_381_G2_element => 96
-  | Const.Bls12_381_MlResult => 576
+  | Const.Bls12_381_G1_element _ => 48
+  | Const.Bls12_381_G2_element _ => 96
+  | Const.Bls12_381_MlResult _ => 576
 
 def cekValueSize (v : CekValue) : Nat :=
   match v with
@@ -133,6 +131,14 @@ def cekValueSize (v : CekValue) : Nat :=
 
 def argSize (args : List CekValue) (i : Nat) : Nat :=
   if h : i < args.length then cekValueSize (args.get ⟨i, h⟩) else 1 -- 1?
+
+/-- Length of the list constant at position i in the CEK args. -/
+def argListLen (args : List CekValue) (i : Nat) : Nat :=
+  if h : i < args.length then
+    match args.get ⟨i, h⟩ with
+    | .VCon (.ConstList cs) => cs.length
+    | _ => 0
+  else 0
 
 def maxArgSize (args : List CekValue) : Nat :=
   match args.map cekValueSize with
@@ -194,6 +200,10 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨74698472⟩, ⟨36⟩⟩
   | BuiltinFun.Bls12_381_finalVerify =>
     ⟨⟨333849714⟩, ⟨1⟩⟩
+  | BuiltinFun.Bls12_381_G1_multiScalarMul =>
+    ⟨⟨321837444 + 25087669 * argListLen args 0⟩, ⟨18⟩⟩
+  | BuiltinFun.Bls12_381_G2_multiScalarMul =>
+    ⟨⟨617887431 + 67302824 * argListLen args 0⟩, ⟨36⟩⟩
   | BuiltinFun.Bls12_381_millerLoop =>
     ⟨⟨254006273⟩, ⟨72⟩⟩
   | BuiltinFun.Bls12_381_mulMlResult =>
@@ -299,21 +309,29 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.VerifyEd25519Signature =>
     ⟨⟨57996947 + 18975 * argSize args 2⟩, ⟨10⟩⟩
   | BuiltinFun.VerifySchnorrSecp256k1Signature =>
-    ⟨⟨39121781 + 32260 * argSize args 1⟩, ⟨10⟩⟩
+    -- args = Vs++[V] = [msg, pk, sig]; linear_in_y = msg = args[0]
+    ⟨⟨39121781 + 32260 * argSize args 0⟩, ⟨10⟩⟩
   | BuiltinFun.AndByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    -- args = Vs++[V] = [b, e(Bool), c]; linear_in_y_and_z: slope1*size(b) + slope2*size(c)
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.OrByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.XorByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.ComplementByteString =>
     ⟨⟨107878 + 680 * argSize args 0⟩, ⟨argSize args 0⟩⟩
   | BuiltinFun.ReadBit =>
     ⟨⟨95336⟩, ⟨1⟩⟩
   | BuiltinFun.WriteBits =>
-    ⟨⟨281145 + 18848 * argSize args 1⟩, ⟨argSize args 0⟩⟩
+    -- args = [idxs, s, x]; linear_in_y uses a2=idxs=args[0]; linear_in_x uses a1=s=args[1]
+    ⟨⟨281145 + 18848 * argSize args 0⟩, ⟨argSize args 1⟩⟩
   | BuiltinFun.ReplicateByte =>
-    ⟨⟨180194 + 159 * argSize args 0⟩, ⟨1 + 1 * argSize args 0⟩⟩
+    -- x = NumBytesCostedAsNumWords(n): 0 for n ≤ 0, else (n-1)/8+1
+    let x := match (args[0]? : Option CekValue) with
+      | some (CekValue.VCon (Const.Integer n)) =>
+          if n ≤ 0 then 0 else (n.toNat - 1) / 8 + 1
+      | _ => 0
+    ⟨⟨180194 + 159 * x⟩, ⟨1 + 1 * x⟩⟩
   | BuiltinFun.ShiftByteString =>
     ⟨⟨158519 + 8942 * argSize args 0⟩, ⟨argSize args 0⟩⟩
   | BuiltinFun.RotateByteString =>
@@ -325,11 +343,31 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.Ripemd_160 =>
     ⟨⟨1964219 + 24520 * argSize args 0⟩, ⟨3⟩⟩
   | BuiltinFun.ExpModInteger =>
-    ⟨⟨987654321⟩, ⟨argSize args 2⟩⟩ -- TODO: exp_mod_cost formula (see Plutus source)
+    -- args = [e, b, m] (reversed CEK accumulation)
+    -- Formula from Haskell: cost0 = c00 + c11*ee*mm + c12*ee*mm^2
+    --   where ee=size(e)=args[0], mm=size(m)=args[2], aa=size(b)=args[1]
+    -- If aa > mm: total = cost0 + cost0/2 (50% penalty)
+    let ee := argSize args 0
+    let mm := argSize args 2
+    let aa := argSize args 1
+    let cost0 := 607153 + 231697 * ee * mm + 53144 * ee * mm^2
+    ⟨⟨if aa > mm then cost0 + cost0 / 2 else cost0⟩, ⟨mm⟩⟩
+  | BuiltinFun.DropList =>
+    -- Cost args (2-arg forward): args[0] = Integer n, x = abs(n) (IntegerCostedLiterally)
+    let x := match (args[0]? : Option CekValue) with
+      | some (CekValue.VCon (Const.Integer n)) => n.natAbs
+      | _ => 0
+    ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
   | BuiltinFun.IntegerToByteString =>
-    let memSize := match args[1]? with
-      | some (CekValue.VCon (Const.Integer n)) => if n > 0 then n.toNat else argSize args 2
-      | _                                       => argSize args 2
+    -- Cost args order: [a1, a0, a2] = [width, endian, integer]
+    -- Memory model: literal_in_y_or_linear_in_z
+    -- y = args[0] (width = a1), wrapped as NumBytesCostedAsNumWords: mem = ((n-1)/8)+1
+    -- If y == 0 (unbounded): use linear_in_z = argSize args 2 (= size of integer = a2)
+    -- CPU: quadratic_in_z where z = argSize args 2 (= size of a2)
+    let memSize := match args[0]? with
+      | some (CekValue.VCon (Const.Integer n)) =>
+          if n > 0 then (n.toNat - 1) / 8 + 1 else argSize args 2
+      | _ => argSize args 2
     ⟨⟨1293828 + 28716 * argSize args 2 + 63 * (argSize args 2)^2⟩, ⟨memSize⟩⟩
 
 def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
@@ -374,6 +412,10 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨158221314 + 26549 * argSize args 0⟩, ⟨36⟩⟩
   | BuiltinFun.Bls12_381_G2_uncompress =>
     ⟨⟨74698472⟩, ⟨36⟩⟩
+  | BuiltinFun.Bls12_381_G1_multiScalarMul =>
+    ⟨⟨321837444 + 25087669 * argListLen args 0⟩, ⟨18⟩⟩
+  | BuiltinFun.Bls12_381_G2_multiScalarMul =>
+    ⟨⟨617887431 + 67302824 * argListLen args 0⟩, ⟨36⟩⟩
   | BuiltinFun.Bls12_381_finalVerify =>
     ⟨⟨333849714⟩, ⟨1⟩⟩
   | BuiltinFun.Bls12_381_millerLoop =>
@@ -417,10 +459,15 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.IndexByteString =>
     ⟨⟨13169⟩, ⟨4⟩⟩
   | BuiltinFun.IntegerToByteString =>
-    -- memory: if arg 1 is a concrete positive integer, use it directly
-    let memSize := match args[1]? with
-      | some (CekValue.VCon (Const.Integer n)) => if n > 0 then n.toNat else argSize args 2
-      | _                                       => argSize args 2
+    -- Cost args order: [a1, a0, a2] = [width, endian, integer]
+    -- Memory model: literal_in_y_or_linear_in_z
+    -- y = args[0] (width = a1), wrapped as NumBytesCostedAsNumWords: mem = ((n-1)/8)+1
+    -- If y == 0 (unbounded): use linear_in_z = argSize args 2 (= size of integer = a2)
+    -- CPU: quadratic_in_z where z = argSize args 2 (= size of a2)
+    let memSize := match args[0]? with
+      | some (CekValue.VCon (Const.Integer n)) =>
+          if n > 0 then (n.toNat - 1) / 8 + 1 else argSize args 2
+      | _ => argSize args 2
     ⟨⟨1293828 + 28716 * argSize args 2 + 63 * (argSize args 2)^2⟩, ⟨memSize⟩⟩
   | BuiltinFun.Keccak_256 =>
     ⟨⟨2261318 + 64571 * argSize args 0⟩, ⟨4⟩⟩
@@ -485,23 +532,32 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.VerifyEcdsaSecp256k1Signature =>
     ⟨⟨43053543⟩, ⟨10⟩⟩
   | BuiltinFun.VerifyEd25519Signature =>
-    ⟨⟨53384111 + 14333 * argSize args 1⟩, ⟨10⟩⟩
+    -- args = Vs++[V] = [msg, pk, sig]; linear_in_y = msg = args[0]
+    ⟨⟨53384111 + 14333 * argSize args 0⟩, ⟨10⟩⟩
   | BuiltinFun.VerifySchnorrSecp256k1Signature =>
-    ⟨⟨43574283 + 26308 * argSize args 1⟩, ⟨10⟩⟩
+    -- args = Vs++[V] = [msg, pk, sig]; linear_in_y = msg = args[0]
+    ⟨⟨43574283 + 26308 * argSize args 0⟩, ⟨10⟩⟩
   | BuiltinFun.AndByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    -- args = Vs++[V] = [b, e(Bool), c]; linear_in_y_and_z: slope1*size(b) + slope2*size(c)
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.OrByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.XorByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.ComplementByteString =>
     ⟨⟨107878 + 680 * argSize args 0⟩, ⟨argSize args 0⟩⟩
   | BuiltinFun.ReadBit =>
     ⟨⟨95336⟩, ⟨1⟩⟩
   | BuiltinFun.WriteBits =>
-    ⟨⟨281145 + 18848 * argSize args 1⟩, ⟨argSize args 0⟩⟩
+    -- args = [idxs, s, x]; linear_in_y uses a2=idxs=args[0]; linear_in_x uses a1=s=args[1]
+    ⟨⟨281145 + 18848 * argSize args 0⟩, ⟨argSize args 1⟩⟩
   | BuiltinFun.ReplicateByte =>
-    ⟨⟨180194 + 159 * argSize args 0⟩, ⟨1 + 1 * argSize args 0⟩⟩
+    -- x = NumBytesCostedAsNumWords(n): 0 for n ≤ 0, else (n-1)/8+1
+    let x := match (args[0]? : Option CekValue) with
+      | some (CekValue.VCon (Const.Integer n)) =>
+          if n ≤ 0 then 0 else (n.toNat - 1) / 8 + 1
+      | _ => 0
+    ⟨⟨180194 + 159 * x⟩, ⟨1 + 1 * x⟩⟩
   | BuiltinFun.ShiftByteString =>
     ⟨⟨158519 + 8942 * argSize args 0⟩, ⟨argSize args 0⟩⟩
   | BuiltinFun.RotateByteString =>
@@ -513,7 +569,16 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.Ripemd_160 =>
     ⟨⟨1964219 + 24520 * argSize args 0⟩, ⟨3⟩⟩
   | BuiltinFun.ExpModInteger =>
-    ⟨⟨100000000000⟩, ⟨argSize args 2⟩⟩ -- TODO: exp_mod_cost formula (see Plutus source)
+    let ee := argSize args 0
+    let mm := argSize args 2
+    let aa := argSize args 1
+    let cost0 := 607153 + 231697 * ee * mm + 53144 * ee * mm^2
+    ⟨⟨if aa > mm then cost0 + cost0 / 2 else cost0⟩, ⟨mm⟩⟩
+  | BuiltinFun.DropList =>
+    let x := match (args[0]? : Option CekValue) with
+      | some (CekValue.VCon (Const.Integer n)) => n.natAbs
+      | _ => 0
+    ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
 
 
 def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
@@ -558,6 +623,10 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨158221314 + 26549 * argSize args 0⟩, ⟨36⟩⟩
   | BuiltinFun.Bls12_381_G2_uncompress =>
     ⟨⟨74698472⟩, ⟨36⟩⟩
+  | BuiltinFun.Bls12_381_G1_multiScalarMul =>
+    ⟨⟨321837444 + 25087669 * argListLen args 0⟩, ⟨18⟩⟩
+  | BuiltinFun.Bls12_381_G2_multiScalarMul =>
+    ⟨⟨617887431 + 67302824 * argListLen args 0⟩, ⟨36⟩⟩
   | BuiltinFun.Bls12_381_finalVerify =>
     ⟨⟨333849714⟩, ⟨1⟩⟩
   | BuiltinFun.Bls12_381_millerLoop =>
@@ -601,10 +670,15 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.IndexByteString =>
     ⟨⟨13169⟩, ⟨4⟩⟩
   | BuiltinFun.IntegerToByteString =>
-    -- memory: if arg 1 is a concrete positive integer, use it directly
-    let memSize := match args[1]? with
-      | some (CekValue.VCon (Const.Integer n)) => if n > 0 then n.toNat else argSize args 2
-      | _                                       => argSize args 2
+    -- Cost args order: [a1, a0, a2] = [width, endian, integer]
+    -- Memory model: literal_in_y_or_linear_in_z
+    -- y = args[0] (width = a1), wrapped as NumBytesCostedAsNumWords: mem = ((n-1)/8)+1
+    -- If y == 0 (unbounded): use linear_in_z = argSize args 2 (= size of integer = a2)
+    -- CPU: quadratic_in_z where z = argSize args 2 (= size of a2)
+    let memSize := match args[0]? with
+      | some (CekValue.VCon (Const.Integer n)) =>
+          if n > 0 then (n.toNat - 1) / 8 + 1 else argSize args 2
+      | _ => argSize args 2
     ⟨⟨1293828 + 28716 * argSize args 2 + 63 * (argSize args 2)^2⟩, ⟨memSize⟩⟩
   | BuiltinFun.Keccak_256 =>
     ⟨⟨2261318 + 64571 * argSize args 0⟩, ⟨4⟩⟩
@@ -669,23 +743,32 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.VerifyEcdsaSecp256k1Signature =>
     ⟨⟨43053543⟩, ⟨10⟩⟩
   | BuiltinFun.VerifyEd25519Signature =>
-    ⟨⟨53384111 + 14333 * argSize args 1⟩, ⟨10⟩⟩
+    -- args = Vs++[V] = [msg, pk, sig]; linear_in_y = msg = args[0]
+    ⟨⟨53384111 + 14333 * argSize args 0⟩, ⟨10⟩⟩
   | BuiltinFun.VerifySchnorrSecp256k1Signature =>
-    ⟨⟨43574283 + 26308 * argSize args 1⟩, ⟨10⟩⟩
+    -- args = Vs++[V] = [msg, pk, sig]; linear_in_y = msg = args[0]
+    ⟨⟨43574283 + 26308 * argSize args 0⟩, ⟨10⟩⟩
   | BuiltinFun.AndByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    -- args = Vs++[V] = [b, e(Bool), c]; linear_in_y_and_z: slope1*size(b) + slope2*size(c)
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.OrByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.XorByteString =>
-    ⟨⟨100181 + 726 * argSize args 1 + 719 * argSize args 2⟩, ⟨max (argSize args 1) (argSize args 2)⟩⟩
+    ⟨⟨100181 + 726 * argSize args 0 + 719 * argSize args 2⟩, ⟨max (argSize args 0) (argSize args 2)⟩⟩
   | BuiltinFun.ComplementByteString =>
     ⟨⟨107878 + 680 * argSize args 0⟩, ⟨argSize args 0⟩⟩
   | BuiltinFun.ReadBit =>
     ⟨⟨95336⟩, ⟨1⟩⟩
   | BuiltinFun.WriteBits =>
-    ⟨⟨281145 + 18848 * argSize args 1⟩, ⟨argSize args 0⟩⟩
+    -- args = [idxs, s, x]; linear_in_y uses a2=idxs=args[0]; linear_in_x uses a1=s=args[1]
+    ⟨⟨281145 + 18848 * argSize args 0⟩, ⟨argSize args 1⟩⟩
   | BuiltinFun.ReplicateByte =>
-    ⟨⟨180194 + 159 * argSize args 0⟩, ⟨1 + 1 * argSize args 0⟩⟩
+    -- x = NumBytesCostedAsNumWords(n): 0 for n ≤ 0, else (n-1)/8+1
+    let x := match (args[0]? : Option CekValue) with
+      | some (CekValue.VCon (Const.Integer n)) =>
+          if n ≤ 0 then 0 else (n.toNat - 1) / 8 + 1
+      | _ => 0
+    ⟨⟨180194 + 159 * x⟩, ⟨1 + 1 * x⟩⟩
   | BuiltinFun.ShiftByteString =>
     ⟨⟨158519 + 8942 * argSize args 0⟩, ⟨argSize args 0⟩⟩
   | BuiltinFun.RotateByteString =>
@@ -697,7 +780,16 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.Ripemd_160 =>
     ⟨⟨1964219 + 24520 * argSize args 0⟩, ⟨3⟩⟩
   | BuiltinFun.ExpModInteger =>
-    ⟨⟨100000000000⟩, ⟨argSize args 2⟩⟩ -- TODO: exp_mod_cost formula (see Plutus source)
+    let ee := argSize args 0
+    let mm := argSize args 2
+    let aa := argSize args 1
+    let cost0 := 607153 + 231697 * ee * mm + 53144 * ee * mm^2
+    ⟨⟨if aa > mm then cost0 + cost0 / 2 else cost0⟩, ⟨mm⟩⟩
+  | BuiltinFun.DropList =>
+    let x := match (args[0]? : Option CekValue) with
+      | some (CekValue.VCon (Const.Integer n)) => n.natAbs
+      | _ => 0
+    ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
 
 def builtinCostSelected (semVar: BuiltinSemanticsVariant) (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match semVar with

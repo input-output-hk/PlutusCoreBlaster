@@ -3,6 +3,7 @@ open Lake DSL
 
 package «PlutusCore» where
   -- add package configuration options here
+  require Cryptograph from "../sc-fvt/Cryptograph"
 
 @[default_target]
 lean_lib «PlutusCore» where

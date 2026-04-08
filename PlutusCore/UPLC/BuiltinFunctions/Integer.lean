@@ -1,9 +1,11 @@
 import PlutusCore.Integer
+import PlutusCore.Crypto.ExpMod
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.Integer
+
 namespace PLC
   open PlutusCore.Integer
   export PlutusCore.Integer (
@@ -19,9 +21,13 @@ namespace PLC
     lessThanInteger
     lessThanEqualsInteger
   )
+  open PlutusCore.Crypto.ExpMod
+  export PlutusCore.Crypto.ExpMod (expModInteger)
 end PLC
+
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Utils
 
 -- NOTE: Args are deliberately reversed on the Cek machine stack for performance
 
@@ -96,4 +102,11 @@ def lessThanEqualsInteger (Vs : List CekValue) : Option CekValue :=
       some (CekValue.VCon (Const.Bool (PLC.lessThanEqualsInteger op1 op2)))
   | _ => none
 
-end PlutusCore.UPLC.CekValue
+-- Define expModInteger: args reversed as [m, e, b]
+def expModInteger (Vs : List CekValue) : Option CekValue :=
+  match Vs with
+  | [CekValue.VCon (Const.Integer m), CekValue.VCon (Const.Integer e), CekValue.VCon (Const.Integer b)] =>
+      tryCatchSome (PLC.expModInteger b e m) (CekValue.VCon ∘ Const.Integer)
+  | _ => none
+
+end PlutusCore.UPLC.BuiltinFunctions.Integer

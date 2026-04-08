@@ -1,9 +1,12 @@
+import PlutusCore.ByteString
+import PlutusCore.Cbor
 import PlutusCore.Data
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.Data
+
 namespace PLC
   open PlutusCore.Data
   export PlutusCore.Data (
@@ -22,11 +25,18 @@ namespace PLC
     mkPairData
     mkNilData
     mkNilPairData
-    -- TODO: export serialiseData
+    -- serialiseData
+  )
+  open PlutusCore.Cbor
+  export PlutusCore.Cbor (
+    encodeData
   )
 end PLC
+
+open PlutusCore.ByteString (ByteString)
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Utils
 
 -- NOTE: Args are deliberately reversed on the Cek machine stack for performance
 
@@ -138,6 +148,10 @@ def mkNilPairData (Vs : List CekValue) : Option CekValue :=
       CekValue.VCon $ Const.ConstPairDataList (PLC.mkNilPairData ())
   | _ => none
 
+-- Define serializeData
+def serializeData (Vs : List CekValue) : Option CekValue :=
+  match Vs with
+  | [CekValue.VCon (Const.Data d)] => (CekValue.VCon ∘ Const.ByteString ∘ ByteString.mk) <$> PLC.encodeData d
+  | _                              => none
 
-
-end PlutusCore.UPLC.CekValue
+end PlutusCore.UPLC.BuiltinFunctions.Data
