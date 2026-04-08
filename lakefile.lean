@@ -14,3 +14,6 @@ lean_lib «Tests» where
 
 lean_lib «Lemmas» where
   -- add library configuration options here
+
+lean_lib «Cryptograph» where
+  -- add library configuration options here
