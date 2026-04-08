@@ -7,3 +7,4 @@ import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.FlatEncoding
 import PlutusCore.UPLC.ScriptEncoding
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.TextEncoding

@@ -4,6 +4,7 @@ import PlutusCore.Cbor
 
 import PlutusCore.UPLC.FlatEncoding
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.TextEncoding
 
 namespace PlutusCore.UPLC.ScriptEncoding
 
@@ -11,6 +12,7 @@ open PlutusCore.Cbor (decodeLargeBytestring)
 
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.FlatEncoding (decodeProgramFromByteString)
+open PlutusCore.UPLC.TextEncoding (programFromString)
 
 namespace Internal
 
@@ -135,7 +137,7 @@ Imports a UPLC program from a file at compile time.
 
 Syntax: `#import_uplc <identifier> <format> <filepath>`
 
-Supported formats: `textual` (stub), `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
+Supported formats: `textual`, `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
 
 Example:
 ```lean4
@@ -206,28 +208,35 @@ def importUplcImp : CommandElab := fun stx => do
       | none => s!"Decoding error in '{filename}'"
     if suggestion.isEmpty then baseMsg else s!"{baseMsg}. {suggestion}"
 
-  /-- Parses a textual UPLC file and returns the resulting expression (STUB) -/
+  /-- Reads file at path `filename` contents as text. -/
+  readFileContents (filename : String) : TermElabM String :=
+    liftM $ do
+      let path := System.FilePath.mk filename
+      IO.FS.readFile path
+
+  /-- Parses a textual UPLC file and returns the resulting expression -/
   parseTextualUplc (filename : String) : TermElabM Expr := do
-    throwError s!"Textual UPLC parser not yet implemented for '{filename}'"
+    let content ← readFileContents filename
+    match programFromString content with
+    | .ok p =>
+        logInfo s!"Successfully decoded textual '{filename}'"
+        return (toExpr p)
+    | .error msg =>
+        throwError (decodingErrorWithSuggestion content `textual filename (some msg))
 
   /-- Parses a flat-encoded UPLC file and returns the resulting expression -/
   parseFlatUplc (filename : String) : TermElabM Expr := do
-    -- Read file content
-    let content ← liftM $ do
-      let path := System.FilePath.mk filename
-      IO.FS.readFile path
+    let content ← readFileContents filename
     match decodeProgramFromByteString content with
     | .some p =>
-        logInfo s!"Successfully decoded '{filename}'"
+        logInfo s!"Successfully decoded flat '{filename}'"
         return (toExpr p)
     | .none =>
         throwError (decodingErrorWithSuggestion content `flat filename)
 
   /-- Parses a flat hex-encoded UPLC file and returns the resulting expression -/
   parseFlatHexUplc (filename : String) : TermElabM Expr := do
-    let content ← liftM $ do
-      let path := System.FilePath.mk filename
-      IO.FS.readFile path
+    let content ← readFileContents filename
     match flatEncodedScriptFromHex? content with
     | .ok p =>
         logInfo s!"Successfully decoded flat hex '{filename}'"
@@ -237,9 +246,7 @@ def importUplcImp : CommandElab := fun stx => do
 
   /-- Parses a single CBOR hex-encoded UPLC file and returns the resulting expression -/
   parseSingleCborHexUplc (filename : String) : TermElabM Expr := do
-    let content ← liftM $ do
-      let path := System.FilePath.mk filename
-      IO.FS.readFile path
+    let content ← readFileContents filename
     match singleCborEncodedScriptFromHex? content with
     | .ok p =>
         logInfo s!"Successfully decoded single CBOR hex '{filename}'"
