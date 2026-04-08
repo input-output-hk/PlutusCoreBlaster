@@ -1,6 +1,7 @@
 import PlutusCore.Default
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.BuiltinFunctions.Bitwise
 import PlutusCore.UPLC.BuiltinFunctions.Bool
 import PlutusCore.UPLC.BuiltinFunctions.ByteString
 import PlutusCore.UPLC.BuiltinFunctions.Crypto
@@ -18,6 +19,7 @@ namespace PlutusCore.UPLC.BuiltinFunctions.Evaluate
 open PlutusCore.Default
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Bitwise
 open PlutusCore.UPLC.BuiltinFunctions.Bool
 open PlutusCore.UPLC.BuiltinFunctions.ByteString
 open PlutusCore.UPLC.BuiltinFunctions.Data
@@ -123,9 +125,26 @@ def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : Bu
   -- Other cryptography
   | .Keccak_256                      => Crypto.keccak_256
   | .Blake2b_224                     => Crypto.blake2b_224
+  | .IntegerToByteString             => Bitwise.integerToByteString
+  | .ByteStringToInteger             => Bitwise.byteStringToInteger
+  -- Batch 5
+  -- ByteString
+  | .AndByteString                   => Bitwise.andByteString
+  | .OrByteString                    => Bitwise.orByteString
+  | .XorByteString                   => Bitwise.xorByteString
+  | .ComplementByteString            => Bitwise.complementByteString
+  | .ReadBit                         => Bitwise.readBit
+  | .WriteBits                       => Bitwise.writeBits
+  | .ReplicateByte                   => Bitwise.replicateByte
+  | .ShiftByteString                 => Bitwise.shiftByteString
+  | .RotateByteString                => Bitwise.rotateByteString
+  | .CountSetBits                    => Bitwise.countSetBits
+  | .FindFirstSetBit                 => Bitwise.findFirstSetBit
+  -- Cryptography
+  | .Ripemd_160                      => Crypto.ripemd_160
   -- Batch 6
   | .ExpModInteger                   => expModInteger
-  -- Batch 5 (bitwise) and Batch 7 wired in a subsequent PR
-  | _                                => fun _ => none
+  -- Batch 7
+  | .DropList                        => dropList
 
 end PlutusCore.UPLC.BuiltinFunctions.Evaluate
