@@ -114,4 +114,16 @@ info: Successfully decoded single CBOR hex 'PlutusCore/UPLC/ScriptEncoding/Tests
 #guard_msgs in
 #import_uplc dataMap PlutusV2 single_cbor_hex "PlutusCore/UPLC/ScriptEncoding/TestsFlat/dataMap.flat"
 
+/--
+info: Successfully decoded textual '../PlutusCore/PlutusCore/UPLC/ScriptEncoding/TestsText/factorial.uplc'
+-/
+#guard_msgs in
+#import_uplc factorial textual  "../PlutusCore/PlutusCore/UPLC/ScriptEncoding/TestsText/factorial.uplc"
+
+/--
+info: Successfully decoded textual '../PlutusCore/PlutusCore/UPLC/ScriptEncoding/TestsText/fibonacci.uplc'
+-/
+#guard_msgs in
+#import_uplc fibonacci textual  "../PlutusCore/PlutusCore/UPLC/ScriptEncoding/TestsText/fibonacci.uplc"
+
 end PlutusCore.UPLC.ScriptEncoding
