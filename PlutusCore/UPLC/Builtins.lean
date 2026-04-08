@@ -7,13 +7,13 @@ open PlutusCore.UPLC.Term
 inductive ExpectedBuiltinArg
 | ArgV : ExpectedBuiltinArg
 | ArgQ : ExpectedBuiltinArg
-deriving Repr
+deriving Repr, BEq
 
 -- Define expectedBuiltinArgs
 inductive ExpectedBuiltinArgs
 | One : ExpectedBuiltinArg → ExpectedBuiltinArgs
 | More : ExpectedBuiltinArg → ExpectedBuiltinArgs → ExpectedBuiltinArgs
-deriving Repr
+deriving Repr, BEq
 
 namespace ExpectedArgNotations
 
@@ -106,13 +106,16 @@ def expectedArgs (b : BuiltinFun) : ExpectedBuiltinArgs :=
   | Bls12_381_G2_hashToGroup        => ArgV ⊙ One ArgV
   | Bls12_381_G2_compress           => One ArgV
   | Bls12_381_G2_uncompress         => One ArgV
+  | Bls12_381_G1_multiScalarMul     => ArgV ⊙ One ArgV
+  | Bls12_381_G2_multiScalarMul     => ArgV ⊙ One ArgV
   | Bls12_381_millerLoop            => ArgV ⊙ One ArgV
   | Bls12_381_mulMlResult           => ArgV ⊙ One ArgV
   | Bls12_381_finalVerify           => ArgV ⊙ One ArgV
-  | Keccak_256                      => ArgV ⊙ One ArgV
-  | Blake2b_224                     => ArgV ⊙ One ArgV
+  | Keccak_256                      => One ArgV
+  | Blake2b_224                     => One ArgV
   | IntegerToByteString             => ArgV ⊙ ArgV ⊙ One ArgV
   | ByteStringToInteger             => ArgV ⊙ One ArgV
+  -- Batch 5 (bitwise) and Batch 6/7 wired in a subsequent PR
   | _ => One ExpectedBuiltinArg.ArgV
 
 namespace BuiltinNotations

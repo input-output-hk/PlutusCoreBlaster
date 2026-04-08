@@ -8,12 +8,15 @@ open Lean
 instance : ToExpr AtomicType where
   toTypeExpr := .const ``AtomicType []
   toExpr
-    | .TypeInteger    => .const ``AtomicType.TypeInteger    []
-    | .TypeByteString => .const ``AtomicType.TypeByteString []
-    | .TypeString     => .const ``AtomicType.TypeString     []
-    | .TypeBool       => .const ``AtomicType.TypeBool       []
-    | .TypeUnit       => .const ``AtomicType.TypeUnit       []
-    | .TypeData       => .const ``AtomicType.TypeData       []
+    | .TypeInteger              => .const ``AtomicType.TypeInteger    []
+    | .TypeByteString           => .const ``AtomicType.TypeByteString []
+    | .TypeString               => .const ``AtomicType.TypeString     []
+    | .TypeBool                 => .const ``AtomicType.TypeBool       []
+    | .TypeUnit                 => .const ``AtomicType.TypeUnit       []
+    | .TypeData                 => .const ``AtomicType.TypeData       []
+    | .TypeBls12_381_G1_element => .const ``AtomicType.TypeBls12_381_G1_element []
+    | .TypeBls12_381_G2_element => .const ``AtomicType.TypeBls12_381_G2_element []
+    | .TypeBls12_381_MlResult   => .const ``AtomicType.TypeBls12_381_MlResult []
 
 mutual
   def BuiltinType.toExpr : BuiltinType → Expr
@@ -45,9 +48,9 @@ partial def constToExpr : Const → Expr
   | .Pair                 p => .app (.const ``Const.Pair                 []) (pairToExpr (α := Const) (β := Const) (.const ``Const []) (.const ``Const []) constToExpr constToExpr p)
   | .PairData             p => .app (.const ``Const.PairData             []) (toExpr p)
   | .Data                 d => .app (.const ``Const.Data                 []) (toExpr d)
-  | .Bls12_381_G1_element   =>       .const ``Const.Bls12_381_G1_element []
-  | .Bls12_381_G2_element   =>       .const ``Const.Bls12_381_G2_element []
-  | .Bls12_381_MlResult     =>       .const ``Const.Bls12_381_MlResult   []
+  | .Bls12_381_G1_element p => .app (.const ``Const.Bls12_381_G1_element []) (toExpr p)
+  | .Bls12_381_G2_element q => .app (.const ``Const.Bls12_381_G2_element []) (toExpr q)
+  | .Bls12_381_MlResult   r => .app (.const ``Const.Bls12_381_MlResult   []) (toExpr r)
 
 instance : ToExpr Const where
   toTypeExpr := .const ``Const []
@@ -110,6 +113,8 @@ instance : ToExpr BuiltinFun where
     | .SerializeData                   => .const ``BuiltinFun.SerializeData []
     | .VerifyEcdsaSecp256k1Signature   => .const ``BuiltinFun.VerifyEcdsaSecp256k1Signature []
     | .VerifySchnorrSecp256k1Signature => .const ``BuiltinFun.VerifySchnorrSecp256k1Signature []
+    | .Bls12_381_G1_multiScalarMul     => .const ``BuiltinFun.Bls12_381_G1_multiScalarMul []
+    | .Bls12_381_G2_multiScalarMul     => .const ``BuiltinFun.Bls12_381_G2_multiScalarMul []
     | .Bls12_381_G1_add                => .const ``BuiltinFun.Bls12_381_G1_add []
     | .Bls12_381_G1_neg                => .const ``BuiltinFun.Bls12_381_G1_neg []
     | .Bls12_381_G1_scalarMul          => .const ``BuiltinFun.Bls12_381_G1_scalarMul []

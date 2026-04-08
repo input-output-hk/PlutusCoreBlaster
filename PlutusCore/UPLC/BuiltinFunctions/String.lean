@@ -3,7 +3,8 @@ import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.String
+
 namespace PLC
   open PlutusCore.String
   export PlutusCore.String (
@@ -13,6 +14,8 @@ namespace PLC
     decodeUtf8
   )
 end PLC
+
+open PlutusCore.UPLC.BuiltinFunctions.Utils
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
@@ -48,4 +51,4 @@ def decodeUtf8 (Vs : List CekValue) : Option CekValue :=
   | _ => none
 
 
-end PlutusCore.UPLC.CekValue
+end PlutusCore.UPLC.BuiltinFunctions.String

@@ -11,7 +11,7 @@ namespace PlutusCore.UPLC.CekMachine
 open PlutusCore.Default
 open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.Builtins
-open PlutusCore.UPLC.Evaluate
+open PlutusCore.UPLC.BuiltinFunctions.Evaluate
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.ExBudget
 open PlutusCore.UPLC.CostModels
@@ -40,20 +40,19 @@ inductive State where
   | Halt    : CekValue → State
 deriving Repr
 
--- Result tyupe for budget aware execution
+-- Result type for budget aware execution
 inductive EvaluationResult where
     | Success : CekValue → ExBudget → EvaluationResult
     | BudgetExhausted : ExBudget → EvaluationResult
     | EvaluationError : EvaluationResult
 deriving Repr
 
-
 -- Define Helper Functions
 -- Define ifBoundOtherwiseError
 def ifBoundOtherwiseError (s : Stack) (p : Environment) (x : String) : State :=
   match p with
-  | Environment.EmptyEnvironment => State.Error
-  | Environment.NonEmptyEvironment p' x' V =>
+  | .EmptyEnvironment => State.Error
+  | .NonEmptyEnvironment p' x' V =>
       if x = x' then State.Return s V else ifBoundOtherwiseError s p' x
 
 -- Define ifArgVOtherwiseError
@@ -68,7 +67,7 @@ def ifArgQOtherwiseError (Sigma : State) (l : ExpectedBuiltinArg) : State :=
   | ExpectedBuiltinArg.ArgV => State.Error
 
 def evalBuiltin (semanticsVariant : BuiltinSemanticsVariant) (s : Stack) (b : BuiltinFun) (Vs : List CekValue) : State :=
-  match UPLC.Evaluate.evaluateBuiltinFunction semanticsVariant b Vs with
+  match evaluateBuiltinFunction semanticsVariant b Vs with
   | some V => State.Return s V
   | none => State.Error
 
@@ -105,9 +104,9 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
   | State.Return (Frame.LeftApplicationToTerm M ρ :: s) V =>
       State.Eval (Frame.RightApplicationOfValue V :: s) ρ M
   | State.Return (Frame.RightApplicationOfValue (CekValue.VLam x M ρ) :: s) V =>
-      State.Eval s (Environment.NonEmptyEvironment ρ x V) M
+      State.Eval s (.NonEmptyEnvironment ρ x V) M
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VLam x M ρ) =>
-      State.Eval s (Environment.NonEmptyEvironment ρ x V) M
+      State.Eval s (.NonEmptyEnvironment ρ x V) M
   | State.Return (Frame.RightApplicationOfValue (CekValue.VBuiltin b Vs (ι ⊙ η)) :: s) V =>
       ifArgVOtherwiseError (State.Return s (CekValue.VBuiltin b (V :: Vs) η)) ι
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VBuiltin b Vs (ι ⊙ η)) =>
@@ -127,9 +126,76 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
   | State.Return (Frame.ConstructorArgument i Vs [] ρ :: s) V =>
       State.Return s (CekValue.VConstr i (List.reverse (V :: Vs)))
   | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VConstr i Vs) =>
-        match List.get?Internal Ms i with
+        match Ms[i]? with
         | some mi => State.Eval (folding Vs s) ρ mi
         | none => State.Error
+  -- case on built-in constant types
+  -- Ref: CaseBuiltin DefaultUni in plutus-core/src/PlutusCore/Default/Universe.hs
+  -- The Haskell CEK dispatches via `caseBuiltin` which returns HeadOnly (no spine args)
+  -- or HeadSpine (branch + args to apply). We inline that dispatch here.
+
+  -- DefaultUniInteger: selects branch at index n (0-indexed), no spine args.
+  --   | 0 <= x && x < toInteger len -> HeadOnly $ branches Vector.! fromInteger x
+  --   | otherwise -> HeadError
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.Integer n)) =>
+        if 0 ≤ n && n.toNat < Ms.length then
+          match Ms[n.toNat]? with
+          | some mi => State.Eval s ρ mi
+          | none => State.Error
+        else State.Error
+
+  -- DefaultUniBool:
+  --   False | len == 1 || len == 2 -> HeadOnly (branches ! 0)
+  --   True  | len == 2             -> HeadOnly (branches ! 1)
+  --   _ -> HeadError (wrong number of branches)
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.Bool false)) =>
+        if Ms.length == 1 || Ms.length == 2 then
+          match Ms[0]? with
+          | some mi => State.Eval s ρ mi
+          | none => State.Error
+        else State.Error
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.Bool true)) =>
+        if Ms.length == 2 then
+          match Ms[1]? with
+          | some mi => State.Eval s ρ mi
+          | none => State.Error
+        else State.Error
+
+  -- DefaultUniUnit: exactly 1 branch; HeadOnly (branches ! 0), no spine args
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon Const.Unit) =>
+        if Ms.length == 1 then
+          match Ms[0]? with
+          | some mi => State.Eval s ρ mi
+          | none => State.Error
+        else State.Error
+
+  -- DefaultUniPair: exactly 1 branch; HeadSpine (branches ! 0) [fst, snd]
+  --   branch is applied to fst and snd as separate arguments
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.Pair p)) =>
+        if Ms.length == 1 then
+          let Vs := [CekValue.VCon p.1, CekValue.VCon p.2]
+          match Ms[0]? with
+          | some mi => State.Eval (folding Vs s) ρ mi
+          | none => State.Error
+        else State.Error
+
+  -- DefaultUniList (len == 2):
+  --   non-empty: HeadSpine (branches ! 0) [head, tail]
+  --   empty:     HeadOnly  (branches ! 1), no spine args
+  -- DefaultUniList (len == 1): only non-empty valid; empty → HeadError
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.ConstList (c :: cs))) =>
+        if Ms.length == 1 || Ms.length == 2 then
+          let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
+          match Ms[0]? with
+          | some mi => State.Eval (folding Vs s) ρ mi
+          | none => State.Error
+        else State.Error
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.ConstList [])) =>
+        if Ms.length == 2 then
+          match Ms[1]? with
+          | some mi => State.Eval s ρ mi
+          | none => State.Error
+        else State.Error
   | _ => State.Error
 
   where
@@ -181,7 +247,7 @@ def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
     | State.Eval _ _ Term.Error             => ExBudget.zero
     | State.Return _ _                      => ExBudget.zero
     | State.Error                           => ExBudget.zero
-    | State.Halt _ => ExBudget.zero
+    | State.Halt _                          => ExBudget.zero
 
 def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) : ExBudget :=
     match Sigma with
@@ -217,7 +283,6 @@ def runStepsWithBudget
     match Sigma with
     | State.Halt V  => EvaluationResult.Success V (initialBudget - budget)
     | State.Error   => EvaluationResult.EvaluationError
-    | State.Eval _ _ Term.Error => EvaluationResult.EvaluationError -- Not the cleanest but I can't do decreasing proof without this
     | _ =>
         match stepWithBudget semanticsVariant costs Sigma budget with
         | none => EvaluationResult.BudgetExhausted budget
@@ -226,28 +291,26 @@ def runStepsWithBudget
     decreasing_by
         sorry
 
--- UPLC version 1.0.0 = PlutusV1/V2; 1.1.0 = PlutusV3 (Conway+).
--- TOCHECK
-def versionToSemanticsVariant (version : Version): BuiltinSemanticsVariant :=
-    match version with
-    | Version.Version 1 0 _ => .defaultFunSemanticsVariantC
-    | Version.Version 1 1 _ => .defaultFunSemanticsVariantC
-    | _ => .defaultFunSemanticsVariantC
-
-def versionToCosts (version : Version) : CekMachineCosts :=
-    match version with
-    | Version.Version 1 0 _ => defaultCekMachineCostsC
-    | Version.Version 1 1 _ => defaultCekMachineCostsC
-    | _ => defaultCekMachineCostsC
+-- Map semantics variant to the corresponding CEK machine step costs.
+-- See: https://github.com/IntersectMBO/plutus/blob/master/plutus-ledger-api/src/PlutusLedgerApi/MachineParameters.hs
+--   PlutusV1/V2, pre-Conway  → VariantA (defaultCekMachineCostsA)
+--   PlutusV1/V2, post-Conway → VariantB (defaultCekMachineCostsB)
+--   PlutusV3,    any         → VariantC (defaultCekMachineCostsC)
+def semVarToCosts : BuiltinSemanticsVariant → CekMachineCosts
+  | .defaultFunSemanticsVariantA => defaultCekMachineCostsA
+  | .defaultFunSemanticsVariantB => defaultCekMachineCostsB
+  | .defaultFunSemanticsVariantC => defaultCekMachineCostsC
 
 def cekExecuteProgramWithBudget
     (p : Program)
+    (plutusVer : PlutusVersion)
+    (protocolVer : ProtocolVersion)
     (params : List Term)
     (budget : ExBudget) : EvaluationResult :=
     match p with
-    | Program.Program version body =>
-        let semVar := versionToSemanticsVariant version
-        let costs  := versionToCosts version
+    | Program.Program _ body =>
+        let semVar := PlutusVersion.toSemanticsVariant plutusVer protocolVer
+        let costs  := semVarToCosts semVar
         -- Startup cost is charged once up front, matching the Plutus reference
         if budget.canAfford costs.startupCost then
             runStepsWithBudget semVar costs (initialState (applyParams body params))
