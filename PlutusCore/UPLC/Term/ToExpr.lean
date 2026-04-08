@@ -149,6 +149,7 @@ instance : ToExpr BuiltinFun where
     | .FindFirstSetBit                 => .const ``BuiltinFun.FindFirstSetBit []
     | .Ripemd_160                      => .const ``BuiltinFun.Ripemd_160 []
     | .ExpModInteger                   => .const ``BuiltinFun.ExpModInteger []
+    | .DropList                        => .const ``BuiltinFun.DropList []
 
 partial def termToExpr : PlutusCore.UPLC.Term.Term → Expr
   | .Var     s   =>  .app  (.const ``Term.Var     []) (toExpr s)

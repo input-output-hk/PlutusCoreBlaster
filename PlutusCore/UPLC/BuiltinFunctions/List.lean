@@ -85,6 +85,16 @@ def nullList (Vs : List CekValue) : Option CekValue :=
       some (CekValue.VCon (Const.Bool (PLC.nullList xs)))
   | _ => none
 
--- dropList added in the Bitwise/Batch-7 PR
+-- dropList n xs = xs.drop n (n < 0 treated as 0 via Int.toNat)
+-- Eval args (reversed): [list, Integer n]
+def dropList (Vs : List CekValue) : Option CekValue :=
+  match Vs with
+  | [.VCon (.ConstList xs), .VCon (.Integer n)] =>
+      some (.VCon (.ConstList (xs.drop n.toNat)))
+  | [.VCon (.ConstDataList xs), .VCon (.Integer n)] =>
+      some (.VCon (.ConstDataList (xs.drop n.toNat)))
+  | [.VCon (.ConstPairDataList xs), .VCon (.Integer n)] =>
+      some (.VCon (.ConstPairDataList (xs.drop n.toNat)))
+  | _ => none
 
 end PlutusCore.UPLC.BuiltinFunctions.List

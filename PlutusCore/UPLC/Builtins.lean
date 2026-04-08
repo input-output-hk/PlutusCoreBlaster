@@ -115,8 +115,23 @@ def expectedArgs (b : BuiltinFun) : ExpectedBuiltinArgs :=
   | Blake2b_224                     => One ArgV
   | IntegerToByteString             => ArgV ⊙ ArgV ⊙ One ArgV
   | ByteStringToInteger             => ArgV ⊙ One ArgV
-  -- Batch 5 (bitwise) and Batch 6/7 wired in a subsequent PR
-  | _ => One ExpectedBuiltinArg.ArgV
+  -- Batch 5
+  | AndByteString                   => ArgV ⊙ ArgV ⊙ One ArgV
+  | OrByteString                    => ArgV ⊙ ArgV ⊙ One ArgV
+  | XorByteString                   => ArgV ⊙ ArgV ⊙ One ArgV
+  | ComplementByteString            => One ArgV
+  | ReadBit                         => ArgV ⊙ One ArgV
+  | WriteBits                       => ArgV ⊙ ArgV ⊙ One ArgV
+  | ReplicateByte                   => ArgV ⊙ One ArgV
+  | ShiftByteString                 => ArgV ⊙ One ArgV
+  | RotateByteString                => ArgV ⊙ One ArgV
+  | CountSetBits                    => One ArgV
+  | FindFirstSetBit                 => One ArgV
+  | Ripemd_160                      => One ArgV
+  -- Batch 6
+  | ExpModInteger                   => ArgV ⊙ ArgV ⊙ One ArgV
+  -- Batch 7
+  | DropList                        => ArgQ ⊙ ArgV ⊙ One ArgV
 
 namespace BuiltinNotations
 
