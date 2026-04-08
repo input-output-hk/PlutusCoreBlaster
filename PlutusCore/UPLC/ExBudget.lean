@@ -1,4 +1,4 @@
-/- Execution beudget for UPLC evaluation, tracking CPU and Memory resources
+/- Execution budget for UPLC evaluation, tracking CPU and Memory resources
 -/
 
 namespace PlutusCore.UPLC.ExBudget
@@ -66,7 +66,7 @@ namespace ExBudget
   instance : Add ExBudget := ⟨add⟩
   instance : Sub ExBudget := ⟨subtract⟩
 
-  -- Can we afort a given cost
+  -- Can we afford a given cost
   def canAfford (budget : ExBudget) (cost : ExBudget) : Bool :=
     budget.exBudgetCPU.unExCPU >= cost.exBudgetCPU.unExCPU &&
     budget.exBudgetMemory.unExMemory >= cost.exBudgetMemory.unExMemory

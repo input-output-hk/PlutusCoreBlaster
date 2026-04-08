@@ -5,7 +5,7 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "750039ddf175225c487ac5a44c14fd26d2df5c82",
+   "rev": "c576289cb55412b359411d6c89568f95af50730c",
    "name": "Blaster",
    "manifestFile": "lake-manifest.json",
    "inputRev": "main",

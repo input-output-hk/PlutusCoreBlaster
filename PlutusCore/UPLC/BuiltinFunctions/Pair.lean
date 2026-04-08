@@ -2,7 +2,8 @@ import PlutusCore.Pair
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.Pair
+
 namespace PLC
   open PlutusCore.Pair
   export PlutusCore.Pair (
@@ -10,6 +11,7 @@ namespace PLC
     sndPair
   )
 end PLC
+
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
@@ -33,4 +35,4 @@ def sndPair (Vs : List CekValue) : Option CekValue :=
        some (CekValue.VCon (Const.Data (PLC.sndPair p)))
   | _ => none
 
-end PlutusCore.UPLC.CekValue
+end PlutusCore.UPLC.BuiltinFunctions.Pair
