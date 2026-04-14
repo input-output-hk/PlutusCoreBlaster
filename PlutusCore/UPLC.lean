@@ -9,3 +9,4 @@ import PlutusCore.UPLC.PlutusScript
 import PlutusCore.UPLC.PreProcess
 import PlutusCore.UPLC.ScriptEncoding
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.Utils
