@@ -28,12 +28,12 @@ partial def natToBytes32 (n : Nat) : List UInt8 :=
 -- BIP-340 tagged hash: SHA256(SHA256(tag) || SHA256(tag) || msg)
 def taggedHash (tag : String) (msg : List UInt8) : List UInt8 :=
   let tagBytes := tag.toUTF8.toList
-  let tagHashVec := Internal.hashMessage tagBytes
+  let tagHashVec := hashMessage tagBytes
   let tagHash := Vector.toList tagHashVec |>.flatMap Cryptograph.Integer.UInt32.toUInt8BE
 
   -- Double the tag hash and append message
   let input := tagHash ++ tagHash ++ msg
-  let hashVec := Internal.hashMessage input
+  let hashVec := hashMessage input
   Vector.toList hashVec |>.flatMap Cryptograph.Integer.UInt32.toUInt8BE
 
 -- Lift x-coordinate to point (assumes even y)
@@ -47,17 +47,16 @@ def liftX (xBytes : List UInt8) : Option Secp256k1Point :=
     let x := Fp.ofNat xNat
 
     -- Compute y² = x³ + 7
-    let x3 := Fp.mul (Fp.square x) x
-    let yy := Fp.add x3 (Fp.ofNat 7)
+    let yy := x^3 + 7
 
     -- Compute y = yy^((p+1)/4) (works because p ≡ 3 mod 4)
-    let y := Fp.pow yy ((p + 1) / 4)
+    let y := yy ^ ((p + 1) / 4)
 
     -- Check if y² = yy
-    if Fp.square y ≠ yy then none
+    if y^2 ≠ yy then none
     else
       -- Choose even y
-      let y := if y.val % 2 = 0 then y else Fp.neg y
+      let y := if y.val % 2 = 0 then y else -y
       some (Secp256k1Point.fromAffine x y)
 
 -- Check if point has even y coordinate
@@ -90,9 +89,9 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
         let e := bytesToNat eBytes % curveOrder
 
         -- Compute R = s*G - e*P
-        let sG := Secp256k1Point.scalarMul s Secp256k1Point.basePoint
-        let eP := Secp256k1Point.scalarMul e pubKey
-        let R := Secp256k1Point.add sG (Secp256k1Point.neg eP)
+        let sG := s * Secp256k1Point.basePoint
+        let eP := e * pubKey
+        let R := sG + (-eP)
 
         -- Check that R has even y and R.x = r
         if not (hasEvenY R) then false

@@ -6,12 +6,9 @@ namespace Cryptograph.Ed25519.Signature
 /-! ## Ed25519 Signature Verification-/
 
 open Cryptograph.Ed25519.Point
+open Cryptograph.Ed25519.Point.EdPoint (curveOrder)
 open Cryptograph.Ed25519.Field
 open Cryptograph.Sha2.Sha512
-
--- Curve order (number of points on the curve)
--- L = 2^252 + 27742317777372353535851937790883648493
-def curveOrder : Nat := 2^252 + 27742317777372353535851937790883648493
 
 -- Convert bytes (little-endian) to Nat
 def bytesToNat (bytes : List UInt8) : Nat :=
@@ -47,19 +44,18 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
         if s ≥ curveOrder then false
         else
           -- Compute hash: h = SHA-512(R || A || M)
-          let hashInput := rBytes ++ publicKey ++ message
+          let hashInput  := rBytes ++ publicKey ++ message
           let hashOutput := Internal.hashMessage hashInput
-          let hashBytes := hashOutput.flatMap Cryptograph.Integer.UInt64.toUInt8BE
+          let hashBytes  := hashOutput.flatMap Cryptograph.Integer.UInt64.toUInt8BE
 
           -- Reduce hash modulo L
           let h := reduceModL hashBytes
 
-          -- Compute left side: s*B
-          let leftSide := EdPoint.scalarMul s EdPoint.basePoint
+          -- Compute left side: 8 * (s*B), cofactored equation as of RFC 8032
+          let leftSide := 8 * s * EdPoint.basePoint
 
-          -- Compute right side: R + h*A
-          let hA := EdPoint.scalarMul h a
-          let rightSide := EdPoint.add r hA
+          -- Compute right side: 8 * (R + h*A), cofactored equation as of RFC 8032
+          let rightSide := 8 * (r + h * a)
 
           -- Check if points are equal (in affine coordinates)
           let (lx, ly) := EdPoint.toAffine leftSide

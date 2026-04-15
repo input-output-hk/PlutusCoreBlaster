@@ -72,13 +72,16 @@ partial def pow (a : Fp) (n : Nat) : Fp :=
   if n = 0 then one
   else if n = 1 then a
   else
-    let half := pow a (n / 2)
+    let half    := pow a (n / 2)
     let squared := square half
-    if n % 2 = 0 then squared else mul squared a
+    if n % 2 = 0 then squared else a * squared
+
+instance : HPow Fp Nat Fp := ⟨pow⟩
 
 -- Modular inverse using Fermat's little theorem: a^(p-2) ≡ a^(-1) (mod p)
-def inv (a : Fp) : Fp :=
-  pow a (p - 2)
+def inv (a : Fp) : Fp := a ^ (p - 2)
+
+instance : Inv Fp := ⟨inv⟩
 
 -- Division: a / b = a * b^(-1)
 def div (a b : Fp) : Fp :=
@@ -87,9 +90,11 @@ def div (a b : Fp) : Fp :=
 instance : Div Fp := ⟨div⟩
 
 -- Convert from bytes (big-endian, 32 bytes)
-def fromBytesBE (bytes : List UInt8) : Fp :=
+def fromBytesBE (bytes : List UInt8) : Option Fp :=
   let n := bytes.foldl (fun acc b => acc * 256 + b.toNat) 0
-  normalize n
+  if n < p
+    then some (ofNat n)
+    else none
 
 -- Convert to bytes (big-endian, 32 bytes)
 partial def toBytesBE (a : Fp) : List UInt8 :=
