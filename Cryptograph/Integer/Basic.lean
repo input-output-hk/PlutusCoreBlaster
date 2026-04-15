@@ -13,6 +13,9 @@ def UInt64.toUInt8BE (x : UInt64) : List UInt8 :=
   let x₁ := x >>> 32
   UInt32.toUInt8BE (UInt64.toUInt32 x₁) ++ UInt32.toUInt8BE (UInt64.toUInt32 x)
 
+def UInt128.toUInt8BE (n : Nat) : List UInt8 :=
+  UInt64.toUInt8BE (n >>> 64).toUInt64 ++ UInt64.toUInt8BE n.toUInt64
+
 def UInt32.ofUInt8BE (x : Vector UInt8 4) : UInt32 :=
   (UInt8.toUInt32 x[0]) <<< 24 ||| (UInt8.toUInt32 x[1]) <<< 16 ||| (UInt8.toUInt32 x[2]) <<< 8 ||| UInt8.toUInt32 x[3]
 
@@ -26,6 +29,7 @@ export Internal
     UInt32.toUInt8BE
     UInt32.ofUInt8BE
     UInt64.toUInt8BE
+    UInt128.toUInt8BE
     rotr
     shr
   )

@@ -32,7 +32,7 @@ def padMessage (x : List UInt8) : List UInt8 :=
   let l      := List.length x
   let padn   := (120 - ((l + 1) % 64)) % 64
   let zeroes := List.replicate padn 0x00
-  if l ≥ 2 ^ 64
+  if l ≥ 2 ^ 61
     then panic! "Message too long!"
     else x ++ (0x80 :: zeroes) ++ UInt64.toUInt8BE (UInt64.ofNat (l * 8))
 
