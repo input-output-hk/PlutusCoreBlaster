@@ -76,9 +76,13 @@ def pow (a : Fp) (n : Nat) : Fp :=
     if n % 2 = 0 then squared else mul squared a
 termination_by n
 
+instance : HPow Fp Nat Fp := ⟨pow⟩
+
 -- Modular inverse using Fermat's little theorem: a^(p-2) ≡ a^(-1) (mod p)
 def inv (a : Fp) : Fp :=
   pow a (p - 2)
+
+instance : Inv Fp := ⟨inv⟩
 
 -- Division: a / b = a * b^(-1)
 def div (a b : Fp) : Fp :=
@@ -87,9 +91,11 @@ def div (a b : Fp) : Fp :=
 instance : Div Fp := ⟨div⟩
 
 -- Convert from bytes (little-endian, 32 bytes)
-def fromBytesLE (bytes : List UInt8) : Fp :=
+def fromBytesLE (bytes : List UInt8) : Option Fp :=
   let n := bytes.foldr (fun b acc => b.toNat + acc * 256) 0
-  normalize n
+  if n < p
+    then some ⟨n⟩
+    else none
 
 -- Convert to bytes (little-endian, 32 bytes)
 partial def toBytesLE (a : Fp) : List UInt8 :=

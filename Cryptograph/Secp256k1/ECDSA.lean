@@ -42,16 +42,16 @@ def verifyWithPoint (q : Secp256k1Point) (r s : Nat) (message : List UInt8) : Bo
   let u2 := (r * sInv) % curveOrder
 
   -- Compute R = u1*G + u2*Q
-  let point1 := Secp256k1Point.scalarMul u1 Secp256k1Point.basePoint
-  let point2 := Secp256k1Point.scalarMul u2 q
-  let pointR := Secp256k1Point.add point1 point2
+  let point1 := u1 * Secp256k1Point.basePoint
+  let point2 := u2 * q
+  let pointR := point1 + point2
 
   -- Extract x coordinate
   match Secp256k1Point.toAffine pointR with
   | none => false
   | some (x, _) =>
     -- Check if x (mod n) = r
-    (x.val % curveOrder) = r
+    (x.val % curveOrder) == r
 
 -- Verify ECDSA signature
 def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=
@@ -75,13 +75,14 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
       | none =>
         -- Try uncompressed format (0x04 || x || y)
         if publicKey.length ≠ 65 || publicKey[0]! ≠ 0x04 then false
-        else
+        else Option.getD (do
           let xBytes := publicKey.toArray[1:33].toList
           let yBytes := publicKey.toArray[33:65].toList
-          let x := Fp.fromBytesBE xBytes
-          let y := Fp.fromBytesBE yBytes
-          let q := Secp256k1Point.fromAffine x y
-          verifyWithPoint q r s message
+          let x      ← Fp.fromBytesBE xBytes
+          let y      ← Fp.fromBytesBE yBytes
+          guard (Secp256k1Point.isOnCurve x y)
+          let q      := Secp256k1Point.fromAffine x y
+          verifyWithPoint q r s message) false
       | some q => verifyWithPoint q r s message
 
 end Cryptograph.Secp256k1.ECDSA

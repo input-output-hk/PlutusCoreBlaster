@@ -31,12 +31,12 @@ def toAffine (p : Secp256k1Point) : Option (Fp × Fp) :=
   match p with
   | infinity => none
   | point x y z =>
-    if z = 0 then none
-    else
-      let zinv := Fp.inv z
-      let zinv2 := Fp.square zinv
-      let zinv3 := Fp.mul zinv2 zinv
-      some (Fp.mul x zinv2, Fp.mul y zinv3)
+      if z = 0 then none
+      else
+        let zinv  := z⁻¹
+        let zinv2 := zinv ^ 2
+        let zinv3 := zinv2 * zinv
+        some (Fp.mul x zinv2, Fp.mul y zinv3)
 
 -- Point doubling in Jacobian coordinates
 -- Based on the "dbl-2007-bl" formulas for a=0
@@ -46,15 +46,15 @@ partial def double (p : Secp256k1Point) : Secp256k1Point :=
   | point x y z =>
     if y = 0 then infinity
     else
-      let xx := Fp.square x
-      let yy := Fp.square y
-      let yyyy := Fp.square yy
-      let zz := Fp.square z
-      let s := Fp.mul (Fp.ofNat 2) (Fp.sub (Fp.sub (Fp.square (Fp.add x yy)) xx) yyyy)
-      let m := Fp.add (Fp.mul (Fp.ofNat 3) xx) (Fp.mul (Fp.square (Fp.square z)) (Fp.ofNat 0))  -- a=0 for secp256k1
-      let x3 := Fp.sub (Fp.square m) (Fp.add s s)
-      let y3 := Fp.sub (Fp.mul m (Fp.sub s x3)) (Fp.mul (Fp.ofNat 8) yyyy)
-      let z3 := Fp.sub (Fp.sub (Fp.square (Fp.add y z)) yy) zz
+      let xx   := x^2
+      let yy   := y^2
+      let yyyy := yy^2
+      let zz   := z^2
+      let s    := 2 * ((x + yy)^2 - xx - yyyy)
+      let m    := 3 * xx
+      let x3   := m^2 - 2 * s
+      let y3   := m * (s - x3) - 8 * yyyy
+      let z3 := (y + z)^2 - yy - zz
       point x3 y3 z3
 
 -- Point addition in Jacobian coordinates
@@ -68,25 +68,25 @@ partial def add (p q : Secp256k1Point) : Secp256k1Point :=
     if x1 = x2 && y1 = y2 && z1 = z2 then
       double p
     else
-      let z1z1 := Fp.square z1
-      let z2z2 := Fp.square z2
-      let u1 := Fp.mul x1 z2z2
-      let u2 := Fp.mul x2 z1z1
-      let s1 := Fp.mul (Fp.mul y1 z2) z2z2
-      let s2 := Fp.mul (Fp.mul y2 z1) z1z1
+      let z1z1 := z1^2
+      let z2z2 := z2^2
+      let u1   := x1 * z2z2
+      let u2   := x2 * z1z1
+      let s1   := y1 * z2 * z2z2
+      let s2   := y2 * z1 * z1z1
 
       if u1 = u2 then
         if s1 = s2 then double p  -- Same point, use doubling
         else infinity  -- Inverse points
       else
-        let h := Fp.sub u2 u1
-        let i := Fp.square (Fp.add h h)
-        let j := Fp.mul h i
-        let r := Fp.add (Fp.sub s2 s1) (Fp.sub s2 s1)
-        let v := Fp.mul u1 i
-        let x3 := Fp.sub (Fp.sub (Fp.square r) j) (Fp.add v v)
-        let y3 := Fp.sub (Fp.mul r (Fp.sub v x3)) (Fp.add (Fp.mul s1 j) (Fp.mul s1 j))
-        let z3 := Fp.mul (Fp.sub (Fp.sub (Fp.square (Fp.add z1 z2)) z1z1) z2z2) h
+        let h  := u2 - u1
+        let i  := (2 * h) ^ 2
+        let j  := h * i
+        let r  := 2 * (s2 - s1)
+        let v  := u1 * i
+        let x3 := r^2 - j - 2 * v
+        let y3 := r * (v - x3) - 2 * s1 * j
+        let z3 := ((z1 + z2)^2 - z1z1 - z2z2) * h
         point x3 y3 z3
 
 instance : Add Secp256k1Point := ⟨add⟩
@@ -99,6 +99,8 @@ partial def scalarMul (n : Nat) (p : Secp256k1Point) : Secp256k1Point :=
     let half := scalarMul (n / 2) p
     let doubled := double half
     if n % 2 = 0 then doubled else add doubled p
+
+instance : HMul Nat Secp256k1Point Secp256k1Point := ⟨scalarMul⟩
 
 -- Negate a point
 def neg (p : Secp256k1Point) : Secp256k1Point :=
@@ -116,32 +118,33 @@ def basePoint : Secp256k1Point :=
   let gy := Fp.ofNat 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
   fromAffine gx gy
 
+-- Checks if the point (`x`, `y`) is on the elliptic curve.
+def isOnCurve (x y : Fp) : Bool := y^2 == x^3 + 7
+
 -- Decompress a point from x-coordinate and sign bit (SEC1 encoding)
 def decompress (bytes : List UInt8) : Option Secp256k1Point :=
-  if bytes.length ≠ 33 then none
+  if h : bytes.length ≠ 33 then none
   else
-    let prefixByte := bytes[0]!
-    if prefixByte ≠ 0x02 && prefixByte ≠ 0x03 then none
-    else
-      let xBytes := bytes.tail
-      let x := Fp.fromBytesBE xBytes
+    let prefixByte := bytes.head (by grind only [= List.length_nil])
+    let xBytes     := bytes.tail
+    let xOpt       := Fp.fromBytesBE xBytes
+    match prefixByte == 0x02 || prefixByte == 0x03, xOpt with
+    | true, some x =>
+        let y2 := x ^ 3 + 7
 
-      -- Compute y² = x³ + 7
-      let x3 := Fp.mul (Fp.square x) x
-      let yy := Fp.add x3 (Fp.ofNat 7)
+        -- Compute square root using Tonelli-Shanks or direct formula
+        -- For secp256k1, p ≡ 3 (mod 4), so y = yy^((p+1)/4)
+        let y := Fp.pow y2 ((p + 1) / 4)
 
-      -- Compute square root using Tonelli-Shanks or direct formula
-      -- For secp256k1, p ≡ 3 (mod 4), so y = yy^((p+1)/4)
-      let y := Fp.pow yy ((p + 1) / 4)
-
-      -- Check if y² = yy
-      if Fp.square y ≠ yy then none
-      else
-        -- Adjust sign based on prefix byte
-        let yIsEven := (y.val % 2 = 0)
-        let shouldBeEven := (prefixByte = 0x02)
-        let y := if yIsEven = shouldBeEven then y else Fp.neg y
-        some (fromAffine x y)
+        -- Check if y² = yy
+        if y ^ 2 ≠ y2 then none
+        else
+          -- Adjust sign based on prefix byte
+          let yIsEven := (y.val % 2 = 0)
+          let shouldBeEven := (prefixByte = 0x02)
+          let y := if yIsEven = shouldBeEven then y else Fp.neg y
+          some (fromAffine x y)
+    | _, _ => none
 
 -- Compress a point to 33 bytes (prefix byte + x-coordinate)
 def compress (p : Secp256k1Point) : Option (List UInt8) :=
