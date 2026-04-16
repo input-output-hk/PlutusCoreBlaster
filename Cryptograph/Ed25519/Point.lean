@@ -76,7 +76,7 @@ instance : HMul Nat EdPoint EdPoint := ⟨scalarMul⟩
 
 -- Scalar multiplication from bytes (little-endian)
 def scalarMulBytes (scalar : List UInt8) (p : EdPoint) : EdPoint :=
-  let n := scalar.foldl (fun acc b => acc * 256 + b.toNat) 0
+  let n := scalar.foldr (fun b acc => b.toNat + acc * 256) 0
   scalarMul n p
 
 instance : HMul (List UInt8) EdPoint EdPoint := ⟨scalarMulBytes⟩

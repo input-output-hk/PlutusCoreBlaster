@@ -56,7 +56,7 @@ def verifyWithPoint (q : Secp256k1Point) (r s : Nat) (message : List UInt8) : Bo
 -- Verify ECDSA signature
 def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=
   -- Check signature length
-  if signature.length ≠ 64 then false
+  if signature.length != 64 then false
   else
     -- Parse signature: r (32 bytes) || s (32 bytes)
     let rBytes := signature.take 32
@@ -66,7 +66,7 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
 
     -- Check r, s are in valid range [1, n-1] and low-s (s ≤ n/2)
     -- Note: r = 0, r ≥ n, s = 0, s ≥ n are handled as errors in Basic.lean
-    if r = 0 || r ≥ curveOrder || s = 0 || s ≥ curveOrder then false
+    if r == 0 || Nat.ble curveOrder r || s == 0 || Nat.ble curveOrder s then false
     -- Plutus enforces low-s: reject signatures with s > n/2
     else if Nat.blt (curveOrder / 2) s then false
     else

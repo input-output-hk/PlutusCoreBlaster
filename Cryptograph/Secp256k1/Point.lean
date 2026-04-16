@@ -32,7 +32,7 @@ def toAffine (p : Secp256k1Point) : Option (Fp × Fp) :=
   match p with
   | infinity => none
   | point x y z =>
-      if z = 0 then none
+      if z == 0 then none
       else
         let zinv  := z⁻¹
         let zinv2 := zinv ^ 2
@@ -45,7 +45,7 @@ partial def double (p : Secp256k1Point) : Secp256k1Point :=
   match p with
   | infinity => infinity
   | point x y z =>
-    if y = 0 then infinity
+    if y == 0 then infinity
     else
       let xx   := x^2
       let yy   := y^2
@@ -65,10 +65,6 @@ partial def add (p q : Secp256k1Point) : Secp256k1Point :=
   | infinity, _ => q
   | _, infinity => p
   | point x1 y1 z1, point x2 y2 z2 =>
-    -- Check if same point
-    if x1 == x2 && y1 == y2 && z1 == z2 then
-      double p
-    else
       let z1z1 := z1^2
       let z2z2 := z2^2
       let u1   := x1 * z2z2
@@ -76,8 +72,8 @@ partial def add (p q : Secp256k1Point) : Secp256k1Point :=
       let s1   := y1 * z2 * z2z2
       let s2   := y2 * z1 * z1z1
 
-      if u1 = u2 then
-        if s1 = s2 then double p  -- Same point, use doubling
+      if u1 == u2 then
+        if s1 == s2 then double p  -- Same point, use doubling
         else infinity  -- Inverse points
       else
         let h  := u2 - u1
@@ -94,12 +90,12 @@ instance : Add Secp256k1Point := ⟨add⟩
 
 -- Scalar multiplication using double-and-add algorithm
 partial def scalarMul (n : Nat) (p : Secp256k1Point) : Secp256k1Point :=
-  if n = 0 then zero
-  else if n = 1 then p
+  if n == 0 then zero
+  else if n == 1 then p
   else
     let half := scalarMul (n / 2) p
     let doubled := double half
-    if n % 2 = 0 then doubled else add doubled p
+    if n % 2 == 0 then doubled else add doubled p
 
 instance : HMul Nat Secp256k1Point Secp256k1Point := ⟨scalarMul⟩
 
@@ -138,12 +134,12 @@ def decompress (bytes : List UInt8) : Option Secp256k1Point :=
         let y := Fp.pow y2 ((p + 1) / 4)
 
         -- Check if y² = yy
-        if y ^ 2 ≠ y2 then none
+        if y ^ 2 != y2 then none
         else
           -- Adjust sign based on prefix byte
-          let yIsEven := (y.val % 2 = 0)
-          let shouldBeEven := (prefixByte = 0x02)
-          let y := if yIsEven = shouldBeEven then y else Fp.neg y
+          let yIsEven := (y.val % 2 == 0)
+          let shouldBeEven := (prefixByte == 0x02)
+          let y := if yIsEven == shouldBeEven then y else Fp.neg y
           some (fromAffine x y)
     | _, _ => none
 
