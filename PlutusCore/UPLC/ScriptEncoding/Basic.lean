@@ -225,13 +225,12 @@ def importUplcImp : CommandElab := fun stx => do
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
-    let content' := String.trim content
-    match decodeProgramFromByteString content' with
+    match decodeProgramFromByteString content with
     | .some p =>
         logInfo s!"Successfully decoded '{filename}'"
         return (toExpr p)
     | .none =>
-        throwError (decodingErrorWithSuggestion content' `flat filename)
+        throwError (decodingErrorWithSuggestion content `flat filename)
 
   /-- Parses a flat hex-encoded UPLC file and returns the resulting expression -/
   parseFlatHexUplc (filename : String) : TermElabM Expr := do
