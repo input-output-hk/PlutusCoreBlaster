@@ -237,36 +237,39 @@ def importUplcImp : CommandElab := fun stx => do
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
-    match flatEncodedScriptFromHex? content with
+    let content' := String.trim content
+    match flatEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded flat hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content `flat_hex filename (some msg))
+        throwError (decodingErrorWithSuggestion content' `flat_hex filename (some msg))
 
   /-- Parses a single CBOR hex-encoded UPLC file and returns the resulting expression -/
   parseSingleCborHexUplc (filename : String) : TermElabM Expr := do
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
-    match singleCborEncodedScriptFromHex? content with
+    let content' := String.trim content
+    match singleCborEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded single CBOR hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content `single_cbor_hex filename (some msg))
+        throwError (decodingErrorWithSuggestion content' `single_cbor_hex filename (some msg))
 
   /-- Parses a double CBOR hex-encoded UPLC file and returns the resulting expression -/
   parseDoubleCborHexUplc (filename : String) : TermElabM Expr := do
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
-    match doubleCborEncodedScriptFromHex? content with
+    let content' := String.trim content
+    match doubleCborEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded double CBOR hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content `double_cbor_hex filename (some msg))
+        throwError (decodingErrorWithSuggestion content' `double_cbor_hex filename (some msg))
 
   /-- Parses a UPLC file and returns the resulting expression based on format -/
   parseUplcFile (stx : Syntax) : TermElabM Expr := do
