@@ -15,6 +15,7 @@ structure EdPoint where
   y : Fp
   z : Fp
   t : Fp
+  deriving BEq
 
 namespace EdPoint
 
@@ -23,7 +24,7 @@ def zero : EdPoint := ⟨0, 1, 1, 0⟩
 
 -- Check if point is the identity
 def isZero (p : EdPoint) : Bool :=
-  p.x = 0 && p.y = p.z
+  p.x == 0 && p.y == p.z
 
 -- Convert from affine coordinates (x, y)
 def fromAffine (x y : Fp) : EdPoint :=

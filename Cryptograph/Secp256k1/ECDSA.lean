@@ -68,13 +68,13 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
     -- Note: r = 0, r ≥ n, s = 0, s ≥ n are handled as errors in Basic.lean
     if r = 0 || r ≥ curveOrder || s = 0 || s ≥ curveOrder then false
     -- Plutus enforces low-s: reject signatures with s > n/2
-    else if s > curveOrder / 2 then false
+    else if Nat.blt (curveOrder / 2) s then false
     else
       -- Parse public key
       match Secp256k1Point.decompress publicKey with
       | none =>
         -- Try uncompressed format (0x04 || x || y)
-        if publicKey.length ≠ 65 || publicKey[0]! ≠ 0x04 then false
+        if publicKey.length != 65 || publicKey[0]! != 0x04 then false
         else Option.getD (do
           let xBytes := publicKey.toArray[1:33].toList
           let yBytes := publicKey.toArray[33:65].toList

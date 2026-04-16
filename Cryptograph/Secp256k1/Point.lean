@@ -10,6 +10,7 @@ open Cryptograph.Secp256k1.Field
 inductive Secp256k1Point where
   | infinity : Secp256k1Point
   | point : (x : Fp) → (y : Fp) → (z : Fp) → Secp256k1Point
+  deriving BEq
 
 namespace Secp256k1Point
 
@@ -19,8 +20,8 @@ def zero : Secp256k1Point := infinity
 -- Check if point is the identity
 def isZero (p : Secp256k1Point) : Bool :=
   match p with
-  | infinity => true
-  | point _ _ z => z = 0
+  | infinity    => true
+  | point _ _ z => z == 0
 
 -- Convert from affine coordinates (x, y)
 def fromAffine (x y : Fp) : Secp256k1Point :=
@@ -65,7 +66,7 @@ partial def add (p q : Secp256k1Point) : Secp256k1Point :=
   | _, infinity => p
   | point x1 y1 z1, point x2 y2 z2 =>
     -- Check if same point
-    if x1 = x2 && y1 = y2 && z1 = z2 then
+    if x1 == x2 && y1 == y2 && z1 == z2 then
       double p
     else
       let z1z1 := z1^2
