@@ -22,8 +22,8 @@ def reduceModL (hash : List UInt8) : Nat :=
 -- Returns true if signature is valid
 def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=
   -- Check lengths
-  if publicKey.length ≠ 32 then false
-  else if signature.length ≠ 64 then false
+  if publicKey.length != 32 then false
+  else if signature.length != 64 then false
   else
     -- Split signature into R (32 bytes) and s (32 bytes)
     let rBytes := signature.take 32
@@ -41,7 +41,7 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
         let s := bytesToNat sBytes
 
         -- Check s < L (curve order)
-        if s ≥ curveOrder then false
+        if Nat.ble curveOrder s then false
         else
           -- Compute hash: h = SHA-512(R || A || M)
           let hashInput  := rBytes ++ publicKey ++ message
