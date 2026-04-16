@@ -10,7 +10,7 @@ def p : Nat := 2^255 - 19
 -- Field element: Nat modulo p wrapped in a structure
 structure Fp where
   val : Nat
-  deriving DecidableEq, Repr
+  deriving BEq, DecidableEq, Repr
 
 -- Enable numeric literal syntax for Fp
 instance : OfNat Fp n := ⟨⟨n % p⟩⟩
