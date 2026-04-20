@@ -26,12 +26,13 @@ deriving BEq
 
 mutual
   inductive BuiltinType
-    | AtomicType : AtomicType → BuiltinType
+    | AtomicType   : AtomicType → BuiltinType
     | TypeOperator : TypeOperator → BuiltinType
 
   inductive TypeOperator
-    | TypeList : BuiltinType → TypeOperator
-    | TypePair : BuiltinType → BuiltinType → TypeOperator
+    | TypeList  : BuiltinType → TypeOperator
+    | TypeArray : BuiltinType → TypeOperator
+    | TypePair  : BuiltinType → BuiltinType → TypeOperator
 end
 
 inductive Const
@@ -43,6 +44,7 @@ inductive Const
   | ConstList             : List Const → Const
   | ConstDataList         : List Data → Const          -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | ConstPairDataList     : List (Data × Data) → Const -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
+  | ConstArray            : Array Const → Const
   | Pair                  : Const × Const → Const
   | PairData              : Data × Data → Const        -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | Data                  : Data → Const
@@ -168,6 +170,9 @@ inductive BuiltinFun
   | ExpModInteger
 -- Batch 7
   | DropList
+  | LengthOfArray
+  | ListToArray
+  | IndexArray
 deriving Repr, BEq
 
 /-- Terms use de Bruijn indices: `Var i` refers to the binder `i` levels out
