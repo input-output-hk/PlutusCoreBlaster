@@ -97,16 +97,30 @@ def byteStringSize (bs : ByteString) : Nat :=
   let byteLen := (bs.data.length + 7) / 8 -- round up
   byteLen
 
-/-- Size of a data value -/
-def dataSize (d : Data) : Nat :=
-  match d with
-  | Data.Constr n ds => 1 + ds.foldl (fun acc d => acc + dataSize d) 0
-  | Data.Map kvs => 1 + kvs.foldl (fun acc (k, v) => acc + dataSize k + dataSize v) 0
-  | Data.List ds => 1 + ds.foldl (fun acc d => acc + dataSize d) 0
-  | Data.I i => 1 + integerSize i
-  | Data.B bs => 1 + byteStringSize bs
-  termination_by d -- Dummy, what's decreasing is the nesting of data structures
-  decreasing_by all_goals sorry
+mutual
+
+  def listDataSize (ds : List Data) : Nat :=
+    let rec loop (acc : Nat) : List Data → Nat
+      | h :: t => loop (acc + dataSize h) t
+      | []     => acc
+    loop 0 ds
+
+  def pairsDataSize (kvs : List (Data × Data)) : Nat :=
+    let rec loop (acc : Nat) : List (Data × Data) → Nat
+      | (p1, p2) :: t => loop (acc + dataSize p1 + dataSize p2) t
+      | []       => acc
+    loop 0 kvs
+
+  /-- Size of a data value -/
+  def dataSize (d : Data) : Nat :=
+    match h : d with
+    | Data.Constr n ds => 1 + listDataSize ds
+    | Data.Map    kvs  => 1 + pairsDataSize kvs
+    | Data.List   ds   => 1 + listDataSize ds
+    | Data.I      i    => 1 + integerSize i
+    | Data.B      bs   => 1 + byteStringSize bs
+
+end
 
 /-- Size of a const value-/
 def constSize (c : Const) : Nat :=

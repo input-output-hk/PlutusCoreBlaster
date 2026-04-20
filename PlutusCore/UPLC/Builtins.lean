@@ -113,6 +113,9 @@ def expectedArgs (b : BuiltinFun) : ExpectedBuiltinArgs :=
   | Blake2b_224                     => ArgV ⊙ One ArgV
   | IntegerToByteString             => ArgV ⊙ ArgV ⊙ One ArgV
   | ByteStringToInteger             => ArgV ⊙ One ArgV
+  | LengthOfArray                   => ArgQ ⊙ One ArgV
+  | ListToArray                     => ArgQ ⊙ One ArgV
+  | IndexArray                      => ArgQ ⊙ ArgV ⊙ One ArgV
   | _ => One ExpectedBuiltinArg.ArgV
 
 namespace BuiltinNotations
