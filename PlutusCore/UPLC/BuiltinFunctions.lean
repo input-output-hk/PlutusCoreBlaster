@@ -1,4 +1,5 @@
 
+import PlutusCore.UPLC.BuiltinFunctions.Array
 import PlutusCore.UPLC.BuiltinFunctions.Bool
 import PlutusCore.UPLC.BuiltinFunctions.ByteString
 import PlutusCore.UPLC.BuiltinFunctions.Data
