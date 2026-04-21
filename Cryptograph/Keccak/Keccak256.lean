@@ -154,10 +154,12 @@ private def pad (message : ByteArray) (suffix : UInt8 := 0x01) : ByteArray :=
   let msgLen := message.size
   let blockSize := rate
   let padLen := blockSize - (msgLen % blockSize)
-
-  let padded := message.push suffix  -- Domain separation suffix
-  let padded := (List.range (padLen - 2)).foldl (fun arr _ => arr.push 0x00) padded
-  padded.push 0x80  -- Final bit
+  if padLen == 1 then
+    message.push (suffix ||| 0x80)  -- Suffix and final bit combined into one byte
+  else
+    let padded := message.push suffix  -- Domain separation suffix
+    let padded := (List.range (padLen - 2)).foldl (fun arr _ => arr.push 0x00) padded
+    padded.push 0x80  -- Final bit
 
 -- XOR a block into the state
 private def xorBlock (state : State) (block : ByteArray) (blockSize : Nat) : State :=

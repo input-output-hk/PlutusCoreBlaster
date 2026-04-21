@@ -131,7 +131,7 @@ def blake2b (input : List UInt8) (outputLen : Nat) : List UInt8 :=
 
     -- Process full blocks
     let blockSize := 128  -- Blake2b block size in bytes
-    let numFullBlocks := inputLen / blockSize
+    let numFullBlocks := (inputLen - 1) / blockSize
     let h := (List.range numFullBlocks).foldl (fun h blockIdx =>
       let offset := blockIdx * blockSize
       let m := parseBlock inputBytes offset

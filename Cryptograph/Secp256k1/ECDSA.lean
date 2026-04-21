@@ -14,7 +14,7 @@ open Cryptograph.Sha2.Sha256
 def curveOrder : Nat := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
 -- Modular inverse modulo curve order
-partial def invModN (a : Nat) : Nat :=
+def invModN (a : Nat) : Nat :=
   let rec powModN (base : Nat) (exp : Nat) : Nat :=
     if exp = 0 then 1
     else if exp = 1 then base % curveOrder
@@ -31,27 +31,29 @@ def bytesToNat (bytes : List UInt8) : Nat :=
 
 -- Helper: verify with parsed point
 def verifyWithPoint (q : Secp256k1Point) (r s : Nat) (message : List UInt8) : Bool :=
-  -- message is already a 32-byte hash (per Plutus ECDSA spec)
-  let h := bytesToNat message
+  if (message.length != 32) || (s == 0)
+    then false
+    else
+      let h := bytesToNat message
 
-  -- Compute u1 = h * s^-1 (mod n)
-  let sInv := invModN s
-  let u1 := (h * sInv) % curveOrder
+      -- Compute u1 = h * s^-1 (mod n)
+      let sInv := invModN s
+      let u1 := (h * sInv) % curveOrder
 
-  -- Compute u2 = r * s^-1 (mod n)
-  let u2 := (r * sInv) % curveOrder
+      -- Compute u2 = r * s^-1 (mod n)
+      let u2 := (r * sInv) % curveOrder
 
-  -- Compute R = u1*G + u2*Q
-  let point1 := u1 * Secp256k1Point.basePoint
-  let point2 := u2 * q
-  let pointR := point1 + point2
+      -- Compute R = u1*G + u2*Q
+      let point1 := u1 * Secp256k1Point.basePoint
+      let point2 := u2 * q
+      let pointR := point1 + point2
 
-  -- Extract x coordinate
-  match Secp256k1Point.toAffine pointR with
-  | none => false
-  | some (x, _) =>
-    -- Check if x (mod n) = r
-    (x.val % curveOrder) == r
+      -- Extract x coordinate
+      match Secp256k1Point.toAffine pointR with
+      | none => false
+      | some (x, _) =>
+        -- Check if x (mod n) = r
+        (x.val % curveOrder) == r
 
 -- Verify ECDSA signature
 def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=
