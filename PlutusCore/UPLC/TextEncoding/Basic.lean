@@ -22,8 +22,8 @@ term         ::= var
                | "(" "error"   ")"
 builtin-type ::= "integer" | "bytestring" | "string" | "bool" | "unit" | "data"
                | "(" builtin-type ")"
-               | "list" builtin-type
-               | "pair" builtin-type builtin-type
+               | "(" "list" builtin-type ")"
+               | "(" "pair" builtin-type builtin-type ")"
 const-val    ::= integer-literal          -- for type integer
                | "True" | "False"         -- for type bool
                | "#" hexdigits            -- for type bytestring

@@ -190,8 +190,11 @@ def importUplcImp : CommandElab := fun stx => do
 
   /-- Tries to decode content with all formats and returns the first one that succeeds -/
   findWorkingFormat (content : String) : Option Name :=
+    -- Try textual
+    if (programFromString content).isOk then
+      some `textual
     -- Try flat
-    if (decodeProgramFromByteString content).isSome then
+    else if (decodeProgramFromByteString content).isSome then
       some `flat
     -- Try flat_hex
     else if (flatEncodedScriptFromHex? content).isOk then
