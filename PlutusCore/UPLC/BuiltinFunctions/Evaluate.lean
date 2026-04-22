@@ -1,6 +1,7 @@
 import PlutusCore.Default
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.BuiltinFunctions.Bitwise
 import PlutusCore.UPLC.BuiltinFunctions.Bool
 import PlutusCore.UPLC.BuiltinFunctions.ByteString
 import PlutusCore.UPLC.BuiltinFunctions.Crypto
@@ -27,6 +28,7 @@ open PlutusCore.UPLC.BuiltinFunctions.Pair
 open PlutusCore.UPLC.BuiltinFunctions.String
 open PlutusCore.UPLC.BuiltinFunctions.Trace
 open PlutusCore.UPLC.BuiltinFunctions.Unit
+open PlutusCore.UPLC.BuiltinFunctions.Bitwise
 
 -- Evaluate a builtin function based on its type.
 def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : BuiltinFun) : List CekValue → Option CekValue :=
@@ -123,9 +125,26 @@ def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : Bu
   -- Other cryptography
   | .Keccak_256                      => Crypto.keccak_256
   | .Blake2b_224                     => Crypto.blake2b_224
+  | .IntegerToByteString             => integerToByteString
+  | .ByteStringToInteger             => byteStringToInteger
+  -- Batch 5 (bitwise)
+  | .AndByteString                   => andByteString
+  | .OrByteString                    => orByteString
+  | .XorByteString                   => xorByteString
+  | .ComplementByteString            => complementByteString
+  | .ReadBit                         => readBit
+  | .WriteBits                       => writeBits
+  | .ReplicateByte                   => replicateByte
+  | .ShiftByteString                 => shiftByteString
+  | .RotateByteString                => rotateByteString
+  | .CountSetBits                    => countSetBits
+  | .FindFirstSetBit                 => findFirstSetBit
+  -- Cryptography
+  | .Ripemd_160                      => Crypto.ripemd_160
   -- Batch 6
   | .ExpModInteger                   => expModInteger
-  -- Batch 5 (bitwise) and Batch 7 wired in a subsequent PR
-  | _                                => fun _ => none
+  -- Batch 7 and remaining unimplemented builtins
+  | .DropList                        => fun _ => none
+
 
 end PlutusCore.UPLC.BuiltinFunctions.Evaluate

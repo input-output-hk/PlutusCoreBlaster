@@ -21,15 +21,15 @@ opaque verifyEcdsaSecp256k1Signature (publicKey message signature : ByteString) 
   let pk  := String.toByteList publicKey.data
   let msg := String.toByteList message.data
   let sig := String.toByteList signature.data
-  if pk.length  ≠ 33 then .error "verifyEcdsaSecp256k1Signature: pk must be 33 bytes"
-  else if msg.length ≠ 32 then .error "verifyEcdsaSecp256k1Signature: msg must be 32 bytes"
-  else if sig.length ≠ 64 then .error "verifyEcdsaSecp256k1Signature: sig must be 64 bytes"
+  if pk.length != 33 then .error "verifyEcdsaSecp256k1Signature: pk must be 33 bytes"
+  else if msg.length != 32 then .error "verifyEcdsaSecp256k1Signature: msg must be 32 bytes"
+  else if sig.length != 64 then .error "verifyEcdsaSecp256k1Signature: sig must be 64 bytes"
   else
     -- Per Plutus spec: r or s equal to 0 or ≥ curveOrder is an evaluation error (not False)
     let r := ECDSA.bytesToNat (sig.take 32)
     let s := ECDSA.bytesToNat (sig.drop 32)
-    if r = 0 || r ≥ ECDSA.curveOrder then .error "verifyEcdsaSecp256k1Signature: r out of range"
-    else if s = 0 || s ≥ ECDSA.curveOrder then .error "verifyEcdsaSecp256k1Signature: s out of range"
+    if r == 0 || Nat.ble ECDSA.curveOrder r then .error "verifyEcdsaSecp256k1Signature: r out of range"
+    else if s == 0 || Nat.ble ECDSA.curveOrder s then .error "verifyEcdsaSecp256k1Signature: s out of range"
     else match Secp256k1Point.decompress pk with
     | none   => .error "verifyEcdsaSecp256k1Signature: invalid public key"
     | some _ => .ok (ECDSA.verify pk msg sig)
@@ -41,8 +41,8 @@ opaque verifySchnorrSecp256k1Signature (publicKey message signature : ByteString
   let pk  := String.toByteList publicKey.data
   let msg := String.toByteList message.data
   let sig := String.toByteList signature.data
-  if pk.length  ≠ 32 then .error "verifySchnorrSecp256k1Signature: pk must be 32 bytes"
-  else if sig.length ≠ 64 then .error "verifySchnorrSecp256k1Signature: sig must be 64 bytes"
+  if pk.length != 32 then .error "verifySchnorrSecp256k1Signature: pk must be 32 bytes"
+  else if sig.length != 64 then .error "verifySchnorrSecp256k1Signature: sig must be 64 bytes"
   else match Schnorr.liftX pk with
   | none   => .error "verifySchnorrSecp256k1Signature: invalid public key"
   | some _ => .ok (Schnorr.verify pk msg sig)

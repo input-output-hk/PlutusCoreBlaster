@@ -178,6 +178,13 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
           | some mi => State.Eval (folding Vs s) ρ mi
           | none => State.Error
         else State.Error
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.PairData p)) =>
+        if Ms.length == 1 then
+          let Vs := [CekValue.VCon (Const.Data p.1), CekValue.VCon (Const.Data p.2)]
+          match Ms[0]? with
+          | some mi => State.Eval (folding Vs s) ρ mi
+          | none => State.Error
+        else State.Error
 
   -- DefaultUniList (len == 2):
   --   non-empty: HeadSpine (branches ! 0) [head, tail]
@@ -196,6 +203,33 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
           | some mi => State.Eval s ρ mi
           | none => State.Error
         else State.Error
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.ConstDataList (c :: cs))) =>
+        if Ms.length == 1 || Ms.length == 2 then
+          let Vs := [CekValue.VCon (.Data c), CekValue.VCon (Const.ConstDataList cs)]
+          match Ms[0]? with
+          | some mi => State.Eval (folding Vs s) ρ mi
+          | none => State.Error
+        else State.Error
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.ConstDataList [])) =>
+        if Ms.length == 2 then
+          match Ms[1]? with
+          | some mi => State.Eval s ρ mi
+          | none => State.Error
+        else State.Error
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.ConstPairDataList (c :: cs))) =>
+        if Ms.length == 1 || Ms.length == 2 then
+          let Vs := [CekValue.VCon (.PairData c), CekValue.VCon (Const.ConstPairDataList cs)]
+          match Ms[0]? with
+          | some mi => State.Eval (folding Vs s) ρ mi
+          | none => State.Error
+        else State.Error
+  | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VCon (Const.ConstPairDataList [])) =>
+        if Ms.length == 2 then
+          match Ms[1]? with
+          | some mi => State.Eval s ρ mi
+          | none => State.Error
+        else State.Error
+
   | _ => State.Error
 
   where

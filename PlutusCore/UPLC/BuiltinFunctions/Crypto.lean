@@ -174,13 +174,15 @@ def bls12381G2Uncompress : List CekValue → Option CekValue
   | [.VCon (.ByteString x)] => (.VCon ∘ .Bls12_381_G2_element) <$> (PLC.bls12_381_G2_uncompress x |> Except.toOption)
   | _ => none
 
+private def msmScalarBound : Int := (2 : Int) ^ (4095 : Nat)
+
 -- MSM scalar bound: -2^4095 ≤ s < 2^4095
 private def msmScalarInBounds (n : Int) : Bool :=
-  let bound : Int := (2 : Int) ^ (4095 : Nat)
-  n ≥ -bound && n < bound
+  n ≥ -msmScalarBound && n < msmScalarBound
 
 def bls12381G1MultiScalarMul : List CekValue → Option CekValue
   | [.VCon (.ConstList points), .VCon (.ConstList scalars)] => do
+    guard (points.length == scalars.length)
     let scalarsI ← scalars.mapM (fun c => match c with | .Integer n => some n | _ => none)
     let pointsG1 ← points.mapM (fun c => match c with | .Bls12_381_G1_element p => some p | _ => none)
     if scalarsI.any (fun n => !msmScalarInBounds n) then none
