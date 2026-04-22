@@ -1,5 +1,6 @@
 
 import Cryptograph.Blake2b.Blake2bTestVectors
+import Cryptograph.BLS12_381.TestVectors
 import Cryptograph.Keccak.Keccak256TestVectors
 import Cryptograph.Ripemd.Ripemd160TestVectors
 import Cryptograph.Sha2.Sha256TestVectors

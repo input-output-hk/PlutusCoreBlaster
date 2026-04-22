@@ -250,7 +250,7 @@ def g2 : Point Fq2 :=
 /-- Checks whether a given point is on the curve.
     BLS12-381 curve equations are `y^2 = x^3 + 4` and `y^2 = x^3 + 4(u+1)`. -/
 def isOnCurve {α} [Field α] [DecidableEq α] : Point α → Bool
-  | .infinity     => false
+  | .infinity     => true
   | .affine ax ay => (ay * ay) = (ax * ax * ax + mulByNonResidual (Field.ofNat 4))
 
 theorem g1_on_curve : isOnCurve g1 = true := by rfl
@@ -289,12 +289,15 @@ instance {α} [Field α] : Neg (Point α) where
   neg := pointNegate
 
 /-- Calculates adding a point to itself `n` times on the curve. -/
-partial def pointBinaryMul {α} [DecidableEq α] [Field α] (acc : Point α) : Nat → Point α → Point α
-  | 0, _ => acc
-  | n, b =>
+def pointBinaryMul {α} [DecidableEq α] [Field α] (acc : Point α) (n : Nat) (b : Point α) : Point α :=
+  match hn : n with
+  | 0     => acc
+  | p + 1 =>
       let double := pointDouble b
       if 2 ∣ n then pointBinaryMul acc              (n / 2) double
                else pointBinaryMul (pointAdd acc b) (n / 2) double
+  termination_by n
+  decreasing_by all_goals (rw [←hn]; apply Nat.div_lt_self <;> omega)
 
 /-- Calculates the multiplication of point `p` with a `scalar` on the curve. -/
 def pointMul {α} [DecidableEq α] [Field α] (scalar : Int) (p : Point α) : Point α :=
@@ -780,7 +783,9 @@ def Fq2.findY (x : Fq2) (bigger : Bool) : Option Fq2 :=
 def compressG1 : Point Fq1 → List UInt8
   | .infinity   => 0b11000000 :: List.replicate 47 0
   | .affine x y =>
-      let y' := Option.get! (Fq1.findY x false)
+      -- For a correctly constructed point `findY` should always
+      -- result in `some y`.
+      let y' := Option.getD (Fq1.findY x false) 0
       let b  := i2ospN x.t.val 48
       let b0 := b.headD 0
       let b' := b.tail
@@ -791,7 +796,9 @@ def compressG1 : Point Fq1 → List UInt8
 def compressG2 : Point Fq2 → List UInt8
   | .infinity   => 0b11000000 :: List.replicate 95 0
   | .affine x y =>
-      let y' := Option.get! (Fq2.findY x false)
+      -- For a correctly constructed point `findY` should always
+      -- result in `some y`.
+      let y' := Option.getD (Fq2.findY x false) 0
       let b  := i2ospN x.u1.t.val 48 ++ i2ospN x.u0.t.val 48
       let b0 := b.headD 0
       let b' := b.tail
