@@ -12,7 +12,6 @@ import PlutusCore.UPLC.BuiltinFunctions.Utils
 namespace PlutusCore.UPLC.BuiltinFunctions.Crypto
 
 namespace PLC
-  open PlutusCore.Crypto.Hash
   export PlutusCore.Crypto.Hash
     (
       sha2_256
@@ -22,18 +21,15 @@ namespace PLC
       keccak_256
       ripemd_160
     )
-  open PlutusCore.Crypto.Ed25519
   export PlutusCore.Crypto.Ed25519
     (
       verifyEd25519Signature
     )
-  open PlutusCore.Crypto.Secp256k1
   export PlutusCore.Crypto.Secp256k1
     (
       verifyEcdsaSecp256k1Signature
       verifySchnorrSecp256k1Signature
     )
-  open PlutusCore.Crypto.BLS12_381.G1
   export PlutusCore.Crypto.BLS12_381.G1
     (
       bls12_381_G1_add
@@ -44,7 +40,6 @@ namespace PLC
       bls12_381_G1_compress
       bls12_381_G1_uncompress
     )
-  open PlutusCore.Crypto.BLS12_381.G2
   export PlutusCore.Crypto.BLS12_381.G2
     (
       bls12_381_G2_add
@@ -55,7 +50,6 @@ namespace PLC
       bls12_381_G2_compress
       bls12_381_G2_uncompress
     )
-  open PlutusCore.Crypto.BLS12_381.Pairing
   export PlutusCore.Crypto.BLS12_381.Pairing
     (
       bls12_381_millerLoop
@@ -195,6 +189,7 @@ def bls12381G1MultiScalarMul : List CekValue → Option CekValue
 
 def bls12381G2MultiScalarMul : List CekValue → Option CekValue
   | [.VCon (.ConstList points), .VCon (.ConstList scalars)] => do
+    guard (points.length == scalars.length)
     let scalarsI ← scalars.mapM (fun c => match c with | .Integer n => some n | _ => none)
     let pointsG2 ← points.mapM (fun c => match c with | .Bls12_381_G2_element p => some p | _ => none)
     if scalarsI.any (fun n => !msmScalarInBounds n) then none

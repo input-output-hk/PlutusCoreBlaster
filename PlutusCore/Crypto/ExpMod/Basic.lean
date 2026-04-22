@@ -33,14 +33,28 @@ def powMod (b e m : Int) : Int :=
     go b' 1 e.toNat
 
 -- Extended Euclidean algorithm: returns (g, s) such that g = gcd(a,b) and s*a ≡ g (mod b).
-partial def extGcd (a b : Int) : Int × Int :=
+-- Termination: r.natAbs decreases at every step because, for E-division,
+--   (a % b).natAbs < b.natAbs  (when b ≠ 0),
+-- as captured by Int.natAbs_emod and the Nat.mod_lt bound.
+set_option linter.unusedVariables false in
+def extGcd (a b : Int) : Int × Int :=
   let rec go (old_r r old_s s : Int) : Int × Int :=
-    if r = 0 then (old_r, old_s)
+    if h : r = 0 then (old_r, old_s)
     else
       let q := old_r / r
-      go r (old_r - q * r) s (old_s - q * s)
+      go r (old_r % r) s (old_s - q * s)
+  termination_by r.natAbs
+  decreasing_by
+    have hna : 0 < r.natAbs := Int.natAbs_pos.mpr h
+    rw [Int.natAbs_emod old_r h]
+    by_cases hcond : 0 ≤ old_r ∨ r ∣ old_r
+    · rw [if_pos hcond]; exact Nat.mod_lt _ hna
+    · rw [if_neg hcond]
+      have hndvd : ¬(r ∣ old_r) := fun hdvd => hcond (Or.inr hdvd)
+      have hmod_ne : old_r.natAbs % r.natAbs ≠ 0 := fun h0 =>
+        hndvd (Int.natAbs_dvd_natAbs.mp (Nat.dvd_of_mod_eq_zero h0))
+      omega
   if b = 0 then (a, 1) else go a b 1 0
-
 
 -- Modular inverse of a mod m (m > 1). Returns .ok x where x ∈ [0,m-1],
 -- or .error if gcd(a,m) ≠ 1.

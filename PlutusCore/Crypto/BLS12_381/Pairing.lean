@@ -33,7 +33,7 @@ opaque bls12_381_millerLoop (p : BLS12_381_G1_Element) (q : BLS12_381_G2_Element
 
 opaque bls12_381_mulMlResult (x y : BLS12_381_MlResult) : BLS12_381_MlResult := (· * ·) <$> x <*> y
 
-opaque bls12_381_finalVerify (x y : BLS12_381_MlResult) : Bool := .some true = finalVerify <$> x <*> y
+opaque bls12_381_finalVerify (x y : BLS12_381_MlResult) : Bool := .some true == finalVerify <$> x <*> y
 
 end Internal
 
