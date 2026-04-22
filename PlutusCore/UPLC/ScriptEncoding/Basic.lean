@@ -10,6 +10,7 @@ namespace PlutusCore.UPLC.ScriptEncoding
 
 open FlatEncoding (decodeProgramFromByteString)
 open PlutusCore.Cbor (decodeLargeBytestring)
+open PlutusCore.UPLC.TextEncoding (programFromString)
 open PlutusScript
 open Term
 
@@ -136,12 +137,8 @@ Imports a UPLC program from a file at compile time and returns a `PlutusScript` 
 
 Syntax: `#import_uplc <identifier> <lang> <format> <filepath>`
 
-<<<<<<< HEAD
-Supported formats: `textual` (stub), `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
-Supported plutus ledger language: `PlutusV1`, `PlutusV2`, `PlutusV3`
-=======
 Supported formats: `textual`, `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
->>>>>>> ae78e4a (feat: add UPLC text parser and textual script encoding)
+Supported plutus ledger language: `PlutusV1`, `PlutusV2`, `PlutusV3`
 
 Example:
 ```lean4
@@ -251,16 +248,11 @@ def importUplcImp : CommandElab := fun stx => do
 
   /-- Parses a flat hex-encoded UPLC file and returns the resulting expression -/
   parseFlatHexUplc (filename : String) : TermElabM Expr := do
-<<<<<<< HEAD
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
     let content' := String.trim content
     match flatEncodedScriptFromHex? content' with
-=======
-    let content ← readFileContents filename
-    match flatEncodedScriptFromHex? content with
->>>>>>> ae78e4a (feat: add UPLC text parser and textual script encoding)
     | .ok p =>
         logInfo s!"Successfully decoded flat hex '{filename}'"
         return (toExpr p)
@@ -269,16 +261,11 @@ def importUplcImp : CommandElab := fun stx => do
 
   /-- Parses a single CBOR hex-encoded UPLC file and returns the resulting expression -/
   parseSingleCborHexUplc (filename : String) : TermElabM Expr := do
-<<<<<<< HEAD
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
     let content' := String.trim content
     match singleCborEncodedScriptFromHex? content' with
-=======
-    let content ← readFileContents filename
-    match singleCborEncodedScriptFromHex? content with
->>>>>>> ae78e4a (feat: add UPLC text parser and textual script encoding)
     | .ok p =>
         logInfo s!"Successfully decoded single CBOR hex '{filename}'"
         return (toExpr p)

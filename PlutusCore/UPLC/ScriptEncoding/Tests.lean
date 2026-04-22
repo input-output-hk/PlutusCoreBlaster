@@ -77,7 +77,7 @@ def test11 := doubleCborEncodedScriptFromHexM "494801000022212001011"
 #guard_msgs in
 #eval flatEncodedScriptFromBytestringM "\x01\x00\x00\x22\x21\x20\x01\x01"
 
-/-- info: Successfully decoded 'PlutusCore/UPLC/ScriptEncoding/TestsFlat/testUplc.flat' -/
+/-- info: Successfully decoded flat 'PlutusCore/UPLC/ScriptEncoding/TestsFlat/testUplc.flat' -/
 #guard_msgs in
 #import_uplc tmp PlutusV2 flat "PlutusCore/UPLC/ScriptEncoding/TestsFlat/testUplc.flat"
 
@@ -115,15 +115,15 @@ info: Successfully decoded single CBOR hex 'PlutusCore/UPLC/ScriptEncoding/Tests
 #import_uplc dataMap PlutusV2 single_cbor_hex "PlutusCore/UPLC/ScriptEncoding/TestsFlat/dataMap.flat"
 
 /--
-info: Successfully decoded textual '../PlutusCore/PlutusCore/UPLC/ScriptEncoding/TestsText/factorial.uplc'
+info: Successfully decoded textual 'PlutusCore/UPLC/ScriptEncoding/TestsText/factorial.uplc'
 -/
 #guard_msgs in
-#import_uplc factorial textual  "../PlutusCore/PlutusCore/UPLC/ScriptEncoding/TestsText/factorial.uplc"
+#import_uplc factorial PlutusV2 textual "PlutusCore/UPLC/ScriptEncoding/TestsText/factorial.uplc"
 
 /--
-info: Successfully decoded textual '../PlutusCore/PlutusCore/UPLC/ScriptEncoding/TestsText/fibonacci.uplc'
+info: Successfully decoded textual 'PlutusCore/UPLC/ScriptEncoding/TestsText/fibonacci.uplc'
 -/
 #guard_msgs in
-#import_uplc fibonacci textual  "../PlutusCore/PlutusCore/UPLC/ScriptEncoding/TestsText/fibonacci.uplc"
+#import_uplc fibonacci PlutusV2 textual "PlutusCore/UPLC/ScriptEncoding/TestsText/fibonacci.uplc"
 
 end PlutusCore.UPLC.ScriptEncoding
