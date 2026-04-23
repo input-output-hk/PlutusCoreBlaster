@@ -103,10 +103,13 @@ def parseDecimalCharCode (d : List Char) : Parser Char := fun s =>
   if List.length digits == 0
     then .error { message := "expected decimal digits", pos := s.pos }
     else
-      let val    := List.foldl (· * 10 + ·) 0 (((· - Char.toNat '0') ∘ Char.toNat) <$> digits)
-      let result := Char.ofNat val |> compensateForTextPack
-      -- each digit is 1 byte long
-      .ok (result, { s with pos := s.pos + ⟨digits.length⟩ })
+      let val := List.foldl (· * 10 + ·) 0 (((· - Char.toNat '0') ∘ Char.toNat) <$> digits)
+      if Nat.blt 0x10FFFF val
+        then .error { message := s!"unicode escape out of range: {val}", pos := s.pos }
+        else
+          let result := Char.ofNat val |> compensateForTextPack
+          -- each digit is 1 byte long
+          .ok (result, { s with pos := s.pos + ⟨digits.length⟩ })
 
 /-- Parses character literals in the form of '\o000.', where the unicode code point
     is expressed in base 8. Expects the chars '\o' to be already consumed and `o` to
@@ -116,10 +119,13 @@ def parseOctalCharCode (o : List Char) : Parser Char := fun s =>
   if List.length digits == 0
     then .error { message := "expected octal digits", pos := s.pos }
     else
-      let val    := List.foldl (· * 8 + ·) 0 (((· - Char.toNat '0') ∘ Char.toNat) <$> digits)
-      let result := Char.ofNat val |> compensateForTextPack
-      -- each digit is 1 byte long
-      .ok (result, { s with pos := s.pos + ⟨digits.length⟩ })
+      let val := List.foldl (· * 8 + ·) 0 (((· - Char.toNat '0') ∘ Char.toNat) <$> digits)
+      if Nat.blt 0x10FFFF val
+        then .error { message := s!"unicode escape out of range: {val}", pos := s.pos }
+        else
+          let result := Char.ofNat val |> compensateForTextPack
+          -- each digit is 1 byte long
+          .ok (result, { s with pos := s.pos + ⟨digits.length⟩ })
 
 /-- Parses character literals in the form of '\x000.', where the unicode code point
     is expressed in base 16. Expects the chars '\x' to be already consumed and `h` to
@@ -129,10 +135,13 @@ def parseHexCharCode (h : List Char) : Parser Char := fun s =>
   if List.length digits == 0
     then .error { message := "expected hex digits", pos := s.pos }
     else
-      let val    := List.foldl (· * 16 + ·) 0 (fHex <$> digits)
-      let result := Char.ofNat val |> compensateForTextPack
-      -- each digit is 1 byte long
-      .ok (result, { s with pos := s.pos + ⟨digits.length⟩ })
+      let val := List.foldl (· * 16 + ·) 0 (fHex <$> digits)
+      if Nat.blt 0x10FFFF val
+        then .error { message := s!"unicode escape out of range: {val}", pos := s.pos }
+        else
+          let result := Char.ofNat val |> compensateForTextPack
+          -- each digit is 1 byte long
+          .ok (result, { s with pos := s.pos + ⟨digits.length⟩ })
  where
   fHex (c : Char) : Nat :=
          if c ≥ '0' && c ≤ '9' then Char.toNat c - Char.toNat '0'
@@ -224,6 +233,7 @@ partial def parseStringChars : Parser (List Char) :=
     match ← peek with
     | .none      => fail "unterminated string literal"
     | .some '"'  => return (List.reverse acc) -- stop, leave '"' unconsumed
+    | .some '\n' => fail "unexpected newline in string literal"
     | .some '\r' => -- skip bare CR (Windows CRLF line endings in source files)
         let _ ← char '\r'
         loop acc
