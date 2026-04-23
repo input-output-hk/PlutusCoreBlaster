@@ -174,9 +174,9 @@ private def msmScalarBound : Int := (2 : Int) ^ (4095 : Nat)
 private def msmScalarInBounds (n : Int) : Bool :=
   n ≥ -msmScalarBound && n < msmScalarBound
 
+-- Plutus Core Spec 4.3.6, Note 3: the input length can be different, truncated to the shorter
 def bls12381G1MultiScalarMul : List CekValue → Option CekValue
   | [.VCon (.ConstList points), .VCon (.ConstList scalars)] => do
-    guard (points.length == scalars.length)
     let scalarsI ← scalars.mapM (fun c => match c with | .Integer n => some n | _ => none)
     let pointsG1 ← points.mapM (fun c => match c with | .Bls12_381_G1_element p => some p | _ => none)
     if scalarsI.any (fun n => !msmScalarInBounds n) then none
@@ -187,9 +187,9 @@ def bls12381G1MultiScalarMul : List CekValue → Option CekValue
       some (.VCon (.Bls12_381_G1_element result))
   | _ => none
 
+-- Plutus Core Spec 4.3.6, Note 3: the input length can be different, truncated to the shorter
 def bls12381G2MultiScalarMul : List CekValue → Option CekValue
   | [.VCon (.ConstList points), .VCon (.ConstList scalars)] => do
-    guard (points.length == scalars.length)
     let scalarsI ← scalars.mapM (fun c => match c with | .Integer n => some n | _ => none)
     let pointsG2 ← points.mapM (fun c => match c with | .Bls12_381_G2_element p => some p | _ => none)
     if scalarsI.any (fun n => !msmScalarInBounds n) then none

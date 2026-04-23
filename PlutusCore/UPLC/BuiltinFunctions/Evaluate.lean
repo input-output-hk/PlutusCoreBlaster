@@ -146,5 +146,4 @@ def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : Bu
   -- Batch 7 and remaining unimplemented builtins
   | .DropList                        => fun _ => none
 
-
 end PlutusCore.UPLC.BuiltinFunctions.Evaluate
