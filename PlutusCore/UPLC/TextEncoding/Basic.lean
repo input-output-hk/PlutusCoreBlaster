@@ -233,10 +233,6 @@ partial def parseStringChars : Parser (List Char) :=
     match ← peek with
     | .none      => fail "unterminated string literal"
     | .some '"'  => return (List.reverse acc) -- stop, leave '"' unconsumed
-    | .some '\n' => fail "unexpected newline in string literal"
-    | .some '\r' => -- skip bare CR (Windows CRLF line endings in source files)
-        let _ ← char '\r'
-        loop acc
     | .some _    =>
         let c ← parseLitChar
         loop (c :: acc)
