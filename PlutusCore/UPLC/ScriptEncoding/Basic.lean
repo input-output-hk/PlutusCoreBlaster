@@ -185,8 +185,11 @@ def importUplcImp : CommandElab := fun stx => do
     let some s := f.isStrLit? | throwErrorAt f m!"string literal expected for filename"
     return s
 
-  /-- Tries to decode content with all formats and returns the first one that succeeds -/
+  /-- Tries to decode content with all formats and returns the first one that succeeds.
+      Hex-based formats are checked against the trimmed content to mirror the
+      real decoders (which call `String.trim` before decoding). -/
   findWorkingFormat (content : String) : Option Name :=
+    let trimmed := String.trim content
     -- Try textual
     if (programFromString content).isOk then
       some `textual
@@ -194,13 +197,13 @@ def importUplcImp : CommandElab := fun stx => do
     else if (decodeProgramFromByteString content).isSome then
       some `flat
     -- Try flat_hex
-    else if (flatEncodedScriptFromHex? content).isOk then
+    else if (flatEncodedScriptFromHex? trimmed).isOk then
       some `flat_hex
     -- Try single_cbor_hex
-    else if (singleCborEncodedScriptFromHex? content).isOk then
+    else if (singleCborEncodedScriptFromHex? trimmed).isOk then
       some `single_cbor_hex
     -- Try double_cbor_hex
-    else if (doubleCborEncodedScriptFromHex? content).isOk then
+    else if (doubleCborEncodedScriptFromHex? trimmed).isOk then
       some `double_cbor_hex
     else
       none

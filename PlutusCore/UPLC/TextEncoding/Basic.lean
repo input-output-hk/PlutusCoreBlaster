@@ -286,8 +286,8 @@ def parseAtomicType : Parser BuiltinType := do
 mutual
   /-- Parse a `BuiltinType`.
       - Atomic: `integer`, `bytestring`, `string`, `bool`, `unit`, `data`, `bls12_381_G1_element` and `bls12_381_G2_element`
-      - List:   `(list T)`   - keyword followed immediately by `T`
-      - Pair:   `(pair T U)` - parenthesised with two type arguments -/
+      - List:   `(list T)`     - parenthesised with one type argument
+      - Pair:   `(pair T U)`   - parenthesised with two type arguments -/
   partial def parseBuiltinType : Parser BuiltinType :=
     ws *> (parseTypeOperator <|> parseAtomicType)
 
