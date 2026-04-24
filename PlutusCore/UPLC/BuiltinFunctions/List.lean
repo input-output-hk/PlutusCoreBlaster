@@ -3,7 +3,8 @@ import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.List
+
 namespace PLC
   open PlutusCore.List
   export PlutusCore.List (
@@ -14,8 +15,10 @@ namespace PLC
     nullList
   )
 end PLC
+
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Utils
 
 -- NOTE: Args are deliberately reversed on the Cek machine stack for performance
 
@@ -82,4 +85,6 @@ def nullList (Vs : List CekValue) : Option CekValue :=
       some (CekValue.VCon (Const.Bool (PLC.nullList xs)))
   | _ => none
 
-end PlutusCore.UPLC.CekValue
+-- dropList added in the Bitwise/Batch-7 PR
+
+end PlutusCore.UPLC.BuiltinFunctions.List

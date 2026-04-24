@@ -16,8 +16,8 @@ mutual
   deriving Repr
 
   inductive Environment
-  | NonEmptyEvironment : Environment → String → CekValue → Environment
-  | EmptyEnvironment   : Environment
+  | NonEmptyEnvironment : Environment → String → CekValue → Environment
+  | EmptyEnvironment    : Environment
   deriving Repr
 end
 

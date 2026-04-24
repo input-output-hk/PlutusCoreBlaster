@@ -2,13 +2,15 @@ import PlutusCore.Trace
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.Trace
+
 namespace PLC
   open PlutusCore.Trace
   export PlutusCore.Trace (
     trace
   )
 end PLC
+
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
@@ -20,4 +22,4 @@ def trace (Vs : List CekValue) : Option CekValue :=
   | [v, CekValue.VCon (Const.String s)] => some (PLC.trace s v)
   | _ => none
 
-end PlutusCore.UPLC.CekValue
+end PlutusCore.UPLC.BuiltinFunctions.Trace

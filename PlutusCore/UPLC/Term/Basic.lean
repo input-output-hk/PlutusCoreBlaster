@@ -1,7 +1,13 @@
+import PlutusCore.Crypto.BLS12_381.G1
+import PlutusCore.Crypto.BLS12_381.G2
+import PlutusCore.Crypto.BLS12_381.Pairing
 import PlutusCore.Data
 
 namespace PlutusCore.UPLC.Term
 
+open PlutusCore.Crypto.BLS12_381.G1 (BLS12_381_G1_Element)
+open PlutusCore.Crypto.BLS12_381.G2 (BLS12_381_G2_Element)
+open PlutusCore.Crypto.BLS12_381.Pairing (BLS12_381_MlResult)
 open PlutusCore.Data (Data)
 open PlutusCore.ByteString (ByteString)
 open PlutusCore.Integer (Integer)
@@ -13,6 +19,9 @@ inductive AtomicType
   | TypeBool
   | TypeUnit
   | TypeData
+  | TypeBls12_381_G1_element
+  | TypeBls12_381_G2_element
+  | TypeBls12_381_MlResult
 deriving BEq
 
 mutual
@@ -37,9 +46,9 @@ inductive Const
   | Pair                  : Const × Const → Const
   | PairData              : Data × Data → Const        -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | Data                  : Data → Const
-  | Bls12_381_G1_element  : Const                       -- NOTE: missing value here (need to check in spec)
-  | Bls12_381_G2_element  : Const                       -- NOTE: missing value here (need to check in spec)
-  | Bls12_381_MlResult    : Const                       -- NOTE: missing value here (need to check in spec)
+  | Bls12_381_G1_element  : BLS12_381_G1_Element → Const
+  | Bls12_381_G2_element  : BLS12_381_G2_Element → Const
+  | Bls12_381_MlResult    : BLS12_381_MlResult   → Const
 deriving Repr
 
 
@@ -70,7 +79,7 @@ inductive BuiltinFun
   | Sha3_256
   | Blake2b_256
   | VerifyEd25519Signature
--- Strings
+-- String
   | AppendString
   | EqualsString
   | EncodeUtf8
@@ -81,10 +90,10 @@ inductive BuiltinFun
   | ChooseUnit
 -- Tracing
   | Trace
--- Pairs
+-- Pair
   | FstPair
   | SndPair
--- Lists
+-- List
   | ChooseList
   | MkCons
   | HeadList
@@ -128,6 +137,8 @@ inductive BuiltinFun
   | Bls12_381_G2_hashToGroup
   | Bls12_381_G2_compress
   | Bls12_381_G2_uncompress
+  | Bls12_381_G1_multiScalarMul
+  | Bls12_381_G2_multiScalarMul
   | Bls12_381_millerLoop
   | Bls12_381_mulMlResult
   | Bls12_381_finalVerify
@@ -155,6 +166,8 @@ inductive BuiltinFun
   | Ripemd_160
 -- Batch 6
   | ExpModInteger
+-- Batch 7
+  | DropList
 deriving Repr, BEq
 
 inductive Term
