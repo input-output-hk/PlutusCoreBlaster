@@ -8,15 +8,15 @@ open Lean
 instance : ToExpr AtomicType where
   toTypeExpr := .const ``AtomicType []
   toExpr
-    | .TypeInteger              => .const ``AtomicType.TypeInteger    []
-    | .TypeByteString           => .const ``AtomicType.TypeByteString []
-    | .TypeString               => .const ``AtomicType.TypeString     []
-    | .TypeBool                 => .const ``AtomicType.TypeBool       []
-    | .TypeUnit                 => .const ``AtomicType.TypeUnit       []
-    | .TypeData                 => .const ``AtomicType.TypeData       []
+    | .TypeInteger              => .const ``AtomicType.TypeInteger              []
+    | .TypeByteString           => .const ``AtomicType.TypeByteString           []
+    | .TypeString               => .const ``AtomicType.TypeString               []
+    | .TypeBool                 => .const ``AtomicType.TypeBool                 []
+    | .TypeUnit                 => .const ``AtomicType.TypeUnit                 []
+    | .TypeData                 => .const ``AtomicType.TypeData                 []
     | .TypeBls12_381_G1_element => .const ``AtomicType.TypeBls12_381_G1_element []
     | .TypeBls12_381_G2_element => .const ``AtomicType.TypeBls12_381_G2_element []
-    | .TypeBls12_381_MlResult   => .const ``AtomicType.TypeBls12_381_MlResult []
+    | .TypeBls12_381_MlResult   => .const ``AtomicType.TypeBls12_381_MlResult   []
 
 mutual
   def BuiltinType.toExpr : BuiltinType → Expr

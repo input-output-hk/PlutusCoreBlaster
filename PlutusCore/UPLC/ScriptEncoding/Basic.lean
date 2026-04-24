@@ -4,11 +4,13 @@ import PlutusCore.Cbor
 
 import PlutusCore.UPLC.FlatEncoding
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.TextEncoding
 
 namespace PlutusCore.UPLC.ScriptEncoding
 
 open FlatEncoding (decodeProgramFromByteString)
 open PlutusCore.Cbor (decodeLargeBytestring)
+open PlutusCore.UPLC.TextEncoding (programFromString)
 open PlutusScript
 open Term
 
@@ -135,7 +137,7 @@ Imports a UPLC program from a file at compile time and returns a `PlutusScript` 
 
 Syntax: `#import_uplc <identifier> <lang> <format> <filepath>`
 
-Supported formats: `textual` (stub), `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
+Supported formats: `textual`, `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
 Supported plutus ledger language: `PlutusV1`, `PlutusV2`, `PlutusV3`
 
 Example:
@@ -183,19 +185,25 @@ def importUplcImp : CommandElab := fun stx => do
     let some s := f.isStrLit? | throwErrorAt f m!"string literal expected for filename"
     return s
 
-  /-- Tries to decode content with all formats and returns the first one that succeeds -/
+  /-- Tries to decode content with all formats and returns the first one that succeeds.
+      Hex-based formats are checked against the trimmed content to mirror the
+      real decoders (which call `String.trim` before decoding). -/
   findWorkingFormat (content : String) : Option Name :=
+    let trimmed := String.trim content
+    -- Try textual
+    if (programFromString content).isOk then
+      some `textual
     -- Try flat
-    if (decodeProgramFromByteString content).isSome then
+    else if (decodeProgramFromByteString content).isSome then
       some `flat
     -- Try flat_hex
-    else if (flatEncodedScriptFromHex? content).isOk then
+    else if (flatEncodedScriptFromHex? trimmed).isOk then
       some `flat_hex
     -- Try single_cbor_hex
-    else if (singleCborEncodedScriptFromHex? content).isOk then
+    else if (singleCborEncodedScriptFromHex? trimmed).isOk then
       some `single_cbor_hex
     -- Try double_cbor_hex
-    else if (doubleCborEncodedScriptFromHex? content).isOk then
+    else if (doubleCborEncodedScriptFromHex? trimmed).isOk then
       some `double_cbor_hex
     else
       none
@@ -215,19 +223,28 @@ def importUplcImp : CommandElab := fun stx => do
       | none => s!"Decoding error in '{filename}'"
     if suggestion.isEmpty then baseMsg else s!"{baseMsg}. {suggestion}"
 
-  /-- Parses a textual UPLC file and returns the resulting expression (STUB) -/
+  /-- Reads file at path `filename` contents as text. -/
+  readFileContents (filename : String) : TermElabM String :=
+    liftM $ do
+      let path := System.FilePath.mk filename
+      IO.FS.readFile path
+
+  /-- Parses a textual UPLC file and returns the resulting expression -/
   parseTextualUplc (filename : String) : TermElabM Expr := do
-    throwError s!"Textual UPLC parser not yet implemented for '{filename}'"
+    let content ← readFileContents filename
+    match programFromString content with
+    | .ok p =>
+        logInfo s!"Successfully decoded textual '{filename}'"
+        return (toExpr p)
+    | .error msg =>
+        throwError (decodingErrorWithSuggestion content `textual filename (some msg))
 
   /-- Parses a flat-encoded UPLC file and returns the resulting expression -/
   parseFlatUplc (filename : String) : TermElabM Expr := do
-    -- Read file content
-    let content ← liftM $ do
-      let path := System.FilePath.mk filename
-      IO.FS.readFile path
+    let content ← readFileContents filename
     match decodeProgramFromByteString content with
     | .some p =>
-        logInfo s!"Successfully decoded '{filename}'"
+        logInfo s!"Successfully decoded flat '{filename}'"
         return (toExpr p)
     | .none =>
         throwError (decodingErrorWithSuggestion content `flat filename)

@@ -36,14 +36,14 @@ opaque bls12_381_G2_scalarMul (z : Integer) (x : BLS12_381_G2_Element) : BLS12_3
 opaque bls12_381_G2_equal (x y : BLS12_381_G2_Element) : Bool := x = y
 
 opaque bls12_381_G2_hashToGroup (msg dst : ByteString) : Except String BLS12_381_G2_Element :=
-  match Fq2.hashToCurve (String.toByteList msg.data) (String.toByteList dst.data) with
+  match Fq2.hashToCurve (Char.toUInt8 <$> msg.data.data) (Char.toUInt8 <$> dst.data.data) with
   | .some r => .ok r
   | .none   => .error "bls12_381_G2_hashToGroup: Domain separator tag too long!"
 
 opaque bls12_381_G2_compress (p : BLS12_381_G2_Element) : ByteString := ⟨⟨Char.ofUInt8 <$> compressG2 p⟩⟩
 
 opaque bls12_381_G2_uncompress (b : ByteString) : Except String BLS12_381_G2_Element :=
-  match uncompressG2 (String.toByteList b.data) with
+  match uncompressG2 (Char.toUInt8 <$> b.data.data) with
   | .some r => .ok r
   | .none   => .error "bls12_381_G2_uncompress: invalid point"
 
