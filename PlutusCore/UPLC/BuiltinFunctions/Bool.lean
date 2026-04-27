@@ -2,7 +2,7 @@ import PlutusCore.Bool
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.Bool
 
 namespace PLC
   open PlutusCore.Bool
@@ -21,4 +21,4 @@ def ifThenElse (Vs : List CekValue) : Option CekValue :=
         some (PLC.ifThenElse b caseTrue caseFalse)
   | _ => none
 
-end PlutusCore.UPLC.CekValue
+end PlutusCore.UPLC.BuiltinFunctions.Bool

@@ -9,5 +9,6 @@ import Cryptograph.Sha3.Sha3_256TestVectors
 
 import PlutusCore.Bitwise.Tests
 import PlutusCore.Cbor.Tests
-import PlutusCore.UPLC.ScriptEncoding.Tests
 import PlutusCore.UPLC.FlatEncoding.Tests
+import PlutusCore.UPLC.ScriptEncoding.Tests
+import PlutusCore.UPLC.TextEncoding.Tests

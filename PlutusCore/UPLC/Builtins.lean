@@ -7,13 +7,13 @@ open PlutusCore.UPLC.Term
 inductive ExpectedBuiltinArg
 | ArgV : ExpectedBuiltinArg
 | ArgQ : ExpectedBuiltinArg
-deriving Repr
+deriving Repr, BEq
 
 -- Define expectedBuiltinArgs
 inductive ExpectedBuiltinArgs
 | One : ExpectedBuiltinArg → ExpectedBuiltinArgs
 | More : ExpectedBuiltinArg → ExpectedBuiltinArgs → ExpectedBuiltinArgs
-deriving Repr
+deriving Repr, BEq
 
 namespace ExpectedArgNotations
 
@@ -106,14 +106,32 @@ def expectedArgs (b : BuiltinFun) : ExpectedBuiltinArgs :=
   | Bls12_381_G2_hashToGroup        => ArgV ⊙ One ArgV
   | Bls12_381_G2_compress           => One ArgV
   | Bls12_381_G2_uncompress         => One ArgV
+  | Bls12_381_G1_multiScalarMul     => ArgV ⊙ One ArgV
+  | Bls12_381_G2_multiScalarMul     => ArgV ⊙ One ArgV
   | Bls12_381_millerLoop            => ArgV ⊙ One ArgV
   | Bls12_381_mulMlResult           => ArgV ⊙ One ArgV
   | Bls12_381_finalVerify           => ArgV ⊙ One ArgV
-  | Keccak_256                      => ArgV ⊙ One ArgV
-  | Blake2b_224                     => ArgV ⊙ One ArgV
+  | Keccak_256                      => One ArgV
+  | Blake2b_224                     => One ArgV
   | IntegerToByteString             => ArgV ⊙ ArgV ⊙ One ArgV
   | ByteStringToInteger             => ArgV ⊙ One ArgV
-  | _ => One ExpectedBuiltinArg.ArgV
+  -- Batch 5 (bitwise)
+  | AndByteString                   => ArgV ⊙ ArgV ⊙ One ArgV
+  | OrByteString                    => ArgV ⊙ ArgV ⊙ One ArgV
+  | XorByteString                   => ArgV ⊙ ArgV ⊙ One ArgV
+  | ComplementByteString            => One ArgV
+  | ShiftByteString                 => ArgV ⊙ One ArgV
+  | RotateByteString                => ArgV ⊙ One ArgV
+  | CountSetBits                    => One ArgV
+  | FindFirstSetBit                 => One ArgV
+  | ReadBit                         => ArgV ⊙ One ArgV
+  | WriteBits                       => ArgV ⊙ ArgV ⊙ One ArgV
+  | ReplicateByte                   => ArgV ⊙ One ArgV
+  -- Batch 6
+  | Ripemd_160                      => One ArgV
+  | ExpModInteger                   => ArgV ⊙ ArgV ⊙ One ArgV
+  -- Batch 7
+  | DropList                        => ArgQ ⊙ ArgV ⊙ One ArgV
 
 namespace BuiltinNotations
 
