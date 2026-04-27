@@ -1,5 +1,5 @@
 import Lean
-
+import PlutusCore.UPLC.PlutusScript
 import PlutusCore.Cbor
 
 import PlutusCore.UPLC.FlatEncoding
@@ -7,10 +7,10 @@ import PlutusCore.UPLC.Term
 
 namespace PlutusCore.UPLC.ScriptEncoding
 
+open FlatEncoding (decodeProgramFromByteString)
 open PlutusCore.Cbor (decodeLargeBytestring)
-
-open PlutusCore.UPLC.Term
-open PlutusCore.UPLC.FlatEncoding (decodeProgramFromByteString)
+open PlutusScript
+open Term
 
 namespace Internal
 
@@ -131,18 +131,19 @@ syntax (name := flatEncodedScriptFromHexMacro) "flatEncodedScriptFromHexM" str :
 def elabFlatEncodedScriptFromHexM : TermElab := fromStringTermElaborator flatEncodedScriptFromHex?
 
 /--
-Imports a UPLC program from a file at compile time.
+Imports a UPLC program from a file at compile time and returns a `PlutusScript` instance
 
-Syntax: `#import_uplc <identifier> <format> <filepath>`
+Syntax: `#import_uplc <identifier> <lang> <format> <filepath>`
 
 Supported formats: `textual` (stub), `flat`, `flat_hex`, `single_cbor_hex`, `double_cbor_hex`
+Supported plutus ledger language: `PlutusV1`, `PlutusV2`, `PlutusV3`
 
 Example:
 ```lean4
-#import_uplc myValidator flat "scripts/validator.flat"
+#import_uplc myValidator PlutusV2 flat "scripts/validator.flat"
 ```
 -/
-syntax (name := import_uplc) "#import_uplc" ident ident str : command
+syntax (name := import_uplc) "#import_uplc" ident ident ident str : command
 
 /-- Elaboration for the #import_uplc command -/
 @[command_elab import_uplc]
@@ -168,6 +169,14 @@ def importUplcImp : CommandElab := fun stx => do
   /-- Extracts the format identifier from syntax -/
   getFormat (stx : Syntax) : TermElabM Name := do
     return stx.getId
+
+  /-- Extracts the plutus language from syntax -/
+  validLang (stx : Syntax) : TermElabM Expr := do
+   match stx.getId with
+   | `PlutusV1 => mkConst ``PlutusLanguage.PlutusV1
+   | `PlutusV2 => mkConst ``PlutusLanguage.PlutusV2
+   | `PlutusV3 => mkConst ``PlutusLanguage.PlutusV3
+   | n => throwErrorAt stx s!"Unsupported plutus ledeger language {n}"
 
   /-- Extracts a filename string from syntax -/
   validFilename (f : Syntax) : TermElabM String := do
@@ -228,55 +237,60 @@ def importUplcImp : CommandElab := fun stx => do
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
-    match flatEncodedScriptFromHex? content with
+    let content' := String.trim content
+    match flatEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded flat hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content `flat_hex filename (some msg))
+        throwError (decodingErrorWithSuggestion content' `flat_hex filename (some msg))
 
   /-- Parses a single CBOR hex-encoded UPLC file and returns the resulting expression -/
   parseSingleCborHexUplc (filename : String) : TermElabM Expr := do
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
-    match singleCborEncodedScriptFromHex? content with
+    let content' := String.trim content
+    match singleCborEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded single CBOR hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content `single_cbor_hex filename (some msg))
+        throwError (decodingErrorWithSuggestion content' `single_cbor_hex filename (some msg))
 
   /-- Parses a double CBOR hex-encoded UPLC file and returns the resulting expression -/
   parseDoubleCborHexUplc (filename : String) : TermElabM Expr := do
     let content ← liftM $ do
       let path := System.FilePath.mk filename
       IO.FS.readFile path
-    match doubleCborEncodedScriptFromHex? content with
+    let content' := String.trim content
+    match doubleCborEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded double CBOR hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content `double_cbor_hex filename (some msg))
+        throwError (decodingErrorWithSuggestion content' `double_cbor_hex filename (some msg))
 
   /-- Parses a UPLC file and returns the resulting expression based on format -/
   parseUplcFile (stx : Syntax) : TermElabM Expr := do
-    let format   ← getFormat stx[2]
-    let filename ← validFilename stx[3]
-    match format with
-    | `textual         => parseTextualUplc filename
-    | `flat            => parseFlatUplc filename
-    | `flat_hex        => parseFlatHexUplc filename
-    | `single_cbor_hex => parseSingleCborHexUplc filename
-    | `double_cbor_hex => parseDoubleCborHexUplc filename
-    | _                => throwErrorAt stx[2] m!"unsupported format '{format}', expected 'textual', 'flat', 'flat_hex', 'single_cbor_hex', or 'double_cbor_hex'"
+    let lang ← validLang stx[2]
+    let format ← getFormat stx[3]
+    let filename ← validFilename stx[4]
+    let uplc ←
+      match format with
+      | `textual         => parseTextualUplc filename
+      | `flat            => parseFlatUplc filename
+      | `flat_hex        => parseFlatHexUplc filename
+      | `single_cbor_hex => parseSingleCborHexUplc filename
+      | `double_cbor_hex => parseDoubleCborHexUplc filename
+      | _                => throwErrorAt stx[3] m!"unsupported format '{format}', expected 'textual', 'flat', 'flat_hex', 'single_cbor_hex', or 'double_cbor_hex'"
+    return mkApp2 (mkConst ``PlutusScript.mk) lang uplc
 
 
 end Internal
 
 export Internal
-  (
-    singleCborEncodedScriptFromHex!
+  ( singleCborEncodedScriptFromHex!
     doubleCborEncodedScriptFromHex!
     flatEncodedScriptFromBytestring!
     flatEncodedScriptFromHex!

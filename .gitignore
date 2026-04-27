@@ -1,0 +1,14 @@
+# Mac OS
+
+**/.DS_Store
+
+# Lake
+.venv/
+.lake/
+
+# Logs
+build.log
+
+# vscode
+/.vscode/
+*.orig

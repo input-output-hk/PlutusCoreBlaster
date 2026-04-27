@@ -1,0 +1,72 @@
+name: ci-linux
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches: [ staging, main ]
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LEAN_VERSION: "4.24.0"
+  Z3_VERSION: "4.15.2"
+  GLIBC_Z3: "2.39"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "/home/runner/.elan/bin" >> $GITHUB_PATH
+          chmod +x /home/runner/.elan/bin/*
+
+      - name: Fix Elan version
+        run: |
+          elan toolchain install ${{ env.LEAN_VERSION }}
+          elan default ${{ env.LEAN_VERSION }}
+
+      - name: Install Z3
+        run: |
+          cd /home/runner/
+          wget -q https://github.com/Z3Prover/z3/releases/download/z3-${{ env.Z3_VERSION }}/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          unzip -q z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          chmod +x z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
+
+      - name: Tools version
+        run: |
+          elan --version
+          lake --version
+          lean --version
+          z3 --version
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build and Validate PlutusCore
+        run: make check_plutus_core
+
+      - name: Upload PlutusCore build log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: plutus-core-build
+          path: build.log
+
+      - name: Execute and Validate Tests
+        run: make check_tests
+
+      - name: Upload Tests log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tests-build
+          path: build.log
