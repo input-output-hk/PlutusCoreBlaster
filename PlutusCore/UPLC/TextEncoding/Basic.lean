@@ -97,7 +97,7 @@ def compensateForTextPack (c : Char) : Char :=
 
 /-- Parses character literals in the form of '\000..', where the unicode code point
     is expressed in base 10. Expects the char '\' to be already consumed and `d` to
-    contain the relevant lookahed. -/
+    contain the relevant lookahead. -/
 def parseDecimalCharCode (d : List Char) : Parser Char := fun s =>
   let digits := List.takeWhile Char.isDigit d
   if List.length digits == 0
@@ -113,7 +113,7 @@ def parseDecimalCharCode (d : List Char) : Parser Char := fun s =>
 
 /-- Parses character literals in the form of '\o000.', where the unicode code point
     is expressed in base 8. Expects the chars '\o' to be already consumed and `o` to
-    contain the relevant lookahed. -/
+    contain the relevant lookahead. -/
 def parseOctalCharCode (o : List Char) : Parser Char := fun s =>
   let digits := List.takeWhile (λ c => c ≥ '0' && c ≤ '7') o
   if List.length digits == 0
@@ -129,7 +129,7 @@ def parseOctalCharCode (o : List Char) : Parser Char := fun s =>
 
 /-- Parses character literals in the form of '\x000.', where the unicode code point
     is expressed in base 16. Expects the chars '\x' to be already consumed and `h` to
-    contain the relevant lookahed. -/
+    contain the relevant lookahead. -/
 def parseHexCharCode (h : List Char) : Parser Char := fun s =>
   let digits := List.takeWhile (λ c => (c ≥ '0' && c ≤ '9') || (c ≥ 'a' && c ≤ 'f') || (c ≥ 'A' && c ≤ 'F')) h
   if List.length digits == 0
