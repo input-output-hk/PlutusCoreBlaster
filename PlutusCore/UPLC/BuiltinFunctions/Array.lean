@@ -15,7 +15,7 @@ open CekValue
 
 def lengthOfArray (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [.VCon (.ConstArray a)] => some (.VCon (.Integer (PLC.lengthOfArray a)))
+  | [.VCon (.ConstArray a)] => PLC.lengthOfArray a |> Int.ofNat |> .Integer |> .VCon |> .some
   | _                       => none
 
 def listToArray (Vs : List CekValue) : Option CekValue :=
