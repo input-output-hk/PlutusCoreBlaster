@@ -263,9 +263,9 @@ def builtinTable : List (Nat × BuiltinFun) :=
     (86, .Ripemd_160),
     (87, .ExpModInteger),
     -- (88, .DropList),   -- TODO: implement these for batch 6
-    -- (89, .LengthOfArray),
-    -- (90, .ListToArray),
-    -- (91, .IndexArray),
+    (89, .LengthOfArray),
+    (90, .ListToArray),
+    (91, .IndexArray),
     -- (92, .Bls12_381_G1_multiScalarMul),
     -- (93, .Bls12_381_G2_multiScalarMul),
     -- (94, .InsertCoin),
