@@ -1,6 +1,7 @@
 import PlutusCore.Default
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.BuiltinFunctions.Array
 import PlutusCore.UPLC.BuiltinFunctions.Bool
 import PlutusCore.UPLC.BuiltinFunctions.ByteString
 import PlutusCore.UPLC.BuiltinFunctions.Data
@@ -14,6 +15,7 @@ import PlutusCore.UPLC.BuiltinFunctions.Unit
 
 namespace PlutusCore.UPLC.Evaluate
 open PlutusCore.Default
+open PlutusCore.UPLC.Array
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 
@@ -67,6 +69,9 @@ def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : Bu
   | .MkPairData => mkPairData
   | .MkNilData => mkNilData
   | .MkNilPairData => mkNilPairData
+  | .LengthOfArray => lengthOfArray
+  | .ListToArray => listToArray
+  | .IndexArray => indexArray
   | _ => fun _ => none
 
 end PlutusCore.UPLC.Evaluate

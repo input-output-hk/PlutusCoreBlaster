@@ -97,16 +97,30 @@ def byteStringSize (bs : ByteString) : Nat :=
   let byteLen := (bs.data.length + 7) / 8 -- round up
   byteLen
 
-/-- Size of a data value -/
-def dataSize (d : Data) : Nat :=
-  match d with
-  | Data.Constr n ds => 1 + ds.foldl (fun acc d => acc + dataSize d) 0
-  | Data.Map kvs => 1 + kvs.foldl (fun acc (k, v) => acc + dataSize k + dataSize v) 0
-  | Data.List ds => 1 + ds.foldl (fun acc d => acc + dataSize d) 0
-  | Data.I i => 1 + integerSize i
-  | Data.B bs => 1 + byteStringSize bs
-  termination_by d -- Dummy, what's decreasing is the nesting of data structures
-  decreasing_by all_goals sorry
+mutual
+
+  def listDataSize (ds : List Data) : Nat :=
+    let rec loop (acc : Nat) : List Data → Nat
+      | h :: t => loop (acc + dataSize h) t
+      | []     => acc
+    loop 0 ds
+
+  def pairsDataSize (kvs : List (Data × Data)) : Nat :=
+    let rec loop (acc : Nat) : List (Data × Data) → Nat
+      | (p1, p2) :: t => loop (acc + dataSize p1 + dataSize p2) t
+      | []       => acc
+    loop 0 kvs
+
+  /-- Size of a data value -/
+  def dataSize (d : Data) : Nat :=
+    match h : d with
+    | Data.Constr n ds => 1 + listDataSize ds
+    | Data.Map    kvs  => 1 + pairsDataSize kvs
+    | Data.List   ds   => 1 + listDataSize ds
+    | Data.I      i    => 1 + integerSize i
+    | Data.B      bs   => 1 + byteStringSize bs
+
+end
 
 /-- Size of a const value-/
 def constSize (c : Const) : Nat :=
@@ -119,6 +133,7 @@ def constSize (c : Const) : Nat :=
   | Const.ConstList cs => cs.foldl (fun acc c => acc + constSize c) 0
   | Const.ConstDataList ds => ds.foldl (fun acc d => acc + dataSize d) 0
   | Const.ConstPairDataList ps => ps.foldl (fun acc (d1, d2) => acc + dataSize d1 + dataSize d2) 0
+  | Const.ConstArray cs => cs.foldl (fun acc c => acc + constSize c) 0
   | Const.Pair (c1, c2) => constSize c1 + constSize c2
   | Const.PairData (d1, d2) => dataSize d1 + dataSize d2
   | Const.Data d => dataSize d
@@ -331,6 +346,12 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
       | some (CekValue.VCon (Const.Integer n)) => if n > 0 then n.toNat else argSize args 2
       | _                                       => argSize args 2
     ⟨⟨1293828 + 28716 * argSize args 2 + 63 * (argSize args 2)^2⟩, ⟨memSize⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match b with
@@ -514,6 +535,12 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1964219 + 24520 * argSize args 0⟩, ⟨3⟩⟩
   | BuiltinFun.ExpModInteger =>
     ⟨⟨100000000000⟩, ⟨argSize args 2⟩⟩ -- TODO: exp_mod_cost formula (see Plutus source)
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 
 def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
@@ -698,6 +725,12 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1964219 + 24520 * argSize args 0⟩, ⟨3⟩⟩
   | BuiltinFun.ExpModInteger =>
     ⟨⟨100000000000⟩, ⟨argSize args 2⟩⟩ -- TODO: exp_mod_cost formula (see Plutus source)
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 def builtinCostSelected (semVar: BuiltinSemanticsVariant) (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match semVar with

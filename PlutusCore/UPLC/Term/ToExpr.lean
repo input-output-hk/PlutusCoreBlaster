@@ -1,9 +1,12 @@
+import PlutusCore.Data
 import PlutusCore.ToExpr
 import PlutusCore.UPLC.Term.Basic
 
 namespace PlutusCore.UPLC.Term
 
 open Lean
+
+open PlutusCore.Data
 
 instance : ToExpr AtomicType where
   toTypeExpr := .const ``AtomicType []
@@ -21,8 +24,9 @@ mutual
     | .TypeOperator t => .app (.const ``BuiltinType.TypeOperator []) (TypeOperator.toExpr t)
 
   def TypeOperator.toExpr : TypeOperator → Expr
-    | .TypeList b     =>  .app  (.const ``TypeOperator.TypeList []) (BuiltinType.toExpr b)
-    | .TypePair b₁ b₂ => mkApp2 (.const ``TypeOperator.TypePair []) (BuiltinType.toExpr b₁) (BuiltinType.toExpr b₂)
+    | .TypeList b     =>  .app  (.const ``TypeOperator.TypeList  []) (BuiltinType.toExpr b)
+    | .TypeArray b    =>  .app  (.const ``TypeOperator.TypeArray []) (BuiltinType.toExpr b)
+    | .TypePair b₁ b₂ => mkApp2 (.const ``TypeOperator.TypePair  []) (BuiltinType.toExpr b₁) (BuiltinType.toExpr b₂)
 end
 
 instance : ToExpr BuiltinType where
@@ -42,6 +46,7 @@ partial def constToExpr : Const → Expr
   | .ConstList            l => .app (.const ``Const.ConstList            []) (listToExpr (α := Const) (.const ``Const []) constToExpr l)
   | .ConstDataList        l => .app (.const ``Const.ConstDataList        []) (toExpr l)
   | .ConstPairDataList    l => .app (.const ``Const.ConstPairDataList    []) (toExpr l)
+  | .ConstArray           a => .app (.const ``Const.ConstArray           []) (arrayToExpr (α := Const) (.const ``Const []) constToExpr a)
   | .Pair                 p => .app (.const ``Const.Pair                 []) (pairToExpr (α := Const) (β := Const) (.const ``Const []) (.const ``Const []) constToExpr constToExpr p)
   | .PairData             p => .app (.const ``Const.PairData             []) (toExpr p)
   | .Data                 d => .app (.const ``Const.Data                 []) (toExpr d)
@@ -144,6 +149,9 @@ instance : ToExpr BuiltinFun where
     | .FindFirstSetBit                 => .const ``BuiltinFun.FindFirstSetBit []
     | .Ripemd_160                      => .const ``BuiltinFun.Ripemd_160 []
     | .ExpModInteger                   => .const ``BuiltinFun.ExpModInteger []
+    | .LengthOfArray                   => .const ``BuiltinFun.LengthOfArray []
+    | .ListToArray                     => .const ``BuiltinFun.ListToArray []
+    | .IndexArray                      => .const ``BuiltinFun.IndexArray []
 
 partial def termToExpr : PlutusCore.UPLC.Term.Term → Expr
   | .Var     s   =>  .app  (.const ``Term.Var     []) (toExpr s)

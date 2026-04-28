@@ -117,7 +117,9 @@ partial def decodeConstType : List Nat → Option (List Nat × BuiltinType)
   | 7 :: 5      :: l => do
       let (l', t) ← decodeConstType l
       .some (l', .TypeOperator (.TypeList t))
-  -- | 7 :: 12     :: l => sorry -- TODO: implement array for batch 6
+  | 7 :: 12     :: l => do
+      let (l', t) ← decodeConstType l
+      .some (l', .TypeOperator (.TypeArray t))
   | 7 :: 7 :: 6 :: l => do
       let (l₁, t₁) ← decodeConstType l
       let (l₂, t₂) ← decodeConstType l₁
@@ -150,6 +152,8 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
                | _ => none -- don't produce anything on type mismatched
              Prod.map id .ConstPairDataList <$> decodeList decodeConstPairData s
        | _ => Prod.map id Const.ConstList <$> decodeList (flip decodeConstValue t) s -- heterogenous list
+  | .TypeOperator (.TypeArray t)    =>
+      Prod.map id (.ConstArray ∘ List.toArray) <$> decodeList (flip decodeConstValue t) s
   | .TypeOperator (.TypePair t₁ t₂) => do
       let (s₁, c₁) ← decodeConstValue s  t₁
       let (s₂, c₂) ← decodeConstValue s₁ t₂
@@ -259,9 +263,9 @@ def builtinTable : List (Nat × BuiltinFun) :=
     (86, .Ripemd_160),
     (87, .ExpModInteger),
     -- (88, .DropList),   -- TODO: implement these for batch 6
-    -- (89, .LengthOfArray),
-    -- (90, .ListToArray),
-    -- (91, .IndexArray),
+    (89, .LengthOfArray),
+    (90, .ListToArray),
+    (91, .IndexArray),
     -- (92, .Bls12_381_G1_multiScalarMul),
     -- (93, .Bls12_381_G2_multiScalarMul),
     -- (94, .InsertCoin),
