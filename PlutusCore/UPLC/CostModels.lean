@@ -133,6 +133,7 @@ def constSize (c : Const) : Nat :=
   | Const.ConstList cs => cs.foldl (fun acc c => acc + constSize c) 0
   | Const.ConstDataList ds => ds.foldl (fun acc d => acc + dataSize d) 0
   | Const.ConstPairDataList ps => ps.foldl (fun acc (d1, d2) => acc + dataSize d1 + dataSize d2) 0
+  | Const.ConstArray cs => cs.foldl (fun acc c => acc + constSize c) 0
   | Const.Pair (c1, c2) => constSize c1 + constSize c2
   | Const.PairData (d1, d2) => dataSize d1 + dataSize d2
   | Const.Data d => dataSize d
@@ -345,6 +346,12 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
       | some (CekValue.VCon (Const.Integer n)) => if n > 0 then n.toNat else argSize args 2
       | _                                       => argSize args 2
     ⟨⟨1293828 + 28716 * argSize args 2 + 63 * (argSize args 2)^2⟩, ⟨memSize⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match b with
@@ -528,6 +535,12 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1964219 + 24520 * argSize args 0⟩, ⟨3⟩⟩
   | BuiltinFun.ExpModInteger =>
     ⟨⟨100000000000⟩, ⟨argSize args 2⟩⟩ -- TODO: exp_mod_cost formula (see Plutus source)
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 
 def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
@@ -712,6 +725,12 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1964219 + 24520 * argSize args 0⟩, ⟨3⟩⟩
   | BuiltinFun.ExpModInteger =>
     ⟨⟨100000000000⟩, ⟨argSize args 2⟩⟩ -- TODO: exp_mod_cost formula (see Plutus source)
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 def builtinCostSelected (semVar: BuiltinSemanticsVariant) (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match semVar with
