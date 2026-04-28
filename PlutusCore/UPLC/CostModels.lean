@@ -123,19 +123,12 @@ def constSize (c : Const) : Nat :=
   | Const.String s => s.length / 4
   | Const.Unit => 0
   | Const.Bool _ => 1
-<<<<<<< HEAD
   -- Haskell measures lists and arrays by their length, not their contents
   -- (`ExMemoryUsage [a]` and `ExMemoryUsage (Vector a)`).
   | Const.ConstList cs => cs.length
   | Const.ConstDataList ds => ds.length
   | Const.ConstPairDataList ps => ps.length
   | Const.ConstArray cs => cs.length
-=======
-  | Const.ConstList cs => cs.foldl (fun acc c => acc + constSize c) 0
-  | Const.ConstDataList ds => ds.foldl (fun acc d => acc + dataSize d) 0
-  | Const.ConstPairDataList ps => ps.foldl (fun acc (d1, d2) => acc + dataSize d1 + dataSize d2) 0
-  | Const.ConstArray cs => cs.foldl (fun acc c => acc + constSize c) 0
->>>>>>> 16f0f47 (Add cost models for array builtins)
   | Const.Pair (c1, c2) => constSize c1 + constSize c2
   | Const.PairData (d1, d2) => dataSize d1 + dataSize d2
   | Const.Data d => dataSize d
@@ -428,12 +421,8 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.LengthOfArray =>
     ⟨⟨231883⟩, ⟨10⟩⟩
   | BuiltinFun.ListToArray =>
-<<<<<<< HEAD
     let n := argSize args 0 -- the list's length (see `constSize`)
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
-=======
-    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
->>>>>>> 16f0f47 (Add cost models for array builtins)
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
 
@@ -688,12 +677,8 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.LengthOfArray =>
     ⟨⟨231883⟩, ⟨10⟩⟩
   | BuiltinFun.ListToArray =>
-<<<<<<< HEAD
     let n := argSize args 0 -- the list's length (see `constSize`)
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
-=======
-    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
->>>>>>> 16f0f47 (Add cost models for array builtins)
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
 
@@ -952,12 +937,8 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.LengthOfArray =>
     ⟨⟨231883⟩, ⟨10⟩⟩
   | BuiltinFun.ListToArray =>
-<<<<<<< HEAD
     let n := argSize args 0 -- the list's length (see `constSize`)
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
-=======
-    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
->>>>>>> 16f0f47 (Add cost models for array builtins)
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
 
