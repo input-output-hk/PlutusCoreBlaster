@@ -41,15 +41,31 @@ jobs:
           chmod +x z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
           echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
 
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
       - name: Tools version
         run: |
           elan --version
           lake --version
           lean --version
           z3 --version
+          nix-shell --version
 
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Build and Validate Cryptograph
+        run: make check_cryptograph
+
+      - name: Upload Cryptograph build log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cryptograph-build
+          path: build.log
 
       - name: Build and Validate PlutusCore
         run: make check_plutus_core

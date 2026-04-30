@@ -39,18 +39,18 @@ opaque equal (a b : @& G1Point) : Bool
 
 /-- Serialize a G1 point in 48-byte compressed form (BLS12-381 spec). -/
 @[extern "lean_plutus_bls_g1_compress"]
-opaque compress (p : @& G1Point) : ByteArray
+opaque compress_bytes (p : @& G1Point) : ByteArray
 
 /-- Parse a 48-byte compressed encoding. Returns `Except String G1Point`,
     with a human-readable error on bad length, bad encoding, or a point
     that is not in the prime-order subgroup. -/
 @[extern "lean_plutus_bls_g1_uncompress"]
-opaque uncompress (bytes : @& ByteArray) : Except String G1Point
+opaque uncompress_bytes (bytes : @& ByteArray) : Except String G1Point
 
 /-- `hash_to_curve(msg, dst)` with the caller-supplied domain-separation
     tag; Plutus does not pin the DST. -/
 @[extern "lean_plutus_bls_g1_hash_to_group"]
-opaque hashToGroup (msg dst : @& ByteArray) : G1Point
+opaque hashToGroup_bytes (msg dst : @& ByteArray) : G1Point
 
 end G1
 

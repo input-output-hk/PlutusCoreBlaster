@@ -2,6 +2,7 @@
 import Cryptograph.Blake2b
 import Cryptograph.BLS12_381
 import Cryptograph.Ed25519
+import Cryptograph.FFI
 import Cryptograph.Integer
 import Cryptograph.Keccak
 import Cryptograph.Ripemd

@@ -30,13 +30,13 @@ opaque equal (a b : @& G2Point) : Bool
 
 /-- Serialize a G2 point in 96-byte compressed form. -/
 @[extern "lean_plutus_bls_g2_compress"]
-opaque compress (p : @& G2Point) : ByteArray
+opaque compress_bytes (p : @& G2Point) : ByteArray
 
 @[extern "lean_plutus_bls_g2_uncompress"]
-opaque uncompress (bytes : @& ByteArray) : Except String G2Point
+opaque uncompress_bytes (bytes : @& ByteArray) : Except String G2Point
 
 @[extern "lean_plutus_bls_g2_hash_to_group"]
-opaque hashToGroup (msg dst : @& ByteArray) : G2Point
+opaque hashToGroup_bytes (msg dst : @& ByteArray) : G2Point
 
 end G2
 
