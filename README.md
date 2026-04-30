@@ -16,15 +16,24 @@ primitives. Includes:
 ## Build
 
 ```bash
-lake build           # everything
-lake test            # run the Tests library
+make build_all       # PlutusCore + Cryptograph + Tests
+make build_tests     # just the test library
+lake build           # raw lake — everything
+lake test            # raw lake — Tests library
 ```
 
-Without installing the system libraries listed below, `lake build`
-still compiles every Lean source file. The four `extern_lib`
-targets that wrap `Cryptograph.FFI.*` only become buildable once
-their native dependencies are present — until then they fail at the
-C-compile step. The pure `Cryptograph.*` modules are unaffected.
+The `make` targets auto-detect your build environment and put
+libsodium / libsecp256k1 / libblst on the compiler/linker path
+either via your system package manager (no Nix involvement) or via
+`nix-shell --run` if you have Nix installed. See
+[Cryptograph.FFI native dependencies](#cryptographffi-native-dependencies)
+for the two install paths.
+
+Without those native libraries installed, `lake build` still
+compiles every Lean source file. The four `extern_lib` targets that
+wrap `Cryptograph.FFI.*` only become buildable once their native
+dependencies are present — until then they fail at the C-compile
+step. The pure `Cryptograph.*` modules are unaffected.
 
 ## Toolchain
 
@@ -50,20 +59,15 @@ can compile:
 
 ### Install
 
-**Nix (recommended — already set up)**
+Pick **one** of the two install paths below. The `make` targets
+auto-detect which you used: if libsodium and libsecp256k1 are on the
+system's `pkg-config` path (or you're already inside a `nix-shell`),
+they invoke `lake` directly; otherwise they fall back to
+`nix-shell --run` when `nix-shell` is on `PATH`. To force a specific
+behaviour, override `NIX_RUN`, e.g.
+`make NIX_RUN='nix-shell --run' build_all` or `make NIX_RUN= build_all`.
 
-A [`shell.nix`](shell.nix) at the repo root pulls in pinned versions
-of libsodium, libsecp256k1, and libblst (plus `pkg-config`). Enter
-it before `lake build`:
-
-```bash
-nix-shell            # drops you into the dev shell
-lake build
-```
-
-Nix sets `NIX_CFLAGS_COMPILE` / `NIX_LDFLAGS` automatically so `cc`
-finds the headers and linker finds the libraries — no further
-configuration is needed.
+#### Option A — system packages
 
 **Arch Linux**
 
@@ -97,6 +101,22 @@ sudo install -m644 bindings/blst.h            /usr/local/include/
 sudo install -m644 bindings/blst_aux.h        /usr/local/include/
 sudo ldconfig
 ```
+
+#### Option B — Nix
+
+A [`shell.nix`](shell.nix) at the repo root pulls in pinned versions
+of libsodium, libsecp256k1, and libblst (plus `pkg-config`). Either
+enter the shell before building, or let `make` wrap commands for you:
+
+```bash
+nix-shell            # drops you into the dev shell, then `lake build` / `make build_all`
+# or, without entering the shell:
+make build_all       # auto-wraps each lake call in `nix-shell --run`
+```
+
+Nix sets `NIX_CFLAGS_COMPILE` / `NIX_LDFLAGS` automatically so `cc`
+finds the headers and linker finds the libraries — no further
+configuration is needed.
 
 ### Verify
 
