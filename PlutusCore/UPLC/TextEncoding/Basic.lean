@@ -504,7 +504,7 @@ mutual
 
   partial def parseConstArray (elemTy : BuiltinType) : Parser Const := do
     let elems ← brackets (sepBy (ws *> parseConstVal elemTy) (ws *> char ',' *> ws))
-    return .ConstList elems
+    return .ConstArray (List.toArray elems)
 
   /-- Parse `(v, v)` as a pair constant. -/
   partial def parseConstPair (t1 t2 : BuiltinType) : Parser Const :=
