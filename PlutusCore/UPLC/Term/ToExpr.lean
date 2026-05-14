@@ -1,4 +1,3 @@
-import PlutusCore.Data
 import PlutusCore.ToExpr
 import PlutusCore.UPLC.Term.Basic
 
