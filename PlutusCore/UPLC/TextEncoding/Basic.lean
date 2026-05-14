@@ -22,13 +22,14 @@ term         ::= var
                | "(" "error"   ")"
 builtin-type ::= "integer" | "bytestring" | "string" | "bool" | "unit" | "data"
                | "(" "list" builtin-type ")"
+               | "(" "array" builtin-type ")"
                | "(" "pair" builtin-type builtin-type ")"
 const-val    ::= integer-literal          -- for type integer
                | "True" | "False"         -- for type bool
                | "#" hexdigits            -- for type bytestring
                | '"' chars '"'            -- for type string
                | "()"                     -- for type unit
-               | "[" (const-val ",")* "]" -- for list types
+               | "[" (const-val ",")* "]" -- for list/array types
                | "(" const-val "," const-val ")" -- for pair types
                | data-val                 -- for type data
 data-val     ::= "(" "Constr" integer "[" data-val* "]" ")"
@@ -283,6 +284,7 @@ mutual
   /-- Parse a `BuiltinType`.
       - Atomic: `integer`, `bytestring`, `string`, `bool`, `unit`, `data`, `bls12_381_G1_element` and `bls12_381_G2_element`
       - List:   `(list T)`     - parenthesised with one type argument
+      - Array:  `(array T)`    - parenthesised with one type argument
       - Pair:   `(pair T U)`   - parenthesised with two type arguments -/
   partial def parseBuiltinType : Parser BuiltinType :=
     ws *> (parseTypeOperator <|> parseAtomicType)
@@ -292,8 +294,9 @@ mutual
     parens $ do
       let name ← identifier
       match name with
-      | "list" => return .TypeOperator (.TypeList (← parseBuiltinType))
-      | "pair" =>
+      | "list"  => return .TypeOperator (.TypeList  (← parseBuiltinType))
+      | "array" => return .TypeOperator (.TypeArray (← parseBuiltinType))
+      | "pair"  =>
           let t1 ← parseBuiltinType
           let t2 ← parseBuiltinType
           return .TypeOperator (.TypePair t1 t2)
@@ -479,6 +482,7 @@ mutual
     | .AtomicType .TypeBls12_381_G2_element => .Bls12_381_G2_element <$> parseBls12_381_G2_element
     | .AtomicType .TypeBls12_381_MlResult   => fail "cannot parse bls12_381_MlResult"
     | .TypeOperator (.TypeList elemTy)      => parseConstList elemTy
+    | .TypeOperator (.TypeArray elemTy)     => parseConstArray elemTy
     | .TypeOperator (.TypePair t1 t2)       => parseConstPair t1 t2
 
   /-- Parse `[v, v, ...]` as a list constant. -/
@@ -497,6 +501,10 @@ mutual
           | _ => fail "pair data expected"
         return .ConstPairDataList pairElems
     | _ => return .ConstList elems
+
+  partial def parseConstArray (elemTy : BuiltinType) : Parser Const := do
+    let elems ← brackets (sepBy (ws *> parseConstVal elemTy) (ws *> char ',' *> ws))
+    return .ConstList elems
 
   /-- Parse `(v, v)` as a pair constant. -/
   partial def parseConstPair (t1 t2 : BuiltinType) : Parser Const :=
