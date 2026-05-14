@@ -5,7 +5,6 @@ import PlutusCore.UPLC.Term
 namespace PlutusCore.UPLC.Array
 
 namespace PLC
-  open PlutusCore.Array
   export PlutusCore.Array (lengthOfArray listToArray indexArray)
 end PLC
 
