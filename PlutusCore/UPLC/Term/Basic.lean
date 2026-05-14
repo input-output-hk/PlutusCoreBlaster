@@ -174,7 +174,6 @@ inductive BuiltinFun
   | Ripemd_160
 -- Batch 6
   | ExpModInteger
--- Batch 7
   | DropList
   | LengthOfArray
   | ListToArray
