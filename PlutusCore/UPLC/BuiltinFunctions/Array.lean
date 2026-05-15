@@ -26,7 +26,10 @@ def listToArray (Vs : List CekValue) : Option CekValue :=
 
 def indexArray (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [.VCon (.Integer (.ofNat n)), .VCon (.ConstArray a)] => .VCon <$> PLC.indexArray a n
+  | [.VCon (.Integer i), .VCon (.ConstArray a)] =>
+      match i with
+      | .ofNat   n => .VCon <$> PLC.indexArray a n
+      | .negSucc _ => none
   | _ => none
 
 end PlutusCore.UPLC.BuiltinFunctions.Array
