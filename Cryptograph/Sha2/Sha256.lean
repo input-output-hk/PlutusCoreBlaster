@@ -83,6 +83,9 @@ def hashMessage (x : List UInt8) : Vector UInt32 8 :=
   let padded := padMessage x
   processChunks initial padded
 
+def hashBytes (x : List UInt8) : List UInt8 :=
+  (Vector.toList (hashMessage x)).flatMap UInt32.toUInt8BE
+
 def hash (x : String) : String :=
   let message := String.toByteList x
   let hashed  := hashMessage message
@@ -93,6 +96,7 @@ end Internal
 export Internal
   (
     hashMessage
+    hashBytes
     hash
   )
 

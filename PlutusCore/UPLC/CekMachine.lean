@@ -16,8 +16,9 @@ open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.ExBudget
 open PlutusCore.UPLC.CostModels
 
-set_option linter.unusedVariables false
--- setting this option to avoid warning on marco rules format and unused variables
+structure CekMachineParams where
+  semanticsVariant  : BuiltinSemanticsVariant
+  useCryptographFFI : Bool
 
 -- Define Frame
 inductive Frame where
@@ -42,9 +43,9 @@ deriving Repr
 
 -- Result type for budget aware execution
 inductive EvaluationResult where
-    | Success : CekValue → ExBudget → EvaluationResult
-    | BudgetExhausted : ExBudget → EvaluationResult
-    | EvaluationError : EvaluationResult
+  | Success : CekValue → ExBudget → EvaluationResult
+  | BudgetExhausted : ExBudget → EvaluationResult
+  | EvaluationError : EvaluationResult
 deriving Repr
 
 -- Define Helper Functions
@@ -66,8 +67,8 @@ def ifArgQOtherwiseError (Sigma : State) (l : ExpectedBuiltinArg) : State :=
   | ExpectedBuiltinArg.ArgQ => Sigma
   | ExpectedBuiltinArg.ArgV => State.Error
 
-def evalBuiltin (semanticsVariant : BuiltinSemanticsVariant) (s : Stack) (b : BuiltinFun) (Vs : List CekValue) : State :=
-  match evaluateBuiltinFunction semanticsVariant b Vs with
+def evalBuiltin (machineParams : CekMachineParams) (s : Stack) (b : BuiltinFun) (Vs : List CekValue) : State :=
+  match evaluateBuiltinFunction machineParams.semanticsVariant machineParams.useCryptographFFI b Vs with
   | some V => State.Return s V
   | none => State.Error
 
@@ -75,11 +76,11 @@ open UPLC.Builtins
 open ExpectedBuiltinArgs
 open BuiltinNotations
 
-def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
+def step (machineParams : CekMachineParams) (Sigma : State) : State :=
   match Sigma with
   | State.Eval s ρ (Term.Var x) =>
       ifBoundOtherwiseError s ρ x
-  | State.Eval s ρ (Term.Term.Const c) =>
+  | State.Eval s _ (Term.Term.Const c) =>
       State.Return s (CekValue.VCon c)
   | State.Eval s ρ (Term.Lam x M) =>
       State.Return s (CekValue.VLam x M ρ)
@@ -91,13 +92,13 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
       State.Eval (Frame.LeftApplicationToTerm N ρ :: s) ρ M
   | State.Eval s ρ (Term.Constr i (M :: Ms)) =>
       State.Eval (Frame.ConstructorArgument i [] Ms ρ :: s) ρ M
-  | State.Eval s ρ (Term.Constr i []) =>
+  | State.Eval s _ (Term.Constr i []) =>
       State.Return s (CekValue.VConstr i [])
   | State.Eval s ρ (Term.Case N Ms) =>
       State.Eval (Frame.CaseScrutinee Ms ρ :: s) ρ N
-  | State.Eval s ρ (Term.Builtin b) =>
+  | State.Eval s _ (Term.Builtin b) =>
       State.Return s (CekValue.VBuiltin b [] (α(b)))
-  | State.Eval s ρ Term.Error =>
+  | State.Eval _ _ Term.Error =>
       State.Error
   | State.Return [] V =>
       State.Halt V
@@ -112,18 +113,18 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VBuiltin b Vs (ι ⊙ η)) =>
       ifArgVOtherwiseError (State.Return s (CekValue.VBuiltin b (V :: Vs) η)) ι
   | State.Return (Frame.RightApplicationOfValue (CekValue.VBuiltin b Vs (a[ι])) :: s) V =>
-      ifArgVOtherwiseError (evalBuiltin semanticsVariant s b (V :: Vs)) ι -- considering args reversal when calling builtin
+      ifArgVOtherwiseError (evalBuiltin machineParams s b (V :: Vs)) ι -- considering args reversal when calling builtin
   | State.Return (Frame.LeftApplicationToValue V :: s) (CekValue.VBuiltin b Vs (a[ι])) =>
-      ifArgVOtherwiseError (evalBuiltin semanticsVariant s b (V :: Vs)) ι -- considering args reversal when calling builtin
+      ifArgVOtherwiseError (evalBuiltin machineParams s b (V :: Vs)) ι -- considering args reversal when calling builtin
   | State.Return (Frame.ForceFrame :: s) (CekValue.VDelay M ρ) =>
       State.Eval s ρ M
   | State.Return (Frame.ForceFrame :: s) (CekValue.VBuiltin b Vs (ι ⊙ η)) =>
       ifArgQOtherwiseError (State.Return s (CekValue.VBuiltin b Vs η)) ι
   | State.Return (Frame.ForceFrame :: s) (CekValue.VBuiltin b Vs (a[ι])) =>
-      ifArgQOtherwiseError (evalBuiltin semanticsVariant s b Vs) ι
+      ifArgQOtherwiseError (evalBuiltin machineParams s b Vs) ι
   | State.Return (Frame.ConstructorArgument i Vs (M :: Ms) ρ :: s) V =>
       State.Eval (Frame.ConstructorArgument i (V :: Vs) Ms ρ :: s) ρ M
-  | State.Return (Frame.ConstructorArgument i Vs [] ρ :: s) V =>
+  | State.Return (Frame.ConstructorArgument i Vs [] _ :: s) V =>
       State.Return s (CekValue.VConstr i (List.reverse (V :: Vs)))
   | State.Return (Frame.CaseScrutinee Ms ρ :: s) (CekValue.VConstr i Vs) =>
         match Ms[i]? with
@@ -239,12 +240,12 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
       | x :: xs' => Frame.LeftApplicationToValue x :: (folding xs' init)
 
 -- Define Run Steps
-def runSteps (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) : State :=
+def runSteps (machineParams : CekMachineParams) (Sigma : State) (n : Nat) : State :=
   match n, Sigma with
-  | _, State.Halt V => Sigma
-  | _, State.Error => Sigma
-  | 0, _ => State.Error -- change to error when num steps exhausted
-  | Nat.succ n, _ => runSteps semanticsVariant (step semanticsVariant Sigma) n
+  | _      , State.Halt _ => Sigma
+  | _      , State.Error  => Sigma
+  | 0      , _            => State.Error -- change to error when num steps exhausted
+  | .succ n, _            => runSteps machineParams (step machineParams Sigma) n
 
 -- Define Apply Params
 def applyParams (body : Term) (params : List Term) : Term :=
@@ -256,74 +257,75 @@ def applyParams (body : Term) (params : List Term) : Term :=
 def initialState (t : Term) : State :=
   State.Eval [] Environment.EmptyEnvironment t
 
-def cekExecuteProgramWithSemanticVariant (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State :=
+def cekExecuteProgramWithSemanticVariant (semanticVariant : BuiltinSemanticsVariant) (useCryptographFFI : Bool) (p : Program) (params : List Term) (n : Nat) : State :=
   match p with
   | Program.Program _ body =>
-      runSteps semanticVariant (initialState (applyParams body params)) n
+      runSteps ⟨semanticVariant, useCryptographFFI⟩ (initialState (applyParams body params)) n
 
 -- Define CEK Execution
-def cekExecuteProgram : Program → List Term →  Nat → State := cekExecuteProgramWithSemanticVariant default
+def cekExecuteProgram : Program → List Term →  Nat → State := cekExecuteProgramWithSemanticVariant default true
 
 
 -- Budget aware CEK execution
 -- Calculate the cost of a single CEK machine step based on the current state
 def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
   match Sigma with
-    | State.Eval _ _ (Term.Var _)           => costs.stepCostVar
-    | State.Eval _ _ (Term.Term.Const _)    => costs.stepCostConst
-    | State.Eval _ _ (Term.Lam _ _)         => costs.stepCostLam
-    | State.Eval _ _ (Term.Delay _)         => costs.stepCostDelay
-    | State.Eval _ _ (Term.Force _)         => costs.stepCostForce
-    | State.Eval _ _ (Term.Apply _ _)       => costs.stepCostApply
-    | State.Eval _ _ (Term.Builtin _)       => costs.stepCostBuiltin
-    | State.Eval _ _ (Term.Constr _ _)      => costs.stepCostConstr
-    | State.Eval _ _ (Term.Case _ _)        => costs.stepCostCase
-    | State.Eval _ _ Term.Error             => ExBudget.zero
-    | State.Return _ _                      => ExBudget.zero
-    | State.Error                           => ExBudget.zero
-    | State.Halt _                          => ExBudget.zero
+    | State.Eval   _ _ (Term.Var _)        => costs.stepCostVar
+    | State.Eval   _ _ (Term.Term.Const _) => costs.stepCostConst
+    | State.Eval   _ _ (Term.Lam _ _)      => costs.stepCostLam
+    | State.Eval   _ _ (Term.Delay _)      => costs.stepCostDelay
+    | State.Eval   _ _ (Term.Force _)      => costs.stepCostForce
+    | State.Eval   _ _ (Term.Apply _ _)    => costs.stepCostApply
+    | State.Eval   _ _ (Term.Builtin _)    => costs.stepCostBuiltin
+    | State.Eval   _ _ (Term.Constr _ _)   => costs.stepCostConstr
+    | State.Eval   _ _ (Term.Case _ _)     => costs.stepCostCase
+    | State.Eval   _ _ Term.Error          => ExBudget.zero
+    | State.Return _ _                     => ExBudget.zero
+    | State.Error                          => ExBudget.zero
+    | State.Halt   _                       => ExBudget.zero
 
 def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) : ExBudget :=
     match Sigma with
-    -- Check Return states that will call evalBuiltin with final argument
-    -- We need to include the final argument being applied in the cost calculation
+    -- Check Return states that will call evalBuiltin with final argument.
+    -- Pass args in the same order evalBuiltin sees them (V :: Vs) — last-applied
+    -- first, matching what the cost-model formulas in CostModels.lean assume.
     | State.Return (Frame.RightApplicationOfValue (CekValue.VBuiltin b Vs (a[_])) :: _) V =>
-        builtinCostSelected semVar b (Vs ++ [V])
+        builtinCostSelected semVar b (V :: Vs)
     | State.Return (Frame.LeftApplicationToValue V :: _) (CekValue.VBuiltin b Vs (a[_])) =>
-        builtinCostSelected semVar b (Vs ++ [V])
+        builtinCostSelected semVar b (V :: Vs)
     | State.Return (Frame.ForceFrame :: _) (CekValue.VBuiltin b Vs (a[_])) =>
         builtinCostSelected semVar b Vs
     | _ => ExBudget.zero
 
 def stepWithBudget
-    (semanticsVariant : BuiltinSemanticsVariant)
+    (machineParams : CekMachineParams)
     (costs : CekMachineCosts)
     (Sigma : State)
     (budget : ExBudget) : Option (State × ExBudget) :=
-    let stepCost := calculateStepCostr costs Sigma
-    let builtinCost := getBuiltinCostIfExecuted semanticsVariant Sigma
-    let totalCost := stepCost + builtinCost
-    if budget.canAfford totalCost then
-        some (step semanticsVariant Sigma, budget - totalCost)
-    else
-        none
+  let stepCost := calculateStepCostr costs Sigma
+  let builtinCost := getBuiltinCostIfExecuted machineParams.semanticsVariant Sigma
+  let totalCost := stepCost + builtinCost
+  if budget.canAfford totalCost then
+      some (step machineParams Sigma, budget - totalCost)
+  else
+      none
 
 def runStepsWithBudget
-    (semanticsVariant : BuiltinSemanticsVariant)
+    (machineParams : CekMachineParams)
     (costs : CekMachineCosts)
     (Sigma : State)
     (budget : ExBudget)
     (initialBudget : ExBudget) : EvaluationResult :=
-    match Sigma with
-    | State.Halt V  => EvaluationResult.Success V (initialBudget - budget)
-    | State.Error   => EvaluationResult.EvaluationError
-    | _ =>
-        match stepWithBudget semanticsVariant costs Sigma budget with
-        | none => EvaluationResult.BudgetExhausted budget
-        | some (newState, newBudget) => runStepsWithBudget semanticsVariant costs newState newBudget initialBudget
-    termination_by budget.exBudgetCPU.unExCPU + budget.exBudgetMemory.unExMemory
-    decreasing_by
-        sorry
+  match Sigma with
+  | State.Halt V  => EvaluationResult.Success V (initialBudget - budget)
+  | State.Error   => EvaluationResult.EvaluationError
+  | _ =>
+      match stepWithBudget machineParams costs Sigma budget with
+      | none => EvaluationResult.BudgetExhausted budget
+      | some (newState, newBudget) => runStepsWithBudget machineParams costs newState newBudget initialBudget
+  termination_by budget.exBudgetCPU.unExCPU + budget.exBudgetMemory.unExMemory
+  decreasing_by
+      sorry
 
 -- Map semantics variant to the corresponding CEK machine step costs.
 -- See: https://github.com/IntersectMBO/plutus/blob/master/plutus-ledger-api/src/PlutusLedgerApi/MachineParameters.hs
@@ -341,15 +343,15 @@ def cekExecuteProgramWithBudget
     (protocolVer : ProtocolVersion)
     (params : List Term)
     (budget : ExBudget) : EvaluationResult :=
-    match p with
-    | Program.Program _ body =>
-        let semVar := PlutusVersion.toSemanticsVariant plutusVer protocolVer
-        let costs  := semVarToCosts semVar
-        -- Startup cost is charged once up front, matching the Plutus reference
-        if budget.canAfford costs.startupCost then
-            runStepsWithBudget semVar costs (initialState (applyParams body params))
-                (budget - costs.startupCost) budget
-        else
-            EvaluationResult.BudgetExhausted budget
+  match p with
+  | Program.Program _ body =>
+      let semVar := PlutusVersion.toSemanticsVariant plutusVer protocolVer
+      let costs  := semVarToCosts semVar
+      -- Startup cost is charged once up front, matching the Plutus reference
+      if budget.canAfford costs.startupCost then
+          runStepsWithBudget ⟨semVar, true⟩ costs (initialState (applyParams body params))
+              (budget - costs.startupCost) budget
+      else
+          EvaluationResult.BudgetExhausted budget
 
 end PlutusCore.UPLC.CekMachine

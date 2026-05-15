@@ -12,3 +12,7 @@ import PlutusCore.Cbor.Tests
 import PlutusCore.UPLC.FlatEncoding.Tests
 import PlutusCore.UPLC.ScriptEncoding.Tests
 import PlutusCore.UPLC.TextEncoding.Tests
+
+-- The conformance test suite (Tests.Conformance) is intentionally NOT imported
+-- here. It is built and run only by the manual `ci-conformance` workflow,
+-- which checks out IntersectMBO/plutus and (re)generates the suite first.

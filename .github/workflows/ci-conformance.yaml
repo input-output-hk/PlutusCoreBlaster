@@ -1,0 +1,211 @@
+name: ci-conformance
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      plutus_ref:
+        description: "IntersectMBO/plutus ref (branch, tag, or commit) to test against"
+        required: false
+        default: "master"
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: ci-conformance-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  LEAN_VERSION: "4.24.0"
+  Z3_VERSION: "4.15.2"
+  GLIBC_Z3: "2.39"
+
+jobs:
+  conformance:
+    # Run on:
+    #   - any workflow_dispatch invocation, OR
+    #   - a PR comment whose body starts with the trigger phrase, authored by
+    #     a project maintainer (repo owner, org member, or invited collaborator).
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       startsWith(github.event.comment.body, '/run-conformance') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Acknowledge comment trigger
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Add an "eyes" reaction to the triggering comment so the author sees
+          # the workflow picked it up. Best-effort — failures here don't matter.
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content='eyes' || true
+
+      - name: Resolve PR head ref
+        if: github.event_name == 'issue_comment'
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_TIME: ${{ github.event.comment.created_at }}
+          REPO_OWNER: ${{ github.event.repository.owner.login }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+
+          # Fetch head SHA, head repo, and the head commit's pushedDate via GraphQL.
+          # `pushedDate` is a server-set timestamp, unlike author.date / committer.date
+          # which a malicious PR author can backdate. We use it to close the TOCTOU
+          # window between the maintainer's `/run-conformance` comment and the
+          # workflow's checkout: if the head was pushed AFTER the comment, refuse.
+          query='query($owner: String!, $repo: String!, $num: Int!) {
+            repository(owner: $owner, name: $repo) {
+              pullRequest(number: $num) {
+                headRefOid
+                headRepository { nameWithOwner }
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      pushedDate
+                      committedDate
+                    }
+                  }
+                }
+              }
+            }
+          }'
+
+          result=$(gh api graphql \
+            -f query="$query" \
+            -F owner="$REPO_OWNER" \
+            -F repo="$REPO_NAME" \
+            -F num="$PR_NUMBER")
+
+          head_sha=$(echo "$result" | jq -r '.data.repository.pullRequest.headRefOid')
+          head_repo=$(echo "$result" | jq -r '.data.repository.pullRequest.headRepository.nameWithOwner')
+          pushed_date=$(echo "$result" | jq -r '.data.repository.pullRequest.commits.nodes[0].commit.pushedDate')
+          committed_date=$(echo "$result" | jq -r '.data.repository.pullRequest.commits.nodes[0].commit.committedDate')
+
+          # pushedDate can be null for some commits (e.g. very old commits). Fall
+          # back to committedDate with a warning — the attacker-controllable
+          # fallback is acceptable for that edge case but worth flagging.
+          effective_date="$pushed_date"
+          if [[ "$effective_date" == "null" ]]; then
+            echo "::warning::pushedDate is null for $head_sha; falling back to committedDate ($committed_date), which is user-settable."
+            effective_date="$committed_date"
+          fi
+
+          if [[ "$effective_date" > "$COMMENT_TIME" ]]; then
+            echo "::error::PR head $head_sha was pushed at $effective_date, after the" \
+                 "maintainer's /run-conformance comment at $COMMENT_TIME. Refusing" \
+                 "to run on un-reviewed code; a maintainer must comment again to re-authorize."
+            exit 1
+          fi
+
+          echo "Authorized PR head: $head_sha (pushed $effective_date, comment $COMMENT_TIME)"
+          echo "sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "repo=$head_repo" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve plutus ref
+        id: plutus
+        env:
+          # Pass the comment body via env var (never interpolate untrusted input
+          # directly into the shell command).
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          DEFAULT_REF: ${{ github.event.inputs.plutus_ref || 'master' }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+            # Take the first whitespace-separated token after the trigger phrase
+            # on the first line of the comment. Empty -> 'master'.
+            first_line=$(printf '%s\n' "$COMMENT_BODY" | head -n1)
+            ref=$(echo "$first_line" | sed -E 's|^/run-conformance[[:space:]]*||' | awk '{print $1}')
+            if [[ -z "$ref" ]]; then
+              ref=master
+            fi
+            # Whitelist refs to git-safe characters (alnum, dot, dash, underscore,
+            # slash). Tags like v1.2.3 and 40-char SHAs both match.
+            if ! [[ "$ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+              echo "Refusing unsafe plutus ref: $ref" >&2
+              exit 1
+            fi
+          else
+            ref=$DEFAULT_REF
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Resolved IntersectMBO/plutus ref: $ref"
+
+      - name: Setup Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "/home/runner/.elan/bin" >> $GITHUB_PATH
+          chmod +x /home/runner/.elan/bin/*
+
+      - name: Fix Elan version
+        run: |
+          elan toolchain install ${{ env.LEAN_VERSION }}
+          elan default ${{ env.LEAN_VERSION }}
+
+      - name: Install Z3
+        run: |
+          cd /home/runner/
+          wget -q https://github.com/Z3Prover/z3/releases/download/z3-${{ env.Z3_VERSION }}/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          unzip -q z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
+
+      - name: Tools version
+        run: |
+          elan --version
+          lake --version
+          lean --version
+          z3 --version
+
+      - name: Checkout PlutusCoreBlaster
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: ${{ steps.pr.outputs.repo || github.repository }}
+          ref: ${{ steps.pr.outputs.sha || github.ref }}
+          path: PlutusCoreBlaster
+
+      - name: Checkout IntersectMBO/plutus
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: IntersectMBO/plutus
+          ref: ${{ steps.plutus.outputs.ref }}
+          path: plutus
+
+      - name: Symlink .plutus-conformance
+        run: |
+          ln -s "${GITHUB_WORKSPACE}/plutus" "${GITHUB_WORKSPACE}/PlutusCoreBlaster/.plutus-conformance"
+          ls -la "${GITHUB_WORKSPACE}/PlutusCoreBlaster/.plutus-conformance/plutus-conformance/test-cases" | head
+
+      - name: Build PlutusCore
+        working-directory: PlutusCoreBlaster
+        run: make build_plutus_core
+
+      - name: Generate conformance test suite
+        working-directory: PlutusCoreBlaster
+        run: make gen_conformance_tests excludeNotImplemented=1
+
+      - name: Build and validate conformance test suite
+        working-directory: PlutusCoreBlaster
+        run: make check_conformance
+
+      - name: Upload conformance build log
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: conformance-build
+          path: PlutusCoreBlaster/build.log

@@ -12,3 +12,7 @@ build.log
 # vscode
 /.vscode/
 *.orig
+
+# Plutus repo symlink
+
+.plutus-conformance

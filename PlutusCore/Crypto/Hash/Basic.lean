@@ -22,7 +22,7 @@ open PlutusCore.ByteString
 namespace Internal
 
 opaque sha2_256 (x : ByteString) : ByteString :=
-  let hash := Sha256.hashMessage (String.toByteList x.data)
+  let hash := Sha256.hashMessage (x.data.data.map Char.toUInt8)
   let bytes := (Vector.toList hash).flatMap (fun (w : UInt32) =>
     [((w >>> 24) &&& 0xFF).toUInt8,
      ((w >>> 16) &&& 0xFF).toUInt8,
@@ -31,23 +31,23 @@ opaque sha2_256 (x : ByteString) : ByteString :=
   ⟨⟨Char.ofUInt8 <$> bytes⟩⟩
 
 opaque sha3_256 (x : ByteString) : ByteString :=
-  let bytes := Sha3_256.hashBytes (String.toByteList x.data)
+  let bytes := Sha3_256.hashBytes (x.data.data.map Char.toUInt8)
   ⟨⟨Char.ofUInt8 <$> bytes⟩⟩
 
 opaque blake2b_224 (x : ByteString) : ByteString :=
-  let bytes := Blake2b.blake2b_224 (String.toByteList x.data)
+  let bytes := Blake2b.blake2b_224 (x.data.data.map Char.toUInt8)
   ⟨⟨Char.ofUInt8 <$> bytes⟩⟩
 
 opaque blake2b_256 (x : ByteString) : ByteString :=
-  let bytes := Blake2b.blake2b_256 (String.toByteList x.data)
+  let bytes := Blake2b.blake2b_256 (x.data.data.map Char.toUInt8)
   ⟨⟨Char.ofUInt8 <$> bytes⟩⟩
 
 opaque keccak_256 (x : ByteString) : ByteString :=
-  let bytes := Keccak256.hashBytes (String.toByteList x.data)
+  let bytes := Keccak256.hashBytes (x.data.data.map Char.toUInt8)
   ⟨⟨Char.ofUInt8 <$> bytes⟩⟩
 
 opaque ripemd_160 (x : ByteString) : ByteString :=
-  let bytes := Ripemd160.ripemd160 (String.toByteList x.data)
+  let bytes := Ripemd160.ripemd160 (x.data.data.map Char.toUInt8)
   ⟨⟨Char.ofUInt8 <$> bytes⟩⟩
 
 end Internal

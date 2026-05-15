@@ -19,6 +19,7 @@ namespace PlutusCore.UPLC.BuiltinFunctions.Evaluate
 open PlutusCore.Default
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Bitwise
 open PlutusCore.UPLC.BuiltinFunctions.Bool
 open PlutusCore.UPLC.BuiltinFunctions.ByteString
 open PlutusCore.UPLC.BuiltinFunctions.Data
@@ -31,7 +32,7 @@ open PlutusCore.UPLC.BuiltinFunctions.Unit
 open PlutusCore.UPLC.BuiltinFunctions.Bitwise
 
 -- Evaluate a builtin function based on its type.
-def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : BuiltinFun) : List CekValue → Option CekValue :=
+def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (useCryptographFFI : Bool) (b : BuiltinFun) : List CekValue → Option CekValue :=
   match b with
   -- Batch 1
   -- Integer
@@ -125,9 +126,9 @@ def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : Bu
   -- Other cryptography
   | .Keccak_256                      => Crypto.keccak_256
   | .Blake2b_224                     => Crypto.blake2b_224
+  -- Batch 5 (bitwise)
   | .IntegerToByteString             => integerToByteString
   | .ByteStringToInteger             => byteStringToInteger
-  -- Batch 5 (bitwise)
   | .AndByteString                   => andByteString
   | .OrByteString                    => orByteString
   | .XorByteString                   => xorByteString
@@ -143,7 +144,7 @@ def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : Bu
   | .Ripemd_160                      => Crypto.ripemd_160
   -- Batch 6
   | .ExpModInteger                   => expModInteger
-  -- Batch 7 and remaining unimplemented builtins
-  | .DropList                        => fun _ => none
+  -- Batch 7
+  | .DropList                        => dropList
 
 end PlutusCore.UPLC.BuiltinFunctions.Evaluate

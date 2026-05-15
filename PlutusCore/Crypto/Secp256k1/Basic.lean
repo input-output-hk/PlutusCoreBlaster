@@ -18,9 +18,9 @@ namespace Internal
 -- pk: 33 bytes (compressed), msg: 32 bytes (hash), sig: 64 bytes (compact r||s).
 -- Returns .error for invalid lengths or unparseable key/sig (→ EvaluationError in CEK).
 opaque verifyEcdsaSecp256k1Signature (publicKey message signature : ByteString) : Except String Bool :=
-  let pk  := String.toByteList publicKey.data
-  let msg := String.toByteList message.data
-  let sig := String.toByteList signature.data
+  let pk  := Char.toUInt8 <$> publicKey.data.data
+  let msg := Char.toUInt8 <$> message.data.data
+  let sig := Char.toUInt8 <$> signature.data.data
   if pk.length != 33 then .error "verifyEcdsaSecp256k1Signature: pk must be 33 bytes"
   else if msg.length != 32 then .error "verifyEcdsaSecp256k1Signature: msg must be 32 bytes"
   else if sig.length != 64 then .error "verifyEcdsaSecp256k1Signature: sig must be 64 bytes"
@@ -38,9 +38,9 @@ opaque verifyEcdsaSecp256k1Signature (publicKey message signature : ByteString) 
 -- pk: 32 bytes (x-only), msg: any length, sig: 64 bytes.
 -- Returns .error for invalid lengths or unparseable key (→ EvaluationError in CEK).
 opaque verifySchnorrSecp256k1Signature (publicKey message signature : ByteString) : Except String Bool :=
-  let pk  := String.toByteList publicKey.data
-  let msg := String.toByteList message.data
-  let sig := String.toByteList signature.data
+  let pk  := Char.toUInt8 <$> publicKey.data.data
+  let msg := Char.toUInt8 <$> message.data.data
+  let sig := Char.toUInt8 <$> signature.data.data
   if pk.length != 32 then .error "verifySchnorrSecp256k1Signature: pk must be 32 bytes"
   else if sig.length != 64 then .error "verifySchnorrSecp256k1Signature: sig must be 64 bytes"
   else match Schnorr.liftX pk with

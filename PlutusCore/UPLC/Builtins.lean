@@ -120,15 +120,15 @@ def expectedArgs (b : BuiltinFun) : ExpectedBuiltinArgs :=
   | OrByteString                    => ArgV ⊙ ArgV ⊙ One ArgV
   | XorByteString                   => ArgV ⊙ ArgV ⊙ One ArgV
   | ComplementByteString            => One ArgV
+  | ReadBit                         => ArgV ⊙ One ArgV
+  | WriteBits                       => ArgV ⊙ ArgV ⊙ One ArgV
+  | ReplicateByte                   => ArgV ⊙ One ArgV
   | ShiftByteString                 => ArgV ⊙ One ArgV
   | RotateByteString                => ArgV ⊙ One ArgV
   | CountSetBits                    => One ArgV
   | FindFirstSetBit                 => One ArgV
-  | ReadBit                         => ArgV ⊙ One ArgV
-  | WriteBits                       => ArgV ⊙ ArgV ⊙ One ArgV
-  | ReplicateByte                   => ArgV ⊙ One ArgV
-  -- Batch 6
   | Ripemd_160                      => One ArgV
+  -- Batch 6
   | ExpModInteger                   => ArgV ⊙ ArgV ⊙ One ArgV
   -- Batch 7
   | DropList                        => ArgQ ⊙ ArgV ⊙ One ArgV

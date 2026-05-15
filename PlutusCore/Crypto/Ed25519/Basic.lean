@@ -15,9 +15,9 @@ namespace Internal
 -- pk: 32 bytes, msg: any length, sig: 64 bytes.
 -- Returns .error for invalid lengths (→ EvaluationError in CEK).
 opaque verifyEd25519Signature (publicKey message signature : ByteString) : Except String Bool :=
-  let pk  := String.toByteList publicKey.data
-  let msg := String.toByteList message.data
-  let sig := String.toByteList signature.data
+  let pk  := publicKey.data.data.map Char.toUInt8
+  let msg := message.data.data.map Char.toUInt8
+  let sig := signature.data.data.map Char.toUInt8
   if pk.length  ≠ 32 then .error "verifyEd25519Signature: pk must be 32 bytes"
   else if sig.length ≠ 64 then .error "verifyEd25519Signature: sig must be 64 bytes"
   else .ok (Signature.verify pk msg sig)
