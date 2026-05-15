@@ -17,9 +17,9 @@ import PlutusCore.UPLC.BuiltinFunctions.Unit
 namespace PlutusCore.UPLC.BuiltinFunctions.Evaluate
 
 open PlutusCore.Default
-open PlutusCore.UPLC.Array
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Array
 open PlutusCore.UPLC.BuiltinFunctions.Bitwise
 open PlutusCore.UPLC.BuiltinFunctions.Bool
 open PlutusCore.UPLC.BuiltinFunctions.ByteString
