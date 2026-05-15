@@ -402,6 +402,9 @@ def builtinFunOfName? (name : String) : Option BuiltinFun :=
   | "ripemd_160"                      => some .Ripemd_160
   | "expModInteger"                   => some .ExpModInteger
   | "dropList"                        => some .DropList
+  | "lengthOfArray"                   => some .LengthOfArray
+  | "listToArray"                     => some .ListToArray
+  | "indexArray"                      => some .IndexArray
   | _                                 => none
 
 /-- Parse a builtin function name. -/
