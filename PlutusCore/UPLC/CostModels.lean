@@ -1142,6 +1142,12 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
       | some (CekValue.VCon (Const.Integer n)) => n.natAbs
       | _ => 0
     ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 -- BuiltinCostsE
 -- Based on builtinCostModelE.json (plutus 1.64.0.0 / Van Rossem era, PlutusV3 post-Conway).
@@ -1360,6 +1366,12 @@ def builtinCostsE (b : BuiltinFun) (args : List CekValue) : ExBudget :=
       | some (CekValue.VCon (Const.Integer n)) => n.natAbs
       | _ => 0
     ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 def builtinCostSelected (semVar: BuiltinSemanticsVariant) (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match semVar with
