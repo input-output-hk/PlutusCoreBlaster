@@ -77,10 +77,10 @@ def totalSize (v : Value) : Nat :=
 def maxInnerSize (v : Value) : Nat :=
   v.foldl (λ acc _ ts => max acc ts.size) 0
 
-/-- Number of negative quantities across all entries. -/
-def negativeAmounts (v : Value) : Nat :=
-  v.foldl (λ acc _ ts =>
-    acc + ts.foldl (λ a _ q => if q < 0 then a + 1 else a) 0) 0
+/-- Returns true, if there exists at least one negative quantity
+    across all entries. -/
+def anyNegativeAmounts (v : Value) : Bool :=
+  v.any (λ _ b => b.any (λ _ x => x < 0))
 
 /-- Flatten `v` into a list of `((currency, token), quantity)` triples in
     ascending key order. -/
@@ -96,8 +96,17 @@ def toAssocList (v : Value) : List (ByteString × List (ByteString × Integer)) 
 -- Equality
 -- ---------------------------------------------------------------------------
 
-instance : BEq Value where
-  beq a b := toFlatList a == toFlatList b
+private def tokensBeq (a b : Tokens) : Bool :=
+  if a.size == b.size
+    then a.all (λ k v => b.get? k == some v)
+    else false
+
+private def valueBeq (a b : Value) : Bool :=
+  if a.size == b.size
+    then a.all (λ k v => Option.getD (tokensBeq v <$> b.get? k) false)
+    else false
+
+instance : BEq Value := ⟨valueBeq⟩
 
 -- ---------------------------------------------------------------------------
 -- Internal helpers
@@ -143,10 +152,10 @@ def fromList (entries : List (ByteString × List (ByteString × Integer))) : Exc
 /-- Like `fromList`, but returns `empty` on any validation failure. Intended
     for round-tripping `toAssocList`/`ToExpr`, where the input is guaranteed
     valid. -/
-@[inline] def fromList! (entries : List (ByteString × List (ByteString × Integer))) : Value :=
+@[inline] def fromListD (entries : List (ByteString × List (ByteString × Integer))) (default : Value) : Value :=
   match fromList entries with
   | .ok v    => v
-  | .error _ => empty
+  | .error _ => default
 
 -- ---------------------------------------------------------------------------
 -- Builtin functions
@@ -188,8 +197,8 @@ private def unionInner (innerA innerB : Tokens) : Except String Tokens :=
 
 /-- Add two values, summing quantities at matching keys. Fails on overflow. -/
 def unionValue (a b : Value) : Except String Value := do
-  if totalSize a == 0 then return b
-  if totalSize b == 0 then return a
+  if isEmpty a then return b
+  if isEmpty b then return a
   b.foldlM (init := a) (λ outer cur innerB => do
     let innerA := outer.getD cur TreeMap.empty
     let merged ← unionInner innerA innerB
@@ -199,9 +208,9 @@ def unionValue (a b : Value) : Except String Value := do
     `lookupCoin currency token a ≥ qty`. Fails if either side has any
     negative quantity. -/
 def valueContains (a b : Value) : Except String Bool := do
-  if 0 < negativeAmounts a then
+  if anyNegativeAmounts a then
     throw "valueContains: first value contains negative amounts"
-  if 0 < negativeAmounts b then
+  if anyNegativeAmounts b then
     throw "valueContains: second value contains negative amounts"
   if totalSize a < totalSize b then return false
   pure (b.all (λ cur innerB =>
@@ -248,11 +257,11 @@ private def unValueDataInner : Option ByteString → Tokens → List (Data × Da
   | prev, acc, (tD, qD) :: rest => do
       let tok ← match tD with
         | .B b => if validKey b then pure b
-                  else throw s!"unValueData: invalid key"
+                  else throw "unValueData: invalid key"
         | _    => throw "unValueData: non-B token key"
       let q ← match qD with
         | .I i => if validQuantity i then pure i
-                  else throw s!"unValueData: quantity out of bounds"
+                  else throw "unValueData: quantity out of bounds"
         | _    => throw "unValueData: non-I quantity"
       if q == 0 then
         throw "unValueData: zero quantity"
@@ -268,7 +277,7 @@ private def unValueDataOuter : Option ByteString → Value → List (Data × Dat
   | prev, acc, (cD, tsD) :: rest => do
       let cur ← match cD with
         | .B b => if validKey b then pure b
-                  else throw s!"unValueData: invalid currency key"
+                  else throw "unValueData: invalid currency key"
         | _    => throw "unValueData: non-B currency key"
       let inner ← match tsD with
         | .Map ts => unValueDataInner none TreeMap.empty ts
@@ -294,24 +303,24 @@ end Internal
 export Internal
   (
     -- basic functions
+    anyNegativeAmounts
     empty
-    isEmpty
-    totalSize
-    maxInnerSize
-    negativeAmounts
-    toFlatList
-    toAssocList
     fromList
-    fromList!
+    fromListD
+    isEmpty
+    maxInnerSize
+    toAssocList
+    toFlatList
+    totalSize
     -- builtin function implementations
     deleteCoin
     insertCoin
     lookupCoin
-    unionValue
-    valueContains
     scaleValue
-    valueData
+    unionValue
     unValueData
+    valueContains
+    valueData
   )
 
 end PlutusCore.Value

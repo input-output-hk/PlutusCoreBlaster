@@ -61,7 +61,7 @@ private def valueToExpr (v : Value) : Expr :=
       (fun p => pairToExpr (α := ByteString) (β := List (ByteString × Integer))
                   bsType assetsType toExpr assetsExpr p)
       (PlutusCore.Value.toAssocList v)
-  .app (.const ``PlutusCore.Value.fromList! []) assocListExpr
+  .app (.app (.const ``PlutusCore.Value.fromListD []) assocListExpr) (.const ``PlutusCore.Value.empty [])
 
 partial def constToExpr : Const → Expr
   | .Integer              i => .app (.const ``Const.Integer              []) (toExpr i)
