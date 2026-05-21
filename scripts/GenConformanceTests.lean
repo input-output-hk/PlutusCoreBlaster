@@ -36,16 +36,7 @@ structure Config where
 /-- Source-relative path prefixes for test categories whose corresponding
     features are not yet implemented in this Lean formalization. Selected by
     `--exclude-not-implemented`. -/
-def notImplementedPaths : List (List String) := [
-  ["builtin", "constant", "value"],
-  ["builtin", "semantics", "insertCoin"],
-  ["builtin", "semantics", "lookupCoin"],
-  ["builtin", "semantics", "scaleValue"],
-  ["builtin", "semantics", "unionValue"],
-  ["builtin", "semantics", "unValueData"],
-  ["builtin", "semantics", "valueContains"],
-  ["builtin", "semantics", "valueData"]
-]
+def notImplementedPaths : List (List String) := []
 
 /-- Source-relative path prefixes whose expected `evaluation failure` is caused by a free (unbound) variable.
 

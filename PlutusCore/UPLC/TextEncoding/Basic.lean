@@ -1,6 +1,7 @@
 
 import PlutusCore.Parser.Basic
 import PlutusCore.UPLC.Term
+import PlutusCore.Value
 
 /-!
 ## UPLC Text Encoding - Full Parser
@@ -21,7 +22,8 @@ term         ::= var
                | "(" "delay"   term ")"
                | "(" "force"   term ")"
                | "(" "error"   ")"
-builtin-type ::= "integer" | "bytestring" | "string" | "bool" | "unit" | "data"
+builtin-type ::= "integer" | "bytestring" | "string" | "bool" | "unit" | "data" | "value"
+               | "bls12_381_G1_element" | "bls12_381_G2_element"
                | "(" "list" builtin-type ")"
                | "(" "array" builtin-type ")"
                | "(" "pair" builtin-type builtin-type ")"
@@ -33,12 +35,22 @@ const-val    ::= integer-literal          -- for type integer
                | "[" (const-val ",")* "]" -- for list/array types
                | "(" const-val "," const-val ")" -- for pair types
                | data-val                 -- for type data
+               | "0x" hexdigits           -- for bls12_381_G1_element / bls12_381_G2_element
+               | value-val                -- for type value
 data-val     ::= "(" "Constr" integer "[" data-val* "]" ")"
                | "(" "Map"    "[" ("(" data-val "," data-val ")")* "]" ")"
                | "(" "List"   "[" data-val* "]" ")"
                | "I" integer
                | "B" "#" hexdigits
+value-val    ::= "[" (value-entry ",")* "]"
+value-entry  ::= "(" "#" hexdigits "," value-assets ")"  -- currency ≤ 32 bytes
+value-assets ::= "[" (value-asset ",")* "]"
+value-asset  ::= "(" "#" hexdigits "," integer ")"       -- token ≤ 32 bytes; quantity in signed Int128
 ```
+After parsing, `value-val` is normalised in the same way as the Haskell parser:
+duplicate `(currency, token)` pairs have their quantities summed (and the sum
+is re-checked against the signed Int128 bound), zero quantities and empty
+currency entries are dropped, and entries are sorted lexicographically by key.
 -/
 
 namespace PlutusCore.UPLC.TextEncoding
@@ -277,13 +289,14 @@ def parseAtomicType : Parser BuiltinType := do
     | "bool"                 => return .AtomicType .TypeBool
     | "unit"                 => return .AtomicType .TypeUnit
     | "data"                 => return .AtomicType .TypeData
+    | "value"                => return .AtomicType .TypeValue
     | "bls12_381_G1_element" => return .AtomicType .TypeBls12_381_G1_element
     | "bls12_381_G2_element" => return .AtomicType .TypeBls12_381_G2_element
     | other                  => fail s!"unknown builtin type '{other}'"
 
 mutual
   /-- Parse a `BuiltinType`.
-      - Atomic: `integer`, `bytestring`, `string`, `bool`, `unit`, `data`, `bls12_381_G1_element` and `bls12_381_G2_element`
+      - Atomic: `integer`, `bytestring`, `string`, `bool`, `unit`, `data`, `value`, `bls12_381_G1_element` and `bls12_381_G2_element`
       - List:   `(list T)`     - parenthesised with one type argument
       - Array:  `(array T)`    - parenthesised with one type argument
       - Pair:   `(pair T U)`   - parenthesised with two type arguments -/
@@ -406,6 +419,13 @@ def builtinFunOfName? (name : String) : Option BuiltinFun :=
   | "lengthOfArray"                   => some .LengthOfArray
   | "listToArray"                     => some .ListToArray
   | "indexArray"                      => some .IndexArray
+  | "insertCoin"                      => some .InsertCoin
+  | "lookupCoin"                      => some .LookupCoin
+  | "unionValue"                      => some .UnionValue
+  | "valueContains"                   => some .ValueContains
+  | "valueData"                       => some .ValueData
+  | "unValueData"                     => some .UnValueData
+  | "scaleValue"                      => some .ScaleValue
   | _                                 => none
 
 /-- Parse a builtin function name. -/
@@ -465,6 +485,47 @@ mutual
 end
 
 -- ---------------------------------------------------------------------------
+-- Value parser (used by the `value` builtin type)
+-- ---------------------------------------------------------------------------
+
+/-- Parse one inner asset entry `( #hex , integer )`. Length and range checks
+    are deferred to `PlutusCore.Value.fromList`. -/
+def parseValueAsset : Parser (ByteString × Integer) :=
+  parens do
+    ws
+    let token ← parseHashMarkPrefixedByteString
+    ws
+    _ ← char ','
+    ws
+    let amount ← signedInt
+    ws
+    return (token, amount)
+
+/-- Parse one outer entry `( #hex , [ asset, ... ] )`. -/
+def parseValueEntry : Parser (ByteString × List (ByteString × Integer)) :=
+  parens do
+    ws
+    let cur ← parseHashMarkPrefixedByteString
+    ws
+    _ ← char ','
+    ws
+    let assets ← brackets (sepBy parseValueAsset (ws *> char ',' *> ws))
+    ws
+    return (cur, assets)
+
+/-- Parse `(con value ...)` payload. The outer `[ entry, ... ]` is parsed
+    verbatim and then handed to `PlutusCore.Value.fromList`, which performs
+    the Haskell-equivalent normalisation: key-length checks, signed-Int128
+    range checks (also re-checked on summed duplicates), merging of duplicate
+    `(currency, token)` pairs, dropping of zero quantities, dropping of empty
+    currency entries, and key-sorting. -/
+def parseConstValue : Parser Const := do
+  let raw ← brackets (sepBy parseValueEntry (ws *> char ',' *> ws))
+  match PlutusCore.Value.fromList raw with
+  | .ok v    => return .Value v
+  | .error e => fail e
+
+-- ---------------------------------------------------------------------------
 -- Const parser (type-directed)
 -- ---------------------------------------------------------------------------
 
@@ -485,6 +546,7 @@ mutual
     | .AtomicType .TypeBls12_381_G1_element => .Bls12_381_G1_element <$> parseBls12_381_G1_element
     | .AtomicType .TypeBls12_381_G2_element => .Bls12_381_G2_element <$> parseBls12_381_G2_element
     | .AtomicType .TypeBls12_381_MlResult   => fail "cannot parse bls12_381_MlResult"
+    | .AtomicType .TypeValue                => parseConstValue
     | .TypeOperator (.TypeList elemTy)      => parseConstList elemTy
     | .TypeOperator (.TypeArray elemTy)     => parseConstArray elemTy
     | .TypeOperator (.TypePair t1 t2)       => parseConstPair t1 t2

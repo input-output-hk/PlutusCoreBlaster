@@ -10,5 +10,6 @@ import Tests.Conformance.Generated.Builtin.Constant.List
 import Tests.Conformance.Generated.Builtin.Constant.Pair
 import Tests.Conformance.Generated.Builtin.Constant.String
 import Tests.Conformance.Generated.Builtin.Constant.Unit
+import Tests.Conformance.Generated.Builtin.Constant.Value
 
 -- Barrel for Tests.Conformance.Generated.Builtin.Constant

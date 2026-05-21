@@ -166,7 +166,8 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
       | _, _ => some (s₂, Const.Pair (c₁, c₂))
   | .AtomicType .TypeBls12_381_G1_element -- BLS values are not serializable
   | .AtomicType .TypeBls12_381_G2_element
-  | .AtomicType .TypeBls12_381_MlResult   => none
+  | .AtomicType .TypeBls12_381_MlResult
+  | .AtomicType .TypeValue                => none -- Value is not flat-serializable
 
 /- Decodes a constant. -/
 def decodeConst (s : List Bool) : Option (List Bool × Const) := do
@@ -271,12 +272,13 @@ def builtinTable : List (Nat × BuiltinFun) :=
     (91, .IndexArray),
     (92, .Bls12_381_G1_multiScalarMul),
     (93, .Bls12_381_G2_multiScalarMul),
-    -- (94, .InsertCoin),
-    -- (95, .LookupCoin),
-    -- (96, .UnionValue),
-    -- (97, .ValueContains),
-    -- (98, .ValueData),
-    -- (99, .UnValueData),
+    (94, .InsertCoin),
+    (95, .LookupCoin),
+    (96, .UnionValue),
+    (97, .ValueContains),
+    (98, .ValueData),
+    (99, .UnValueData),
+    (100, .ScaleValue),
   ]
 
 def decodeBuiltinFun (_v : Version) (s : List Bool) : Option (List Bool × BuiltinFun) := do

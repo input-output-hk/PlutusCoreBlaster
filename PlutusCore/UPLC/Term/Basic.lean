@@ -2,15 +2,17 @@ import PlutusCore.Crypto.BLS12_381.G1
 import PlutusCore.Crypto.BLS12_381.G2
 import PlutusCore.Crypto.BLS12_381.Pairing
 import PlutusCore.Data
+import PlutusCore.Value
 
 namespace PlutusCore.UPLC.Term
 
+open PlutusCore.ByteString (ByteString)
 open PlutusCore.Crypto.BLS12_381.G1 (BLS12_381_G1_Element)
 open PlutusCore.Crypto.BLS12_381.G2 (BLS12_381_G2_Element)
 open PlutusCore.Crypto.BLS12_381.Pairing (BLS12_381_MlResult)
 open PlutusCore.Data (Data)
-open PlutusCore.ByteString (ByteString)
 open PlutusCore.Integer (Integer)
+open PlutusCore.Value (Value)
 
 inductive AtomicType
   | TypeInteger
@@ -22,6 +24,7 @@ inductive AtomicType
   | TypeBls12_381_G1_element
   | TypeBls12_381_G2_element
   | TypeBls12_381_MlResult
+  | TypeValue
 deriving BEq
 
 instance : LawfulBEq AtomicType where
@@ -54,6 +57,7 @@ inductive Const
   | Pair                  : Const × Const → Const
   | PairData              : Data × Data → Const        -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | Data                  : Data → Const
+  | Value                 : Value → Const
   | Bls12_381_G1_element  : BLS12_381_G1_Element → Const
   | Bls12_381_G2_element  : BLS12_381_G2_Element → Const
   | Bls12_381_MlResult    : BLS12_381_MlResult   → Const
@@ -178,6 +182,14 @@ inductive BuiltinFun
   | LengthOfArray
   | ListToArray
   | IndexArray
+-- Value
+  | InsertCoin
+  | LookupCoin
+  | UnionValue
+  | ValueContains
+  | ValueData
+  | UnValueData
+  | ScaleValue
 deriving Repr, BEq
 
 deriving instance DecidableEq for BuiltinFun
