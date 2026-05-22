@@ -3,46 +3,52 @@ import PlutusCore.Cbor.Basic
 namespace PlutusCore.Cbor
 open PlutusCore.Cbor.CborInternal
 
+/-- Convert a String of codepoint-as-byte characters to its `ByteArray` representation.
+    Test-only helper: matches the historical convention where each Char in 0–255 stands
+    for the byte with the same value (the same convention used by the UPLC `ByteString`
+    domain wrapper). -/
+private def s2ba (s : String) : ByteArray := (Char.toUInt8 <$> s.data).toByteArray
+
 -- ==============
 -- =  Encoding  =
 -- ==============
 
-example : e₈ 7234295460216005990 = "deadbeef".toList := rfl
+example : e₈ 7234295460216005990 = "deadbeef".data.map Char.toUInt8 := by native_decide
 
-example : splitToChunks "" = [] := by native_decide
+example : splitToChunks [] = [] := by native_decide
 
-example : splitToChunks "1234567890123456789012345678901234567890123456789012345678901234" =
-  [ "1234567890123456789012345678901234567890123456789012345678901234" ] := by native_decide
+example : splitToChunks (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList =
+  [ (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList ] := by native_decide
 
-example : splitToChunks  "12345678901234567890123456789012345678901234567890123456789012345" =
-  [ "1234567890123456789012345678901234567890123456789012345678901234"
-  , "5"
+example : splitToChunks (s2ba "12345678901234567890123456789012345678901234567890123456789012345").toList =
+  [ (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList
+  , (s2ba "5").toList
   ] := by native_decide
 
-example : splitToChunks "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
-  [ "1234567890123456789012345678901234567890123456789012345678901234"
-  , "1234567890123456789012345678901234567890123456789012345678901234"
-  , "56"
+example : splitToChunks (s2ba "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456").toList =
+  [ (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList
+  , (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList
+  , (s2ba "56").toList
   ] := by native_decide
 
-example : encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234" =
-  .some ("\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234") := by native_decide
+example : encodeBytestring (s2ba "1234567890123456789012345678901234567890123456789012345678901234") =
+  .some (s2ba ("\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234")) := by native_decide
 
-example : encodeBytestring "12345678901234567890123456789012345678901234567890123456789012345" =
-  .some ("\x5F"
+example : encodeBytestring (s2ba "12345678901234567890123456789012345678901234567890123456789012345") =
+  .some (s2ba ("\x5F"
          ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
          ++ "\x41"     ++ "5"
-         ++ "\xFF") := by native_decide
+         ++ "\xFF")) := by native_decide
 
-example : encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
-  .some ("\x5F"
+example : encodeBytestring (s2ba "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456") =
+  .some (s2ba ("\x5F"
          ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
          ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
          ++ "\x42"     ++ "56"
-         ++ "\xFF") := by native_decide
+         ++ "\xFF")) := by native_decide
 
-example : encodeData (.I 12) = .some "\x0c"     := by simp [encodeData, encodeInt, encodeHead]
-example : encodeData (.I 42) = .some "\x18\x2a" := by simp [encodeData, encodeInt, encodeHead]
+example : encodeData (.I 12) = .some (s2ba "\x0c")     := by native_decide
+example : encodeData (.I 42) = .some (s2ba "\x18\x2a") := by native_decide
 
 example :
     encodeData (
@@ -50,7 +56,7 @@ example :
         .Constr 0 [.I 1284531],
         .I 1739713998000
       ]
-    ) = .some "\xd8\x79\x9f\xd8\x79\x9f\x1a\x00\x13\x99\xb3\xff\x1b\x00\x00\x01\x95\x0f\x08\xec\xb0\xff" := by native_decide
+    ) = .some (s2ba "\xd8\x79\x9f\xd8\x79\x9f\x1a\x00\x13\x99\xb3\xff\x1b\x00\x00\x01\x95\x0f\x08\xec\xb0\xff") := by native_decide
 
 example :
   encodeData (
@@ -59,17 +65,11 @@ example :
       .I 22710,
       .I 4387720097
     ]
-  ) = .some "\xd8\x79\x9f\x1a\x08\x9a\xfe\x76\x19\x58\xb6\x1b\x00\x00\x00\x01\x05\x87\x4b\xa1\xff" := by native_decide
+  ) = .some (s2ba "\xd8\x79\x9f\x1a\x08\x9a\xfe\x76\x19\x58\xb6\x1b\x00\x00\x00\x01\x05\x87\x4b\xa1\xff") := by native_decide
 
 -- ==============
 -- =  Decoding  =
 -- ==============
-
-/-- Convert a String of codepoint-as-byte characters to its `ByteArray` representation.
-    Test-only helper: matches the historical convention where each Char in 0–255 stands
-    for the byte with the same value (the same convention used by the UPLC `ByteString`
-    domain wrapper). -/
-private def s2ba (s : String) : ByteArray := (Char.toUInt8 <$> s.data).toByteArray
 
 example : d₈ ("deadbeef".data.map Char.toUInt8) = .some ([], 7234295460216005990) := by rfl
 example : d₁ ("deadbeef".data.map Char.toUInt8) = .some ("eadbeef".data.map Char.toUInt8, 100) := by rfl

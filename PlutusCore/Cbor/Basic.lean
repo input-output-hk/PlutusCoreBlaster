@@ -20,84 +20,71 @@ namespace CborInternal
 /-- Returns the `i`th byte of `n` in little-endian ordering -/
 -- Spec B.4. 𝖻_𝑖(𝑛) = 𝗆𝗈𝖽(𝖽𝗂𝗏(𝑛, 256 ^ 𝑖), 256)
 @[simp]
-def b_ (i n : Nat) : Char := Char.ofNat ((n / (256 ^ i)) % 256)
+def b_ (i n : Nat) : UInt8 := ((n / (256 ^ i)) % 256).toUInt8
 
 /-- e_w: Returns the little-endian encoding of natural numbers in the prescribed width.
-    in CBOR only the forms e₁ e₂ e₄ and e₈ are used. -/
+    In CBOR only the forms e₁ e₂ e₄ and e₈ are used. -/
 -- Spec B.4. 𝖾_𝑘(𝑛) = [𝖻_(𝑘−1)(𝑛), … , 𝖻_0(𝑛)] if 𝑛 ≤ 256 ^ 𝑘 − 1.
-@[simp] def e₁ (n : Nat) : List Char := [b_ 0 n]
-@[simp] def e₂ (n : Nat) : List Char := [b_ 1 n, b_ 0 n]
-@[simp] def e₄ (n : Nat) : List Char := [b_ 3 n, b_ 2 n, b_ 1 n, b_ 0 n]
-@[simp] def e₈ (n : Nat) : List Char := [b_ 7 n, b_ 6 n, b_ 5 n, b_ 4 n, b_ 3 n, b_ 2 n, b_ 1 n, b_ 0 n]
+@[simp] def e₁ (n : Nat) : List UInt8 := [b_ 0 n]
+@[simp] def e₂ (n : Nat) : List UInt8 := [b_ 1 n, b_ 0 n]
+@[simp] def e₄ (n : Nat) : List UInt8 := [b_ 3 n, b_ 2 n, b_ 1 n, b_ 0 n]
+@[simp] def e₈ (n : Nat) : List UInt8 := [b_ 7 n, b_ 6 n, b_ 5 n, b_ 4 n, b_ 3 n, b_ 2 n, b_ 1 n, b_ 0 n]
 
 /-- ε_head: Encodes the major type (`m`) × Nat pair -/
 -- Spec B.4.
-def encodeHead (m n : Nat) : Option (List Char) :=
+def encodeHead (m n : Nat) : Option (List UInt8) :=
   if m ≤ 7 then
-         if n ≤                   23 then .some [Char.ofNat (32 * m + n)]
-    else if n ≤                  255 then .some (Char.ofNat (32 * m + 24) :: e₁ n)
-    else if n ≤                65535 then .some (Char.ofNat (32 * m + 25) :: e₂ n)
-    else if n ≤           4294967295 then .some (Char.ofNat (32 * m + 26) :: e₄ n)
-    else if n ≤ 18446744073709551615 then .some (Char.ofNat (32 * m + 27) :: e₈ n)
+         if n ≤                   23 then .some [(32 * m + n ).toUInt8]
+    else if n ≤                  255 then .some ((32 * m + 24).toUInt8 :: e₁ n)
+    else if n ≤                65535 then .some ((32 * m + 25).toUInt8 :: e₂ n)
+    else if n ≤           4294967295 then .some ((32 * m + 26).toUInt8 :: e₄ n)
+    else if n ≤ 18446744073709551615 then .some ((32 * m + 27).toUInt8 :: e₈ n)
     else .none
   else .none
 
-/-- Helper theorem used in  the termination proof for `splitToChunks` -/
-theorem String.data_length_of_nonEmpty_pos (s : String) (h : s ≠ "") : 0 < List.length s.data := by
-  obtain ⟨data⟩ := s
-  induction data
-  · contradiction
-  · simp
-
-/-- Helper theorem used in  the termination proof for `splitToChunks` -/
-theorem String.drop_decreases_data_length (s : String) (n : Nat) (hs : s ≠ "") (hn : 0 < n) : (List.drop n s.data).length < s.data.length := by
-    have hs0 : 0 < List.length s.data := String.data_length_of_nonEmpty_pos s hs
-    simp
-    omega
-
-def splitToChunksLoop (acc : List String) (s : String) : List String :=
-  if s = "" then List.reverse acc
-            else splitToChunksLoop (⟨List.take 64 s.data⟩ :: acc) ⟨List.drop 64 s.data⟩
-
-  termination_by (List.length s.data)
-  decreasing_by
-    apply String.drop_decreases_data_length <;> try assumption
-    omega
-
-/-- Splitting strings to chunks as it is implemented in Plutus and stated in the spec. -/
+/-- Splitting a byte list into 64-byte chunks. -/
 -- Spec B.5. "Canonical 64-byte decomposition"
-def splitToChunks := splitToChunksLoop []
+def splitToChunks : List UInt8 → List (List UInt8) :=
+  let rec loop acc s :=
+    if _ : s = [] then List.reverse acc
+                  else loop (List.take 64 s :: acc) (List.drop 64 s)
+    termination_by s.length
+    decreasing_by
+      have hne : s ≠ [] := by assumption
+      cases s with
+      | nil => exact absurd rfl hne
+      | cons _ _ =>
+        simp [List.length_drop]
+        omega
+  loop []
 
 /-- Some sequences are encoded without a specified length (indefinite length encoding). -/
 -- Spec B.4. Heads for indefinite-length items.
-def encodeIndef (m : Nat) : Char := Char.ofNat (32 * m + 31)
+def encodeIndef (m : Nat) : UInt8 := (32 * m + 31).toUInt8
 
-/-- Encodes a string chunk -/
+/-- Encodes a bytestring chunk. -/
 -- Spec B.5. ε_B*
-def encodeBytestringChunk (s : String) : Option (List Char) := do
-  let length := List.length s.data
+def encodeBytestringChunk (s : List UInt8) : Option (List UInt8) := do
+  let length := s.length
   if length ≤ 256 ^ 8
-    then .some ((←encodeHead 2 length) ++ s.data)
+    then .some ((←encodeHead 2 length) ++ s)
     else .none
 
-/-- Encodes a bytestring.
-    Note: it first splits the byte string to 64 byte chunks
-          as detailed in the specification. -/
+/-- Encodes a bytestring (internal, list-based).
+    First splits the byte list into 64-byte chunks as detailed in the specification. -/
 -- Spec B.5. ε_B*
-def encodeBytestring (s : String) : Option String :=
+def encodeBytestringL (s : List UInt8) : Option (List UInt8) :=
   match splitToChunks s with
-  | []      => String.mk <$> encodeHead 2 0  -- empty bytestring is a definite 0-length string (0x40)
-  | h :: [] => String.mk <$> encodeBytestringChunk h
-  | chunks  => do .some ⟨encodeIndef 2 :: (List.concat (←List.flatMapM encodeBytestringChunk chunks) '\xFF')⟩
+  | []      => encodeHead 2 0   -- empty bytestring is a definite 0-length string (0x40)
+  | h :: [] => encodeBytestringChunk h
+  | chunks  => do .some (encodeIndef 2 :: (List.concat (←List.flatMapM encodeBytestringChunk chunks) 0xFF))
 
-
-/-- Encodes a natural number as a list of characters in big-endian -/
+/-- Encodes a natural number as a list of bytes in big-endian. -/
 -- Spec B.6. itos
-def itos (n : Nat) : String :=
+def itos (n : Nat) : List UInt8 :=
   if n == 0
-    then ""
-    else itos (n / 256) ++ (n % 256 |> Char.ofNat |> String.singleton)
-
+    then []
+    else itos (n / 256) ++ [(n % 256).toUInt8]
   decreasing_by
     apply Nat.div_lt_self
     · have h : ¬(n == 0) = true := by assumption
@@ -105,48 +92,47 @@ def itos (n : Nat) : String :=
       omega
     · omega
 
-/-- Encodes an integer using zigzag encoding -/
+/-- Encodes an integer using zigzag encoding (internal, list-based). -/
 -- Spec B.6. ε_Z
-def encodeInt (n : Integer) : Option String :=
-       if (                    0 ≤ n) && (n ≤  18446744073709551615) then String.mk <$> encodeHead 0 (Int.toNat n)
-  else if ( 18446744073709551616 ≤ n)                                then do (String.mk (←encodeHead 6 2)) ++ (←encodeBytestring (n |> Int.toNat |> itos))
-  else if (-18446744073709551616 ≤ n) && (n ≤                    -1) then String.mk <$> encodeHead 1 ((-n - 1) |> Int.toNat)
-  else if                                (n ≤ -18446744073709551617) then do (String.mk (←encodeHead 6 3)) ++ (←encodeBytestring (-n - 1 |> Int.toNat |> itos))
+def encodeIntL (n : Integer) : Option (List UInt8) :=
+       if (                    0 ≤ n) && (n ≤  18446744073709551615) then encodeHead 0 (Int.toNat n)
+  else if ( 18446744073709551616 ≤ n)                                then do return (←encodeHead 6 2) ++ (←encodeBytestringL (itos (Int.toNat n)))
+  else if (-18446744073709551616 ≤ n) && (n ≤                    -1) then encodeHead 1 ((-n - 1) |> Int.toNat)
+  else if                                (n ≤ -18446744073709551617) then do return (←encodeHead 6 3) ++ (←encodeBytestringL (itos (Int.toNat (-n - 1))))
   else .none
 
-/-- Encodes a ctag. -/
+/-- Encodes a ctag (internal, list-based). -/
 -- Spec B.7. ε_ctag
-def encodeCtag (i : Integer) : Option String :=
-  String.mk <$>
-         if (0 ≤ i) && (i ≤   6) then encodeHead 6 ( 121 + i       |> Int.toNat)
-    else if (7 ≤ i) && (i ≤ 127) then encodeHead 6 (1280 + (i - 7) |> Int.toNat)
-    else do (←encodeHead 6 102) ++ (←encodeHead 4 2) ++ ((←encodeInt i).data)
+def encodeCtagL (i : Integer) : Option (List UInt8) :=
+       if (0 ≤ i) && (i ≤   6) then encodeHead 6 ( 121 + i       |> Int.toNat)
+  else if (7 ≤ i) && (i ≤ 127) then encodeHead 6 (1280 + (i - 7) |> Int.toNat)
+  else do return (←encodeHead 6 102) ++ (←encodeHead 4 2) ++ (←encodeIntL i)
 
-/-- Encode data (builtinData). -/
+/-- Encode data (builtinData) (internal, list-based). -/
 -- Spec B.7. Encoding and  decoding Data. ε_data
-def encodeData : Data → Option String
+def encodeDataL : Data → Option (List UInt8)
   | .Constr idx fields =>
       if fields.isEmpty then do
         -- empty field list is a DEFINITE empty array (0x80), matching the serialiseData builtin
-        (←encodeCtag idx) ++ (String.mk (←encodeHead 4 0))
+        (←encodeCtagL idx) ++ (←encodeHead 4 0)
       else do
-        (←encodeCtag idx)
-        ++ (encodeIndef 4 |> String.singleton)
-        ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeData a))) "" fields)
-        ++ "\xFF"
+        (←encodeCtagL idx)
+        ++ [encodeIndef 4]
+        ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeDataL a))) [] fields)
+        ++ [UInt8.ofNat 0xFF]
   | .Map mxs => do
-      ((←encodeHead 5 (List.length mxs)) |> String.mk)
-      ++ (←List.foldlM (λ s p => do .some (s ++ (←encodeData p.fst) ++ (←encodeData p.snd))) "" mxs)
+      (←encodeHead 5 mxs.length)
+      ++ (←List.foldlM (λ s p => do .some (s ++ (←encodeDataL p.fst) ++ (←encodeDataL p.snd))) [] mxs)
   | .List xs =>
       if xs.isEmpty then
         -- empty list is a DEFINITE empty array (0x80), matching the serialiseData builtin
-        String.mk <$> encodeHead 4 0
+        encodeHead 4 0
       else do
-        (encodeIndef 4 |> String.singleton)
-        ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeData a))) "" xs)
-        ++ "\xFF"
-  | .I i => encodeInt i
-  | .B bs => encodeBytestring bs.data
+        [encodeIndef 4]
+        ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeDataL a))) [] xs)
+        ++ [UInt8.ofNat 0xFF]
+  | .I i  => encodeIntL i
+  | .B bs => encodeBytestringL (Char.toUInt8 <$> bs.data.data)
 
   decreasing_by
     · have : sizeOf a     < sizeOf fields := by apply List.sizeOf_lt_of_mem; assumption
@@ -159,6 +145,31 @@ def encodeData : Data → Option String
       simp; omega
     · have : sizeOf a     < sizeOf xs     := by apply List.sizeOf_lt_of_mem; assumption
       simp; omega
+
+/-- Converts a UPLC `ByteString` (which wraps a `String` of codepoint-as-byte
+    chars) to its `ByteArray` representation. -/
+@[inline] def byteStringToByteArray (bs : ByteString) : ByteArray :=
+  (Char.toUInt8 <$> bs.data.data).toByteArray
+
+/-- Encodes a bytestring. -/
+-- Spec B.5. ε_B*
+@[inline] def encodeBytestring (b : ByteArray) : Option ByteArray :=
+  (encodeBytestringL b.toList).map List.toByteArray
+
+/-- Encodes an integer using zigzag encoding. -/
+-- Spec B.6. ε_Z
+@[inline] def encodeInt (n : Integer) : Option ByteArray :=
+  (encodeIntL n).map List.toByteArray
+
+/-- Encodes a ctag. -/
+-- Spec B.7. ε_ctag
+@[inline] def encodeCtag (i : Integer) : Option ByteArray :=
+  (encodeCtagL i).map List.toByteArray
+
+/-- Encode data (builtinData). -/
+-- Spec B.7. Encoding and decoding Data. ε_data
+@[inline] def encodeData (d : Data) : Option ByteArray :=
+  (encodeDataL d).map List.toByteArray
 
 -- ==============
 -- =  Decoding  =

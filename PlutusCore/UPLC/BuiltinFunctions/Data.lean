@@ -30,6 +30,7 @@ namespace PLC
   open PlutusCore.Cbor
   export PlutusCore.Cbor (
     encodeData
+    byteArrayToByteString
   )
 end PLC
 
@@ -160,7 +161,7 @@ def mkNilPairData (Vs : List CekValue) : Option CekValue :=
 -- Define serializeData
 def serializeData (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.Data d)] => (CekValue.VCon ∘ Const.ByteString ∘ ByteString.mk) <$> PLC.encodeData d
+  | [CekValue.VCon (Const.Data d)] => (CekValue.VCon ∘ Const.ByteString ∘ PLC.byteArrayToByteString) <$> PLC.encodeData d
   | _                              => none
 
 end PlutusCore.UPLC.BuiltinFunctions.Data
