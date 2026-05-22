@@ -9,7 +9,7 @@ import PlutusCore.UPLC.Term
 namespace PlutusCore.UPLC.FlatEncoding
 
 open PlutusCore.ByteString (ByteString)
-open PlutusCore.Cbor (decodeData)
+open PlutusCore.Cbor (byteArrayToByteString decodeData)
 open PlutusCore.Data (Data)
 open PlutusCore.Integer (Integer)
 open PlutusCore.String (decodeUtf8)
@@ -70,19 +70,19 @@ def decodeInt (s : List Bool) : Option (List Bool × Integer) := do
 
 -- Spec C.2.5. Bytestrings
 -- D_C^(n)
-def decodeChunk : Nat → List Bool → List Char  → Option (List Bool × List Char)
+def decodeChunk : Nat → List Bool → List UInt8 → Option (List Bool × List UInt8)
   | .zero  , s, l => .some (s, List.reverse l)
   | .succ p, s, l => do
       let (s', x) ← decodeFixedNat 8 s
-      decodeChunk p s' ((Char.ofNat x) :: l)
+      decodeChunk p s' (x.toUInt8 :: l)
 
 -- D_C
-def decodeChunks (s : List Bool) : Option (List Bool × List Char) := do
+def decodeChunks (s : List Bool) : Option (List Bool × List UInt8) := do
   let (s', n) ← decodeFixedNat 8 s
   decodeChunk n s' []
 
 -- D_C*
-partial def decodeCStar (s : List Bool) : Option (List Bool × List Char) := do
+partial def decodeCStar (s : List Bool) : Option (List Bool × List UInt8) := do
   let (s', x) ← decodeChunks s
   match x with
   | [] => .some (s', [])
@@ -91,16 +91,16 @@ partial def decodeCStar (s : List Bool) : Option (List Bool × List Char) := do
       .some (s'', x ++ l)
 
 /- Decodes a Bytestring. -/
-def decodeBytestring (s : List Bool) : Option (List Bool × String) := do
+def decodeBytestring (s : List Bool) : Option (List Bool × ByteArray) := do
   let unpadded ← unpad s
   let (s', r)  ← decodeCStar unpadded
-  .some (s', ⟨r⟩)
+  .some (s', r.toByteArray)
 
 /- Decodes a unicode string. -/
 -- Spec C.2.6. Strings
 def decodeUnicode (s : List Bool) : Option (List Bool × String) := do
   let (s', b) ← decodeBytestring s
-  let u       ← Except.toOption (decodeUtf8 b)
+  let u       ← Except.toOption (decodeUtf8 (byteArrayToByteString b))
   .some (s', u)
 
 /- Decodes a Bool value. -/
@@ -126,11 +126,11 @@ partial def decodeConstType : List Nat → Option (List Nat × BuiltinType)
   | _      => .none
 
 partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool × Const)
-  | .AtomicType .TypeInteger        => Prod.map id .Integer                      <$> decodeInt s
-  | .AtomicType .TypeByteString     => Prod.map id (.ByteString ∘ ByteString.mk) <$> decodeBytestring s
-  | .AtomicType .TypeString         => Prod.map id .String                       <$> decodeUnicode s
+  | .AtomicType .TypeInteger        => Prod.map id .Integer <$> decodeInt s
+  | .AtomicType .TypeByteString     => Prod.map id (.ByteString ∘ byteArrayToByteString) <$> decodeBytestring s
+  | .AtomicType .TypeString         => Prod.map id .String <$> decodeUnicode s
   | .AtomicType .TypeUnit           => .some (s, .Unit)
-  | .AtomicType .TypeBool           => Prod.map id .Bool                         <$> decodeBool s
+  | .AtomicType .TypeBool           => Prod.map id .Bool <$> decodeBool s
   | .AtomicType .TypeData           => do
       let (s', t) ← decodeBytestring s
       let (_ , d) ← decodeData t
@@ -360,28 +360,28 @@ def bitSequenceFromHexString : List Char → List Bool → Option (List Bool)
       bitSequenceFromHexString t (acc ++ b₁ ++ b₂)
   | _            , _   => .none
 
-/- Generates a bit sequence for a byte string. -/
-def bitSequenceFromByteString : List Char → List Bool → Option (List Bool)
+/- Generates a bit sequence for a list of bytes. -/
+def bitSequenceFromBytes : List UInt8 → List Bool → Option (List Bool)
   | []    , acc => .some acc
   | c :: t, acc =>
-      let b   := c |> Char.toUInt8 |> UInt8.toBitVec
+      let b   := c.toBitVec
       let bcc := [b.getLsb 7, b.getLsb 6, b.getLsb 5, b.getLsb 4, b.getLsb 3, b.getLsb 2, b.getLsb 1, b.getLsb 0]
-      bitSequenceFromByteString t (acc ++ bcc)
+      bitSequenceFromBytes t (acc ++ bcc)
 
 /- Decodes a Program from a hex string. -/
 def decodeProgramFromHexString (hexString : String) : Option Program :=
   bitSequenceFromHexString hexString.data [] >>= decodeProgramFromBits
 
-/- Decodes a Program from a byte string. -/
-def decodeProgramFromByteString (s : String) : Option Program :=
-  bitSequenceFromByteString s.data [] >>= decodeProgramFromBits
+/- Decodes a Program from a `ByteArray`. -/
+def decodeProgramFromByteArray (b : ByteArray) : Option Program :=
+  bitSequenceFromBytes b.toList [] >>= decodeProgramFromBits
 
 end Internal
 
 export Internal
   (
     decodeProgramFromHexString
-    decodeProgramFromByteString
+    decodeProgramFromByteArray
   )
 
 end PlutusCore.UPLC.FlatEncoding
