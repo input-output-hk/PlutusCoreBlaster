@@ -21,92 +21,136 @@ open PlutusCore.UPLC.Term
 
 namespace Internal
 
-/- Removes padding from the bit sequence. -/
+/-- A bit-level cursor into a `ByteArray`. `bytePos` indexes the current byte, and
+    `bitPos : Fin 8` is the bit within that byte (MSB-first). The split layout avoids
+    mod/div on every bit read — `nextBit` (the default no-skip case) does pure indexing. -/
+structure DecodeState where
+  input   : ByteArray
+  bytePos : Nat
+  bitPos  : Fin 8
+deriving DecidableEq
+
+/-- Advance the cursor by `n` bits, re-normalising into (bytePos, bitPos). -/
+def DecodeState.advance (d : DecodeState) (n : Nat := 1) : DecodeState :=
+  let total := d.bitPos.val + n
+  { d with
+    bytePos := d.bytePos + total / 8,
+    bitPos  := ⟨total % 8, Nat.mod_lt _ (by decide)⟩ }
+
+/-- Total number of bits in the input buffer. -/
+def DecodeState.totalBits (d : DecodeState) : Nat := 8 * d.input.size
+
+/-- Total bit offset from the start of the input. -/
+def DecodeState.absBit (d : DecodeState) : Nat := 8 * d.bytePos + d.bitPos.val
+
+/-- Read the bit at offset `bitPos + skip` (default `skip = 0` does no mod/div).
+    Uses `BitVec.getMsbD` so the bit order matches the legacy MSB-first
+    `bitSequenceFromBytes` exactly. -/
+def DecodeState.nextBit (d : DecodeState) (skip : Nat := 0) : Option Bool :=
+  if skip = 0 then
+    d.input[d.bytePos]?.map (fun b => b.toBitVec.getMsbD d.bitPos.val)
+  else
+    let total := d.bitPos.val + skip
+    d.input[d.bytePos + total / 8]?.map (fun b => b.toBitVec.getMsbD (total % 8))
+
+@[simp] theorem DecodeState.advance_input (d : DecodeState) (n : Nat) :
+    (d.advance n).input = d.input := rfl
+
+/-- Helper for `unpad`: read `k` bits starting at offset `offset`, expecting
+    the pattern `0...01` (k-1 zeros then a one). Returns `some ()` on match. -/
+private def readPadAt (d : DecodeState) (offset : Nat) : Nat → Option Unit
+  | 0     => .none
+  | 1     => do
+      let b ← d.nextBit offset
+      if b then .some () else .none
+  | k + 2 => do
+      let b ← d.nextBit offset
+      if b then .none else readPadAt d (offset + 1) (k + 1)
+
+/- Removes padding from the bit sequence (advances `d` to the next byte boundary). -/
 -- Spec C.1.1. Padding
-def unpad : List Bool → Option (List Bool)
-  | false :: false :: false :: false :: false :: false :: false :: true :: s => .some s
-  | false :: false :: false :: false :: false :: false :: true          :: s => .some s
-  | false :: false :: false :: false :: false :: true                   :: s => .some s
-  | false :: false :: false :: false :: true                            :: s => .some s
-  | false :: false :: false :: true                                     :: s => .some s
-  | false :: false :: true                                              :: s => .some s
-  | false :: true                                                       :: s => .some s
-  | true                                                                :: s => .some s
-  | _                                                                        => .none
+def unpad (d : DecodeState) : Option DecodeState :=
+  let n : Nat := 8 - d.bitPos.val
+  match readPadAt d 0 n with
+  | .some () => .some (d.advance n)
+  | .none    => .none
 
 /- Decodes a fixed with natural number. -/
 -- Spec C.2.1. Fixed-width natural numbers
-def decodeFixedNat : Nat → List Bool → Option (List Bool × Nat)
-  | .zero  ,          s => .some (s, 0)
-  | .succ p, false :: s => decodeFixedNat p s
-  | .succ p, true  :: s => Prod.map id (2 ^ p + ·) <$> decodeFixedNat p s
-  | _      , _          => .none
+def decodeFixedNat : Nat → DecodeState → Option (DecodeState × Nat)
+  | 0    , d => .some (d, 0)
+  | p + 1, d => do
+      let b       ← d.nextBit
+      let (d', n) ← decodeFixedNat p d.advance
+      .some (d', if b then 2 ^ p + n else n)
 
 /- Decodes a list. -/
 -- Spec C.2.2. Lists
-partial def decodeList {α : Type} (f : List Bool → Option (List Bool × α)) : List Bool -> Option (List Bool × List α)
-  | false :: s => .some (s, [])
-  | true  :: s => do
-      let (s' , x) ← f s
-      let (s'', l) ← decodeList f s'
-      .some (s'', x :: l)
-  | _ => .none
+partial def decodeList {α : Type} (f : DecodeState → Option (DecodeState × α))
+  (d : DecodeState) : Option (DecodeState × List α) := do
+    let b ← d.nextBit
+    if b then
+      let (d' , x) ← f d.advance
+      let (d'', l) ← decodeList f d'
+      .some (d'', x :: l)
+    else
+      .some (d.advance, [])
 
 /- Decodes a variable width natural number. -/
 -- Spec C.2.3. Natural numbers
-def decodeNat (s : List Bool) : Option (List Bool × Nat) := do
-  let (s' , ks) ← decodeList (decodeFixedNat 7) s
-  let (s'', l)  ← decodeFixedNat 7 s'
+def decodeNat (d : DecodeState) : Option (DecodeState × Nat) := do
+  let (d' , ks) ← decodeList (decodeFixedNat 7) d
+  let (d'', l)  ← decodeFixedNat 7 d'
   let series    := List.mapIdx (λ i ki => ki * 2 ^ (7 * i)) (ks ++ [l])
-  .some (s'', List.sum series)
+  .some (d'', List.sum series)
 
 /- Decodes an integer. -/
 -- Spec C.2.4. Integers
-def decodeInt (s : List Bool) : Option (List Bool × Integer) := do
-  let (s', n) ← decodeNat s
+def decodeInt (d : DecodeState) : Option (DecodeState × Integer) := do
+  let (d', n) ← decodeNat d
   if n % 2 = 0
-    then .some (s',              n      / 2)
-    else .some (s', - (Int.ofNat n + 1) / 2)
+    then .some (d',              n      / 2)
+    else .some (d', - (Int.ofNat n + 1) / 2)
 
 -- Spec C.2.5. Bytestrings
 -- D_C^(n)
-def decodeChunk : Nat → List Bool → List UInt8 → Option (List Bool × List UInt8)
-  | .zero  , s, l => .some (s, List.reverse l)
-  | .succ p, s, l => do
-      let (s', x) ← decodeFixedNat 8 s
-      decodeChunk p s' (x.toUInt8 :: l)
+def decodeChunk : Nat → DecodeState → List UInt8 → Option (DecodeState × List UInt8)
+  | .zero  , d, l => .some (d, List.reverse l)
+  | .succ p, d, l => do
+      let (d', x) ← decodeFixedNat 8 d
+      decodeChunk p d' (x.toUInt8 :: l)
 
 -- D_C
-def decodeChunks (s : List Bool) : Option (List Bool × List UInt8) := do
-  let (s', n) ← decodeFixedNat 8 s
-  decodeChunk n s' []
+def decodeChunks (d : DecodeState) : Option (DecodeState × List UInt8) := do
+  let (d', n) ← decodeFixedNat 8 d
+  decodeChunk n d' []
 
 -- D_C*
-partial def decodeCStar (s : List Bool) : Option (List Bool × List UInt8) := do
-  let (s', x) ← decodeChunks s
+partial def decodeCStar (d : DecodeState) : Option (DecodeState × List UInt8) := do
+  let (d', x) ← decodeChunks d
   match x with
-  | [] => .some (s', [])
+  | [] => .some (d', [])
   | x  =>
-      let (s'', l) ← decodeCStar s'
-      .some (s'', x ++ l)
+      let (d'', l) ← decodeCStar d'
+      .some (d'', x ++ l)
 
 /- Decodes a Bytestring. -/
-def decodeBytestring (s : List Bool) : Option (List Bool × ByteArray) := do
-  let unpadded ← unpad s
-  let (s', r)  ← decodeCStar unpadded
-  .some (s', r.toByteArray)
+def decodeBytestring (d : DecodeState) : Option (DecodeState × ByteArray) := do
+  let unpadded ← unpad d
+  let (d', r)  ← decodeCStar unpadded
+  .some (d', r.toByteArray)
 
 /- Decodes a unicode string. -/
 -- Spec C.2.6. Strings
-def decodeUnicode (s : List Bool) : Option (List Bool × String) := do
-  let (s', b) ← decodeBytestring s
+def decodeUnicode (d : DecodeState) : Option (DecodeState × String) := do
+  let (d', b) ← decodeBytestring d
   let u       ← Except.toOption (decodeUtf8 (byteArrayToByteString b))
-  .some (s', u)
+  .some (d', u)
 
 /- Decodes a Bool value. -/
-def decodeBool : List Bool → Option (List Bool × Bool)
-  | b :: s => .some (s, b)
-  | _      => .none
+def decodeBool (d : DecodeState) : Option (DecodeState × Bool) := do
+  let b ← d.nextBit
+  .some (d.advance, b)
 
 partial def decodeConstType : List Nat → Option (List Nat × BuiltinType)
   | 0           :: l => .some (l, .AtomicType .TypeInteger)
@@ -125,50 +169,52 @@ partial def decodeConstType : List Nat → Option (List Nat × BuiltinType)
   | 8           :: l => .some (l, .AtomicType .TypeData)
   | _      => .none
 
-partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool × Const)
-  | .AtomicType .TypeInteger        => Prod.map id .Integer <$> decodeInt s
-  | .AtomicType .TypeByteString     => Prod.map id (.ByteString ∘ byteArrayToByteString) <$> decodeBytestring s
-  | .AtomicType .TypeString         => Prod.map id .String <$> decodeUnicode s
-  | .AtomicType .TypeUnit           => .some (s, .Unit)
-  | .AtomicType .TypeBool           => Prod.map id .Bool <$> decodeBool s
+partial def decodeConstValue (d : DecodeState) : BuiltinType → Option (DecodeState × Const)
+  | .AtomicType .TypeInteger        => Prod.map id .Integer <$> decodeInt d
+  | .AtomicType .TypeByteString     => Prod.map id (.ByteString ∘ byteArrayToByteString) <$> decodeBytestring d
+  | .AtomicType .TypeString         => Prod.map id .String <$> decodeUnicode d
+  | .AtomicType .TypeUnit           => .some (d, .Unit)
+  | .AtomicType .TypeBool           => Prod.map id .Bool <$> decodeBool d
   | .AtomicType .TypeData           => do
-      let (s', t) ← decodeBytestring s
-      let (_ , d) ← decodeData t
-      .some (s', .Data d)
+      let (d', t) ← decodeBytestring d
+      let (_ , da) ← decodeData t
+      .some (d', .Data da)
   | .TypeOperator (.TypeList t)     =>
        match t with
        | .AtomicType .TypeData =>
-             let decodeConstData (xs : List Bool) : Option (List Bool × Data) :=
+             let decodeConstData (xs : DecodeState) : Option (DecodeState × Data) :=
                match decodeConstValue xs t with
-               | some (xs', Const.Data d) => some (xs', d)
-               | _ => none -- don't produce anything on type mismatched
-             Prod.map id Const.ConstDataList <$> decodeList decodeConstData s
+               | some (xs', Const.Data da) => some (xs', da)
+               | _                         => none -- don't produce anything on type mismatched
+             Prod.map id Const.ConstDataList <$> decodeList decodeConstData d
        | .TypeOperator (.TypePair (.AtomicType .TypeData) (.AtomicType .TypeData)) =>
-             let decodeConstPairData (xs : List Bool) : Option (List Bool × (Data × Data)) :=
+             let decodeConstPairData (xs : DecodeState) : Option (DecodeState × (Data × Data)) :=
                match decodeConstValue xs t with
                | some (xs', Const.PairData p) => some (xs', p)
-               | _ => none -- don't produce anything on type mismatched
-             Prod.map id .ConstPairDataList <$> decodeList decodeConstPairData s
-       | _ => Prod.map id Const.ConstList <$> decodeList (flip decodeConstValue t) s -- heterogenous list
+               | _                            => none -- don't produce anything on type mismatched
+             Prod.map id .ConstPairDataList <$> decodeList decodeConstPairData d
+       | _ =>
+             Prod.map id Const.ConstList <$> decodeList (flip decodeConstValue t) d -- heterogenous list
   | .TypeOperator (.TypePair t₁ t₂) => do
-      let (s₁, c₁) ← decodeConstValue s  t₁
-      let (s₂, c₂) ← decodeConstValue s₁ t₂
+      let (d₁, c₁) ← decodeConstValue d  t₁
+      let (d₂, c₂) ← decodeConstValue d₁ t₂
       match t₁, t₂ with
       | .AtomicType .TypeData, .AtomicType .TypeData =>
           match c₁, c₂ with
-          | Const.Data d₁, Const.Data d₂ => some (s₂, Const.PairData (d₁, d₂))
-          | _, _ => none
-      | _, _ => some (s₂, Const.Pair (c₁, c₂))
+          | Const.Data da₁, Const.Data da₂ => some (d₂, Const.PairData (da₁, da₂))
+          | _             , _              => none
+      | _                    , _                     =>
+          some (d₂, Const.Pair (c₁, c₂))
   | .AtomicType .TypeBls12_381_G1_element -- BLS values are not serializable
   | .AtomicType .TypeBls12_381_G2_element
   | .AtomicType .TypeBls12_381_MlResult   => none
 
 /- Decodes a constant. -/
-def decodeConst (s : List Bool) : Option (List Bool × Const) := do
-  let (s', l)      ← decodeList (decodeFixedNat 4) s
-  let (l', t)      ← decodeConstType l
-  let _            ← Option.filter (λ () => l' = []) (.some ())
-  decodeConstValue s' t
+def decodeConst (d : DecodeState) : Option (DecodeState × Const) := do
+  let (d', l) ← decodeList (decodeFixedNat 4) d
+  let (l', t) ← decodeConstType l
+  let _       ← Option.filter (λ () => l' = []) (.some ())
+  decodeConstValue d' t
 
 def builtinTable : List (Nat × BuiltinFun) :=
   [
@@ -274,10 +320,10 @@ def builtinTable : List (Nat × BuiltinFun) :=
     -- (99, .UnValueData),
   ]
 
-def decodeBuiltinFun (_v : Version) (s : List Bool) : Option (List Bool × BuiltinFun) := do
-  let (s', n)    ← decodeFixedNat 7 s
+def decodeBuiltinFun (_v : Version) (d : DecodeState) : Option (DecodeState × BuiltinFun) := do
+  let (d', n)    ← decodeFixedNat 7 d
   let builtinFun ← List.lookup n builtinTable
-  .some (s', builtinFun)
+  .some (d', builtinFun)
 
 /- Display-only binder name for the lambda introduced at nesting level X. -/
 def varName (debruijn : Nat) : String := s!"dbi_{debruijn}"
@@ -285,96 +331,96 @@ def varName (debruijn : Nat) : String := s!"dbi_{debruijn}"
 /- Decodes a DeBruijn index.
    Flat encodes 1-based relative indices (index 0 is invalid); `Term.Var`
    uses 0-based indices (0 = innermost binder), so we subtract 1. -/
-def decodeVar (s : List Bool) : Option (List Bool × Nat) := do
-  let (s', n) ← decodeNat s
+def decodeVar (nextDebruijn : Nat) (d : DecodeState) : Option (DecodeState × Nat) := do
+  let (d', n) ← decodeNat d
   let _       ← Option.filter (λ () => n > 0) (.some ())
-  .some (s', n - 1)
+  .some (d', n - 1)
 
-/- Decodes a UPLC term.
-   `nextDeBruijn` counts enclosing binders and is used only to synthesize
-   display names for lambdas; variables decode to plain indices. -/
-partial def decodeTerm (v : Version) (nextDeBruijn : Nat) : List Bool → Option (List Bool × Term)
-  | false :: false :: false :: false :: s => Prod.map id .Var                          <$> decodeVar s
-  | false :: false :: false :: true  :: s => Prod.map id .Delay                        <$> decodeTerm v nextDeBruijn s
-  | false :: false :: true  :: false :: s => Prod.map id (.Lam (varName nextDeBruijn)) <$> decodeTerm v (nextDeBruijn + 1) s
-  | false :: false :: true  :: true  :: s => do
-      let (s' , t₁) ← decodeTerm v nextDeBruijn s
-      let (s'', t₂) ← decodeTerm v nextDeBruijn s'
-      .some (s'', .Apply t₁ t₂)
-  | false :: true  :: false :: false :: s => Prod.map id .Const   <$> decodeConst s
-  | false :: true  :: false :: true  :: s => Prod.map id .Force   <$> decodeTerm v nextDeBruijn s
-  | false :: true  :: true  :: false :: s => .some (s, .Error)
-  | false :: true  :: true  :: true  :: s => Prod.map id .Builtin <$> decodeBuiltinFun v s
-  | true  :: false :: false :: false :: s => do
+/- Decodes a UPLC term. -/
+partial def decodeTerm (v : Version) (nextDeBruijn : Nat) (d : DecodeState) : Option (DecodeState × Term) := do
+  let (d, op) ← decodeFixedNat 4 d
+  match op with
+  | 0 => Prod.map id .Var                          <$> decodeVar nextDeBruijn d
+  | 1 => Prod.map id .Delay                        <$> decodeTerm v nextDeBruijn d
+  | 2 => Prod.map id (.Lam (varName nextDeBruijn)) <$> decodeTerm v (nextDeBruijn + 1) d
+  | 3 => do
+      let (d' , t₁) ← decodeTerm v nextDeBruijn d
+      let (d'', t₂) ← decodeTerm v nextDeBruijn d'
+      .some (d'', .Apply t₁ t₂)
+  | 4 => Prod.map id .Const   <$> decodeConst d
+  | 5 => Prod.map id .Force   <$> decodeTerm v nextDeBruijn d
+  | 6 => .some (d, .Error)
+  | 7 => Prod.map id .Builtin <$> decodeBuiltinFun v d
+  | 8 => do
       let _        ← if v < .Version 1 1 0 then .none else .some ()
-      let (s' , i) ← Option.filter (λ (_, i) => i < 2 ^ 64) (decodeNat s)
-      let (s'', l) ← decodeList (decodeTerm v nextDeBruijn) s'
-      .some (s'', .Constr i l)
-  | true  :: false :: false :: true  :: s => do
+      let (d' , i) ← Option.filter (λ (_, i) => i < 2 ^ 64) (decodeNat d)
+      let (d'', l) ← decodeList (decodeTerm v nextDeBruijn) d'
+      .some (d'', .Constr i l)
+  | 9 => do
       let _        ← if v < .Version 1 1 0 then .none else .some ()
-      let (s' , u) ← decodeTerm v nextDeBruijn s
-      let (s'', l) ← decodeList (decodeTerm v nextDeBruijn) s'
-      .some (s'', .Case u l)
+      let (d' , u) ← decodeTerm v nextDeBruijn d
+      let (d'', l) ← decodeList (decodeTerm v nextDeBruijn) d'
+      .some (d'', .Case u l)
   | _ => .none
 
 /- Decodes the Version of the Program. -/
-def decodeVersion (s : List Bool) : Option (List Bool × Version) := do
-  let (s'  , a) ← decodeNat s
-  let (s'' , b) ← decodeNat s'
-  let (s''', c) ← decodeNat s''
-  .some (s''', .Version a b c)
+def decodeVersion (d : DecodeState) : Option (DecodeState × Version) := do
+  let (d'  , a) ← decodeNat d
+  let (d'' , b) ← decodeNat d'
+  let (d''', c) ← decodeNat d''
+  .some (d''', .Version a b c)
 
-/- Decodes a Program from a bit sequence. -/
-def decodeProgramFromBits (s : List Bool) : Option Program := do
-  let (s', version) ← decodeVersion s
-  let (r , t      ) ← decodeTerm version 0 s'
-  let unpadded      ← unpad r
-  let _             ← Option.filter (λ () => unpadded = []) (.some ())
+/- Decodes a Program from a `DecodeState`. -/
+def decodeProgramFromState (d : DecodeState) : Option Program := do
+  let (d' , version) ← decodeVersion d
+  let (d'',  t     ) ← decodeTerm version 0 d'
+  let d'''           ← unpad d''
+  let _              ← Option.filter (λ () => d'''.absBit = d'''.totalBits) (.some ())
   .some (.Program version t)
 
-def bitSequenceFromHexDigit : Char → Option (List Bool)
-  | '0'       => [false, false, false, false]
-  | '1'       => [false, false, false,  true]
-  | '2'       => [false, false,  true, false]
-  | '3'       => [false, false,  true,  true]
-  | '4'       => [false,  true, false, false]
-  | '5'       => [false,  true, false,  true]
-  | '6'       => [false,  true,  true, false]
-  | '7'       => [false,  true,  true,  true]
-  | '8'       => [ true, false, false, false]
-  | '9'       => [ true, false, false,  true]
-  | 'a' | 'A' => [ true, false,  true, false]
-  | 'b' | 'B' => [ true, false,  true,  true]
-  | 'c' | 'C' => [ true,  true, false, false]
-  | 'd' | 'D' => [ true,  true, false,  true]
-  | 'e' | 'E' => [ true,  true,  true, false]
-  | 'f' | 'F' => [ true,  true,  true,  true]
+/- Decodes a single hex digit to its 4-bit value. -/
+def hexDigitValue : Char → Option Nat
+  | '0'       => .some  0
+  | '1'       => .some  1
+  | '2'       => .some  2
+  | '3'       => .some  3
+  | '4'       => .some  4
+  | '5'       => .some  5
+  | '6'       => .some  6
+  | '7'       => .some  7
+  | '8'       => .some  8
+  | '9'       => .some  9
+  | 'a' | 'A' => .some 10
+  | 'b' | 'B' => .some 11
+  | 'c' | 'C' => .some 12
+  | 'd' | 'D' => .some 13
+  | 'e' | 'E' => .some 14
+  | 'f' | 'F' => .some 15
   | _         => .none
 
-/- Generates a bit sequence for a hex string. -/
-def bitSequenceFromHexString : List Char → List Bool → Option (List Bool)
-  | []           , acc => .some acc
+/- Converts a hex string to a `ByteArray`. Each pair of hex digits becomes one byte.
+   Returns `.none` for odd-length inputs or non-hex characters. -/
+def hexStringToByteArray (s : String) : Option ByteArray :=
+  go s.data #[]
+where
+  go : List Char → Array UInt8 → Option ByteArray
   | h₁ :: h₂ :: t, acc => do
-      let b₁ ← bitSequenceFromHexDigit (Char.toLower h₁)
-      let b₂ ← bitSequenceFromHexDigit (Char.toLower h₂)
-      bitSequenceFromHexString t (acc ++ b₁ ++ b₂)
+      let v₁ ← hexDigitValue h₁
+      let v₂ ← hexDigitValue h₂
+      go t (acc.push (16 * v₁ + v₂).toUInt8)
+  | []           , acc => .some ⟨acc⟩
   | _            , _   => .none
-
-/- Generates a bit sequence for a list of bytes. -/
-def bitSequenceFromBytes : List UInt8 → List Bool → Option (List Bool)
-  | []    , acc => .some acc
-  | c :: t, acc =>
-      let b   := c.toBitVec
-      let bcc := [b.getLsb 7, b.getLsb 6, b.getLsb 5, b.getLsb 4, b.getLsb 3, b.getLsb 2, b.getLsb 1, b.getLsb 0]
-      bitSequenceFromBytes t (acc ++ bcc)
 
 /- Decodes a Program from a hex string. -/
 def decodeProgramFromHexString (hexString : String) : Option Program :=
-  bitSequenceFromHexString hexString.data [] >>= decodeProgramFromBits
+  hexStringToByteArray hexString >>= decodeProgramFromByteArray
+where
+  decodeProgramFromByteArray (b : ByteArray) : Option Program :=
+    decodeProgramFromState { input := b, bytePos := 0, bitPos := 0 }
 
 /- Decodes a Program from a `ByteArray`. -/
 def decodeProgramFromByteArray (b : ByteArray) : Option Program :=
-  bitSequenceFromBytes b.toList [] >>= decodeProgramFromBits
+  decodeProgramFromState { input := b, bytePos := 0, bitPos := 0 }
 
 end Internal
 

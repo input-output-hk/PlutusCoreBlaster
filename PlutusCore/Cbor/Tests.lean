@@ -7,28 +7,28 @@ open PlutusCore.Cbor.CborInternal
     Test-only helper: matches the historical convention where each Char in 0–255 stands
     for the byte with the same value (the same convention used by the UPLC `ByteString`
     domain wrapper). -/
-private def s2ba (s : String) : ByteArray := (Char.toUInt8 <$> s.data).toByteArray
+private def s2ba (s : String) : ByteArray := ⟨(Char.toUInt8 <$> s.data).toArray⟩
 
 -- ==============
 -- =  Encoding  =
 -- ==============
 
-example : e₈ 7234295460216005990 = "deadbeef".data.map Char.toUInt8 := by native_decide
+example : e₈ 7234295460216005990 = "deadbeef".toUTF8 := by rfl
 
-example : splitToChunks [] = [] := by native_decide
+example : splitToChunks .empty = [] := by rfl
 
-example : splitToChunks (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList =
-  [ (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList ] := by native_decide
+example : splitToChunks (s2ba "1234567890123456789012345678901234567890123456789012345678901234") =
+  [ s2ba "1234567890123456789012345678901234567890123456789012345678901234" ] := by native_decide
 
-example : splitToChunks (s2ba "12345678901234567890123456789012345678901234567890123456789012345").toList =
-  [ (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList
-  , (s2ba "5").toList
+example : splitToChunks (s2ba "12345678901234567890123456789012345678901234567890123456789012345") =
+  [ s2ba "1234567890123456789012345678901234567890123456789012345678901234"
+  , s2ba "5"
   ] := by native_decide
 
-example : splitToChunks (s2ba "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456").toList =
-  [ (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList
-  , (s2ba "1234567890123456789012345678901234567890123456789012345678901234").toList
-  , (s2ba "56").toList
+example : splitToChunks (s2ba "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456") =
+  [ s2ba "1234567890123456789012345678901234567890123456789012345678901234"
+  , s2ba "1234567890123456789012345678901234567890123456789012345678901234"
+  , s2ba "56"
   ] := by native_decide
 
 example : encodeBytestring (s2ba "1234567890123456789012345678901234567890123456789012345678901234") =
@@ -71,8 +71,13 @@ example :
 -- =  Decoding  =
 -- ==============
 
-example : d₈ ("deadbeef".data.map Char.toUInt8) = .some ([], 7234295460216005990) := by rfl
-example : d₁ ("deadbeef".data.map Char.toUInt8) = .some ("eadbeef".data.map Char.toUInt8, 100) := by rfl
+example :
+    d₈ { input := s2ba "deadbeef", pos := 0 } =
+    .some ({ input := s2ba "deadbeef", pos := 8 }, 7234295460216005990) := by native_decide
+
+example :
+    d₁ { input := s2ba "deadbeef", pos := 0 } =
+    .some ({ input := s2ba "deadbeef", pos := 1 }, 100) := by native_decide
 
 example : decodeBytestring (s2ba ("\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234")) =
   .some (s2ba "", s2ba "1234567890123456789012345678901234567890123456789012345678901234") := by native_decide
