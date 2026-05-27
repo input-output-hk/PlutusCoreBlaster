@@ -48,10 +48,10 @@ def DecodeState.absBit (d : DecodeState) : Nat := 8 * d.bytePos + d.bitPos.val
     `bitSequenceFromBytes` exactly. -/
 def DecodeState.nextBit (d : DecodeState) (skip : Nat := 0) : Option Bool :=
   if skip = 0 then
-    d.input[d.bytePos]?.map (fun b => b.toBitVec.getMsbD d.bitPos.val)
+    ((BitVec.getMsbD · d.bitPos.val) ∘ UInt8.toBitVec) <$> d.input[d.bytePos]?
   else
     let total := d.bitPos.val + skip
-    d.input[d.bytePos + total / 8]?.map (fun b => b.toBitVec.getMsbD (total % 8))
+    ((BitVec.getMsbD · (total % 8)) ∘ UInt8.toBitVec)  <$> d.input[d.bytePos + total / 8]?
 
 @[simp] theorem DecodeState.advance_input (d : DecodeState) (n : Nat) :
     (d.advance n).input = d.input := rfl

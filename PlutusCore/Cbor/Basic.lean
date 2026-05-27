@@ -366,7 +366,7 @@ theorem d₈_consumes (d : DecodeState) :
 private theorem decodeHead_di_branch_consumes {d d' : DecodeState} {n' : UInt8} {dv k δ : Nat}
   {dx : DecodeState → Option (DecodeState × Nat)}
   (hdx_cons : ∀ d₀ k₀, dx d.advance = some (d₀, k₀) → d₀.input = (d.advance).input ∧ d₀.pos = (d.advance).pos + δ ∧ d₀.pos ≤ (d.advance).input.size)
-  (h : (fun (p : DecodeState × Nat) => (p.1, n'.toNat / 32, p.2)) <$> dx d.advance = some (d', dv, k)) :
+  (h : (λ (p : DecodeState × Nat) => (p.1, n'.toNat / 32, p.2)) <$> dx d.advance = some (d', dv, k)) :
   d'.input = d.input ∧ d'.pos > d.pos ∧ d'.pos ≤ d.input.size := by
     rcases hdx : dx d.advance with _ | ⟨d_st, n_val⟩
     · rw [hdx] at h; simp at h
@@ -578,8 +578,8 @@ theorem decodeBytestringL_consumes (d : DecodeState) :
 /-- Decodes a bytestring from the input `b`. -/
 -- Spec B.5. D_B*
 def decodeBytestring (b : ByteArray) : Option (ByteArray × ByteArray) :=
-  (decodeBytestringL { input := b, pos := 0 }).map fun (d', t) =>
-    (d'.input.extract d'.pos d'.input.size, t)
+  (decodeBytestringL { input := b, pos := 0 }).map (λ (d', t) =>
+    (d'.input.extract d'.pos d'.input.size, t))
 
 /-- Decodes a "large" block, which can have a length larger than 64 bytes. -/
 def decodeLargeBlock (d : DecodeState) : Option (DecodeState × ByteArray) := do
@@ -690,12 +690,12 @@ def decodeLargeBytestringL (d : DecodeState) : Option (DecodeState × ByteArray)
 
 /-- Decodes a "large" bytestring from a `ByteArray`. -/
 def decodeLargeBytestring (b : ByteArray) : Option (ByteArray × ByteArray) :=
-  (decodeLargeBytestringL { input := b, pos := 0 }).map fun (d', t) =>
-    (d'.input.extract d'.pos d'.input.size, t)
+  (decodeLargeBytestringL { input := b, pos := 0 }).map (λ (d', t) =>
+    (d'.input.extract d'.pos d'.input.size, t))
 
 /-- Reconstructs a natural number from its big endian representation. -/
 -- Spec B.6. stoi
-def stoi (b : ByteArray) : Nat := b.foldl (fun acc x => acc * 256 + x.toNat) 0
+def stoi (b : ByteArray) : Nat := b.foldl (λ acc x => acc * 256 + x.toNat) 0
 
 /-- Decodes an integer value from a `DecodeState` (internal). -/
 def decodeIntL (d : DecodeState) : Option (DecodeState × Integer) :=
@@ -755,8 +755,8 @@ theorem decodeIntL_consumes (d : DecodeState) :
 /-- Decodes an integer value from a `ByteArray`. -/
 --  Spec B.6. D_Z
 def decodeInt (b : ByteArray) : Option (ByteArray × Integer) :=
-  (decodeIntL { input := b, pos := 0 }).map fun (d', i) =>
-    (d'.input.extract d'.pos d'.input.size, i)
+  (decodeIntL { input := b, pos := 0 }).map (λ (d', i) =>
+    (d'.input.extract d'.pos d'.input.size, i))
 
 /-- Decodes a ctag from a `DecodeState`. -/
 -- Spec B.7. D_ctag
@@ -968,8 +968,8 @@ end
 -- Data.hs accepts: indefinite maps (decodePairListIndef) and the indefinite tag-102 constructor
 -- wrapper (decodeIndefConstr). Decode-only, the encoder is unchanged.
 def decodeData (b : ByteArray) : Option (ByteArray × Data) :=
-  (decodeDataLoop { input := b, pos := 0 }).map fun (d', x) =>
-    (d'.input.extract d'.pos d'.input.size, x)
+  (decodeDataLoop { input := b, pos := 0 }).map (λ (d', x) =>
+    (d'.input.extract d'.pos d'.input.size, x))
 
 end CborInternal
 
