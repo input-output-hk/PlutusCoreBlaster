@@ -119,11 +119,11 @@ def basePoint : Secp256k1Point :=
 def isOnCurve (x y : Fp) : Bool := y^2 == x^3 + 7
 
 -- Decompress a point from x-coordinate and sign bit (SEC1 encoding)
-def decompress (bytes : List UInt8) : Option Secp256k1Point :=
-  if h : bytes.length ≠ 33 then none
+def decompress (bytes : ByteArray) : Option Secp256k1Point :=
+  if h : bytes.size ≠ 33 then none
   else
-    let prefixByte := bytes.head (by grind only [= List.length_nil])
-    let xBytes     := bytes.tail
+    let prefixByte := bytes[0]
+    let xBytes     := bytes.extract 1 33
     let xOpt       := Fp.fromBytesBE xBytes
     match prefixByte == 0x02 || prefixByte == 0x03, xOpt with
     | true, some x =>
@@ -144,13 +144,13 @@ def decompress (bytes : List UInt8) : Option Secp256k1Point :=
     | _, _ => none
 
 -- Compress a point to 33 bytes (prefix byte + x-coordinate)
-def compress (p : Secp256k1Point) : Option (List UInt8) :=
+def compress (p : Secp256k1Point) : Option ByteArray :=
   match toAffine p with
   | none => none
   | some (x, y) =>
-    let prefixByte := if y.val % 2 = 0 then 0x02 else 0x03
+    let prefixByte : UInt8 := if y.val % 2 = 0 then 0x02 else 0x03
     let xBytes := Fp.toBytesBE x
-    some (prefixByte :: xBytes)
+    some (ByteArray.mk #[prefixByte] ++ xBytes)
 
 end Secp256k1Point
 

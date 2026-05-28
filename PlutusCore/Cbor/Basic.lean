@@ -11,7 +11,7 @@ open PlutusCore.Integer (Integer)
 -- Spec from herein refers to the Formal Specification of the Plutus Core Language
 -- found at https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf
 
-namespace CborInternal
+namespace Internal
 
 -- ==============
 -- =  Encoding  =
@@ -770,9 +770,9 @@ end
 def decodeData (s : String) : Option (String × Data) :=
   Prod.map String.mk id <$> decodeDataLoop s.data
 
-end CborInternal
+end Internal
 
-export CborInternal
+export Internal
   ( -- encoding
     encodeBytestring
     encodeInt

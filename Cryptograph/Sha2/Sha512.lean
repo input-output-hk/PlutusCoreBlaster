@@ -57,25 +57,25 @@ def sigma1 (x : UInt64) : UInt64 := rotr64 19 x ^^^ rotr64 61 x ^^^ shr64 6 x
 def Ch (x y z : UInt64) : UInt64 := (x &&& y) ^^^ (~~~x &&& z)
 def Maj (x y z : UInt64) : UInt64 := (x &&& y) ^^^ (x &&& z) ^^^ (y &&& z)
 
--- Convert 8 bytes (big-endian) to UInt64
-def bytesToUInt64BE (bytes : List UInt8) (offset : Nat) : UInt64 :=
-  let get := fun i => if offset + i < bytes.length then bytes[offset + i]!.toUInt64 else 0
+-- Convert 8 bytes (big-endian) to UInt64. Out-of-bounds reads contribute 0.
+def bytesToUInt64BE (bytes : ByteArray) (offset : Nat) : UInt64 :=
+  let get := fun i => if offset + i < bytes.size then bytes[offset + i]!.toUInt64 else 0
   (get 0 <<< 56) ||| (get 1 <<< 48) ||| (get 2 <<< 40) ||| (get 3 <<< 32) |||
-  (get 4 <<< 24) ||| (get 5 <<< 16) ||| (get 6 <<< 8) ||| get 7
+  (get 4 <<< 24) ||| (get 5 <<< 16) ||| (get 6 <<<  8) |||  get 7
 
 -- Pad message
-def padMessage (x : List UInt8) : List UInt8 :=
-  let l      := List.length x
+def padMessage (x : ByteArray) : ByteArray :=
+  let l      := x.size
   let padn   := (240 - ((l + 1) % 128)) % 128
-  let zeroes := List.replicate padn 0x00
+  let zeroes := ⟨Array.replicate padn 0x00⟩
   if l ≥ 2 ^ 125
     then panic! "Message too long!"
-    else x ++ (0x80 :: zeroes) ++ UInt128.toUInt8BE (l * 8)
+    else x ++ ⟨#[0x80]⟩ ++ zeroes ++ UInt128.toUInt8BE (l * 8)
 
--- Process one 1024-bit chunk
-def processChunk (h : List UInt64) (chunk : List UInt8) : List UInt64 :=
+-- Process one 1024-bit chunk (128 bytes starting at `offset` in `x`)
+def processChunk (h : List UInt64) (x : ByteArray) (offset : Nat) : List UInt64 :=
   -- Parse chunk into 16 UInt64 words
-  let w0 := List.range 16 |>.map (fun i => bytesToUInt64BE chunk (i * 8))
+  let w0 := List.range 16 |>.map (fun i => bytesToUInt64BE x (offset + i * 8))
 
   -- Extend to 80 words
   let w := (List.range 64).foldl (fun w i =>
@@ -107,25 +107,26 @@ def processChunk (h : List UInt64) (chunk : List UInt8) : List UInt64 :=
   [h[0]! + a, h[1]! + b, h[2]! + c, h[3]! + d,
    h[4]! + e, h[5]! + f, h[6]! + g, h[7]! + h₀]
 
--- Process all chunks
-def processChunks (h : List UInt64) (x : List UInt8) : List UInt64 :=
-  if x.length < 128 then h
+-- Process all chunks starting at byte offset `i`
+def processChunks (h : List UInt64) (x : ByteArray) (i : Nat) : List UInt64 :=
+  if h_done : i + 128 > x.size then h
   else
-    let chunk := x.take 128
-    let h' := processChunk h chunk
-    processChunks h' (x.drop 128)
-termination_by x.length
-decreasing_by simp; omega
+    let h' := processChunk h x i
+    processChunks h' x (i + 128)
+termination_by x.size - i
+decreasing_by simp_wf; omega
+
+-- Pack the 8 final UInt64 hash values into a 64-byte ByteArray (big-endian)
+def wordsToBytes (h : List UInt64) : ByteArray :=
+  h.foldl (fun acc w => acc ++ UInt64.toUInt8BE w) ByteArray.empty
 
 -- Main hash function
-def hashMessage (x : List UInt8) : List UInt64 :=
-  processChunks initial (padMessage x)
+def hashMessage (x : ByteArray) : ByteArray :=
+  wordsToBytes (processChunks initial (padMessage x) 0)
 
 -- Hash and return hex string
 def hash (x : String) : String :=
-  let hashVals := hashMessage x.toByteList
-  let bytes := hashVals.flatMap UInt64.toUInt8BE
-  uint8ListToHex bytes
+  byteArrayToHex (hashMessage x.toByteArray)
 
 end Internal
 

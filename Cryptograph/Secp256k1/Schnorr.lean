@@ -13,32 +13,18 @@ open Cryptograph.Sha2.Sha256
 def curveOrder : Nat := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
 -- Convert bytes (big-endian) to Nat
-def bytesToNat (bytes : List UInt8) : Nat :=
+def bytesToNat (bytes : ByteArray) : Nat :=
   bytes.foldl (fun acc b => acc * 256 + b.toNat) 0
 
--- Convert Nat to 32 bytes (big-endian)
-partial def natToBytes32 (n : Nat) : List UInt8 :=
-  let rec loop (n : Nat) (count : Nat) : List UInt8 :=
-    if count = 0 then []
-    else
-      let byte := (n % 256).toUInt8
-      loop (n / 256) (count - 1) ++ [byte]
-  loop n 32
-
 -- BIP-340 tagged hash: SHA256(SHA256(tag) || SHA256(tag) || msg)
-def taggedHash (tag : String) (msg : List UInt8) : List UInt8 :=
-  let tagBytes := tag.toUTF8.toList
-  let tagHashVec := hashMessage tagBytes
-  let tagHash := Vector.toList tagHashVec |>.flatMap Cryptograph.Integer.UInt32.toUInt8BE
-
+def taggedHash (tag : String) (msg : ByteArray) : ByteArray :=
+  let tagHash := hashMessage tag.toUTF8
   -- Double the tag hash and append message
-  let input := tagHash ++ tagHash ++ msg
-  let hashVec := hashMessage input
-  Vector.toList hashVec |>.flatMap Cryptograph.Integer.UInt32.toUInt8BE
+  hashMessage (tagHash ++ tagHash ++ msg)
 
 -- Lift x-coordinate to point (assumes even y)
-def liftX (xBytes : List UInt8) : Option Secp256k1Point :=
-  if xBytes.length ≠ 32 then none
+def liftX (xBytes : ByteArray) : Option Secp256k1Point :=
+  if xBytes.size ≠ 32 then none
   else
     -- BIP-340: reject if x ≥ p (raw integer must be a valid field element)
     let xNat := bytesToNat xBytes
@@ -66,14 +52,14 @@ def hasEvenY (p : Secp256k1Point) : Bool :=
   | some (_, y) => y.val % 2 == 0
 
 -- Verify BIP-340 Schnorr signature
-def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=
+def verify (publicKey : ByteArray) (message : ByteArray) (signature : ByteArray) : Bool :=
   -- Check lengths
-  if publicKey.length ≠ 32 then false
-  else if signature.length ≠ 64 then false
+  if publicKey.size ≠ 32 then false
+  else if signature.size ≠ 64 then false
   else
     -- Parse signature: r (32 bytes) || s (32 bytes)
-    let rBytes := signature.take 32
-    let sBytes := signature.drop 32
+    let rBytes := signature.extract 0 32
+    let sBytes := signature.extract 32 64
     let r := bytesToNat rBytes
     let s := bytesToNat sBytes
 

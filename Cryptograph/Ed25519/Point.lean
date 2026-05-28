@@ -76,7 +76,7 @@ instance : HMul Nat EdPoint EdPoint := ⟨scalarMul⟩
 
 -- Scalar multiplication from bytes (little-endian)
 def scalarMulBytes (scalar : List UInt8) (p : EdPoint) : EdPoint :=
-  let n := scalar.foldr (fun b acc => b.toNat + acc * 256) 0
+  let n := scalar.foldr (λ b acc => b.toNat + acc * 256) 0
   scalarMul n p
 
 instance : HMul (List UInt8) EdPoint EdPoint := ⟨scalarMulBytes⟩
@@ -97,15 +97,15 @@ def basePoint : EdPoint :=
 
 -- Decompress a point from y-coordinate and sign bit
 -- Ed25519 uses point compression: only y and sign of x are stored
-def decompress (yBytes : List UInt8) : Option EdPoint :=
-  if yBytes.length ≠ 32 then none
+def decompress (yBytes : ByteArray) : Option EdPoint :=
+  if yBytes.size ≠ 32 then none
   else do
     -- Extract sign bit from last byte
     let lastByte := yBytes[31]!
     let xSign := lastByte >>> 7
 
     -- Clear sign bit to get y coordinate
-    let yBytes := yBytes.set 31 (lastByte &&& 0x7F)
+    let yBytes := yBytes.set! 31 (lastByte &&& 0x7F)
     let y      ← Fp.fromBytesLE yBytes
 
     -- Recover x from y using curve equation: x^2 = (y^2 - 1) / (d*y^2 + 1)
@@ -142,14 +142,13 @@ def curveOrder : Nat := 2^252 + 27742317777372353535851937790883648493
 def isInSubgroup (pt : EdPoint) : Bool := isZero (curveOrder * pt)
 
 -- Compress a point to 32 bytes (y-coordinate + sign bit)
-def compress (p : EdPoint) : List UInt8 :=
+def compress (p : EdPoint) : ByteArray :=
   let (x, y) := toAffine p
   let yBytes := Fp.toBytesLE y
   -- Set high bit of last byte to sign of x
   let lastByte := yBytes[31]!
   let xSign := if x.val % 2 = 0 then 0 else 0x80
-  let yBytes := yBytes.set 31 (lastByte ||| xSign)
-  yBytes
+  yBytes.set! 31 (lastByte ||| xSign)
 
 end EdPoint
 

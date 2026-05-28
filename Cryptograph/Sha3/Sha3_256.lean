@@ -4,8 +4,8 @@ namespace Cryptograph.Sha3.Sha3_256
 
 /-! ## SHA3-256 Hash Implementation-/
 
--- SHA3-256 hash function for byte lists
-def hashBytes (input : List UInt8) : List UInt8 :=
+-- SHA3-256 hash function for byte arrays
+def hashBytes (input : ByteArray) : ByteArray :=
   Cryptograph.Keccak.Keccak256.sha3_256_hashBytes input
 
 -- SHA3-256 hash function for strings

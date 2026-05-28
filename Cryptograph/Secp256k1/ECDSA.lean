@@ -26,12 +26,12 @@ def invModN (a : Nat) : Nat :=
   powModN a (curveOrder - 2)
 
 -- Convert bytes (big-endian) to Nat
-def bytesToNat (bytes : List UInt8) : Nat :=
-  bytes.foldl (fun acc b => acc * 256 + b.toNat) 0
+def bytesToNat (bytes : ByteArray) : Nat :=
+  bytes.foldl (λ acc b => acc * 256 + b.toNat) 0
 
 -- Helper: verify with parsed point
-def verifyWithPoint (q : Secp256k1Point) (r s : Nat) (message : List UInt8) : Bool :=
-  if (message.length != 32) || (s == 0)
+def verifyWithPoint (q : Secp256k1Point) (r s : Nat) (message : ByteArray) : Bool :=
+  if (message.size != 32) || (s == 0)
     then false
     else
       let h := bytesToNat message
@@ -56,13 +56,13 @@ def verifyWithPoint (q : Secp256k1Point) (r s : Nat) (message : List UInt8) : Bo
         (x.val % curveOrder) == r
 
 -- Verify ECDSA signature
-def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=
+def verify (publicKey : ByteArray) (message : ByteArray) (signature : ByteArray) : Bool :=
   -- Check signature length
-  if signature.length != 64 then false
+  if signature.size != 64 then false
   else
     -- Parse signature: r (32 bytes) || s (32 bytes)
-    let rBytes := signature.take 32
-    let sBytes := signature.drop 32
+    let rBytes := signature.extract 0 32
+    let sBytes := signature.extract 32 64
     let r := bytesToNat rBytes
     let s := bytesToNat sBytes
 
@@ -76,10 +76,10 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
       match Secp256k1Point.decompress publicKey with
       | none =>
         -- Try uncompressed format (0x04 || x || y)
-        if publicKey.length != 65 || publicKey[0]! != 0x04 then false
+        if publicKey.size != 65 || publicKey[0]! != 0x04 then false
         else Option.getD (do
-          let xBytes := publicKey.toArray[1:33].toList
-          let yBytes := publicKey.toArray[33:65].toList
+          let xBytes := publicKey.extract 1 33
+          let yBytes := publicKey.extract 33 65
           let x      ← Fp.fromBytesBE xBytes
           let y      ← Fp.fromBytesBE yBytes
           guard (Secp256k1Point.isOnCurve x y)

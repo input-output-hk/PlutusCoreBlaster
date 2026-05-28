@@ -143,7 +143,7 @@ instance {α β} [LE α] [LE β] [DecidableLE α] [DecidableLE β] : LE (α × �
   le x y := leProd x y
 
 instance {α β} [LE α] [LE β] [DecidableLE α] [DecidableLE β] : (x y : α × β) → Decidable (x ≤ y) :=
-  fun x y => inferInstanceAs (Decidable (leProd x y))
+  λ x y => inferInstanceAs (Decidable (leProd x y))
 
 def Fq2.inv (x : Fq2) : Fq2 :=
   let f := (x.u1 * x.u1 + x.u0 * x.u0)⁻¹
@@ -166,7 +166,7 @@ instance : Field Fq2 where
   mulByNonResidual := Fq2.mulByNonResidual
 
 instance : (x y : Fq2) → Decidable (x ≤ y) :=
-  fun x y => inferInstanceAs (Decidable ((x.u1, x.u0) ≤ (y.u1, y.u0)))
+  λ x y => inferInstanceAs (Decidable ((x.u1, x.u0) ≤ (y.u1, y.u0)))
 
 def Fq6.add (x y : Fq6) : Fq6 := ⟨x.v2 + y.v2, x.v1 + y.v1, x.v0 + y.v0⟩
 def Fq6.sub (x y : Fq6) : Fq6 := ⟨x.v2 - y.v2, x.v1 - y.v1, x.v0 - y.v0⟩
@@ -200,7 +200,7 @@ instance : Field Fq6 where
   mulByNonResidual := Fq6.mulByNonResidual
 
 instance : (x y : Fq6) → Decidable (x ≤ y) :=
-  fun x y => inferInstanceAs (Decidable ((x.v2, x.v1, x.v0) ≤ (y.v2, y.v1, y.v0)))
+  λ x y => inferInstanceAs (Decidable ((x.v2, x.v1, x.v0) ≤ (y.v2, y.v1, y.v0)))
 
 instance : Inhabited Fq12 where
   default := Fq12.ofNat 0
@@ -463,71 +463,64 @@ def Fq2.sqrtMod (n : Fq2) : Residues Fq2 :=
 /- "Hashing to Elliptic Curves" specification: (RFC9380) https://datatracker.ietf.org/doc/rfc9380/ -/
 
 /- RFC9380: I2OSP functions -/
-def i2osp₁ (n : Nat) : UInt8      := UInt8.ofNat n
-def i2osp₂ (n : Nat) : List UInt8 := [ UInt8.ofNat (n >>> 8), UInt8.ofNat n ]
+def i2osp₁ (n : Nat) : UInt8     := UInt8.ofNat n
+def i2osp₂ (n : Nat) : ByteArray := ⟨#[ UInt8.ofNat (n >>> 8), UInt8.ofNat n ]⟩
 
 /- Encode natural number n as exactly len big-endian bytes (i2osp generalised). -/
-def i2ospN (n : Nat) (len : Nat) : List UInt8 :=
-  let rec loop (n : Nat) : Nat → List UInt8
-    | 0     => []
-    | k + 1 => loop (n / 256) k ++ [UInt8.ofNat (n % 256)]
-  loop n len
+def i2ospN (n : Nat) (len : Nat) : ByteArray :=
+  let rec loop (acc : List UInt8) (n : Nat) : Nat → List UInt8
+    | 0     => acc
+    | k + 1 => loop (UInt8.ofNat (n % 256) :: acc) (n / 256) k
+  ⟨(loop [] n len).toArray⟩
 
 /- RFC9380: OS2IP function -/
-def os2ip (x : List UInt8) : Nat :=
-  let rec loop (acc : Nat) : List UInt8 → Nat
-    | []     => acc
-    | h :: t => loop (acc * 256 + (UInt8.toNat h)) t
-  loop 0 x
+def os2ip (x : ByteArray) : Nat :=
+  x.foldl (init := 0) (λ acc h => acc * 256 + h.toNat)
 
 /- RFC9380: strxor function -/
-def strxor (a b : List UInt8) : List UInt8 :=
-  let rec loop (acc : List UInt8) : List UInt8 → List UInt8 → List UInt8
-    | h₁ :: t₁, h₂ :: t₂ => loop ((h₁ ^^^ h₂) :: acc) t₁ t₂
-    | _       , _        => List.reverse acc
-  loop [] a b
+def strxor (a b : ByteArray) : ByteArray :=
+  ⟨Array.zipWith (· ^^^ ·) a.data b.data⟩
 
 /- RFC9380: sgn0 function for G1 -/
 def Fq1.sgn₀ (x : Fq1) : Fin 2 := ⟨x.t % 2, by omega⟩
 
-/- Performs SHA256 hashing on the input message and produces the output as a byte list. -/
-def sha256 (x : List UInt8) : List UInt8 :=
-  List.flatMap UInt32.toUInt8BE (Vector.toList (Sha256.hashMessage x))
+/- Performs SHA256 hashing on the input message and produces the output as a byte array. -/
+def sha256 (x : ByteArray) : ByteArray := Sha256.hashMessage x
 
 /-- Helper function to calculate running hashes of the message. -/
-def expandMessageXmdLoop (acc : List (List UInt8)) (b₀ prev dst' : List UInt8) (ell i : Nat) : List UInt8 :=
+def expandMessageXmdLoop (acc : ByteArray) (b₀ prev dst' : ByteArray) (ell i : Nat) : ByteArray :=
   if i > ell
-    then List.flatten (List.reverse acc)
-    else let next := sha256 ((strxor b₀ prev) ++ [i2osp₁ i] ++ dst')
-         expandMessageXmdLoop (next :: acc) b₀ next dst' ell (i + 1)
+    then acc
+    else let next := sha256 ((strxor b₀ prev) ++ ⟨#[i2osp₁ i]⟩ ++ dst')
+         expandMessageXmdLoop (acc ++ next) b₀ next dst' ell (i + 1)
   termination_by (ell + 1 - i)
   decreasing_by omega
 
 /-- Produces a uniformly random byte string using a cryptographic hash function SHA256.
     (RFC9380: expand_message_xmd). -/
-def expandMessageXmd (msg dst : List UInt8) (l : Nat) : Option (List UInt8) :=
+def expandMessageXmd (msg dst : ByteArray) (l : Nat) : Option ByteArray :=
   let b   := 32
   let s   := 64
   let ell := Int.toNat (((l : Rat) / b).ceil)
-  if ell > 255 ∨ l > 65535 ∨ (List.length dst) > 255
+  if ell > 255 ∨ l > 65535 ∨ dst.size > 255
     then .none
     else
-      let dst'   := dst ++ [i2osp₁ (List.length dst)]
-      let zPad   := List.replicate s (0 : UInt8)
+      let dst'   := dst ++ ⟨#[i2osp₁ dst.size]⟩
+      let zPad   := ⟨Array.replicate s (0 : UInt8)⟩
       let libStr := i2osp₂ l
-      let msg'   := zPad ++ msg ++ libStr ++ [i2osp₁ 0] ++ dst'
+      let msg'   := zPad ++ msg ++ libStr ++ ⟨#[i2osp₁ 0]⟩ ++ dst'
       let b₀     := sha256 msg'
-      let b₁     := sha256 (b₀ ++ [i2osp₁ 1] ++ dst')
-      let uBytes := b₁ ++ expandMessageXmdLoop [] b₀ b₁ dst' ell 2
-      .some (List.take l uBytes)
+      let b₁     := sha256 (b₀ ++ ⟨#[i2osp₁ 1]⟩ ++ dst')
+      let uBytes := b₁ ++ expandMessageXmdLoop .empty b₀ b₁ dst' ell 2
+      .some (uBytes.extract 0 l)
 
 /-- Hashes arbitrary-length byte strings to a pair of Fq1 values.
     (RFC9380: hash_to_field) -/
-def Fq1.hashToField (message dst : List UInt8) : Option (Fq1 × Fq1) := do
+def Fq1.hashToField (message dst : ByteArray) : Option (Fq1 × Fq1) := do
   let l      := 2 * 64
   let uBytes ← expandMessageXmd message dst l
-  let u₀     := os2ip (List.take 64 uBytes)
-  let u₁     := os2ip (List.drop 64 uBytes)
+  let u₀     := os2ip (uBytes.extract 0 64)
+  let u₁     := os2ip (uBytes.extract 64 uBytes.size)
   (Fq1.ofNat u₀, Fq1.ofNat u₁)
 
 /-- Maps a Fq1 value to the modified curve E'.
@@ -647,7 +640,7 @@ def Fq1.clearCofactor (q : Point Fq1) : Point Fq1 :=
 /-- Uniform encoding from byte strings to points on the curve E₁.
     That is, the distribution of its output is statistically close to uniform in the subgroup.
     (RFC9380: hash_to_curve, BLS12381G1_XMD:SHA-256_SSWU_RO_) -/
-def Fq1.hashToCurve (message dst : List UInt8) : Option (Point Fq1) := do
+def Fq1.hashToCurve (message dst : ByteArray) : Option (Point Fq1) := do
   let (u₀, u₁) ← Fq1.hashToField message dst
   let q₀       := Fq1.mapToCurve u₀
   let q₁       := Fq1.mapToCurve u₁
@@ -663,18 +656,18 @@ def Fq2.sgn₀ (x : Fq2) : Fin 2 :=
   if sign₀ ∨ (zero₀ ∧ sign₁) then 1 else 0
 
 /-- Creates an Fq2 value from 128 bytes. -/
-def Fq2.ofBytes (x : List UInt8) : Fq2 :=
-  let x₀ := os2ip (x |> List.take 64)
-  let x₁ := os2ip (x |> List.drop 64 |> List.take 64)
+def Fq2.ofBytes (x : ByteArray) : Fq2 :=
+  let x₀ := os2ip (x.extract 0 64)
+  let x₁ := os2ip (x.extract 64 128)
   ⟨Fq1.ofNat x₁, Fq1.ofNat x₀⟩
 
 /-- Hashes arbitrary-length byte strings to a pair of Fq2 values.
     (RFC9380: hash_to_field) -/
-def Fq2.hashToField (message dst : List UInt8) : Option (Fq2 × Fq2) := do
+def Fq2.hashToField (message dst : ByteArray) : Option (Fq2 × Fq2) := do
   let l      := 2 * 2 * 64
   let uBytes ← expandMessageXmd message dst l
   let u₀     := Fq2.ofBytes uBytes
-  let u₁     := Fq2.ofBytes (List.drop 128 uBytes)
+  let u₁     := Fq2.ofBytes (uBytes.extract 128 uBytes.size)
   (u₀, u₁)
 
 /-- Maps a G2 value to the modified curve E'.
@@ -744,7 +737,7 @@ def Fq2.clearCofactor (q : Point Fq2) : Point Fq2 :=
 /-- Uniform encoding from byte strings to points in E₂.
     That is, the distribution of its output is statistically close to uniform in the subgroup.
     (RFC9380: hash_to_curve, BLS12381G2_XMD:SHA-256_SSWU_RO_) -/
-def Fq2.hashToCurve (message dst : List UInt8) : Option (Point Fq2) := do
+def Fq2.hashToCurve (message dst : ByteArray) : Option (Point Fq2) := do
   let (u₀, u₁) ← Fq2.hashToField message dst
   let q₀       := Fq2.mapToCurve u₀
   let q₁       := Fq2.mapToCurve u₁
@@ -752,7 +745,7 @@ def Fq2.hashToCurve (message dst : List UInt8) : Option (Point Fq2) := do
   let p        := Fq2.clearCofactor r
   p
 
-def Fq1.ofBytesWithCheck (b : List UInt8) : Option Fq1 :=
+def Fq1.ofBytesWithCheck (b : ByteArray) : Option Fq1 :=
   let n := os2ip b
   let x := Fq1.ofNat n
   if x.t.val = n
@@ -765,9 +758,9 @@ def Fq1.findY (x : Fq1) (bigger : Bool) : Option Fq1 :=
   | .one y     => .some y
   | .two y₁ y₂ => if bigger then y₂ else y₁
 
-def Fq2.ofBytesWithCheck (b : List UInt8) : Option Fq2 :=
-  let u₁' := os2ip (List.take 48 b)
-  let u₀' := os2ip (List.drop 48 b)
+def Fq2.ofBytesWithCheck (b : ByteArray) : Option Fq2 :=
+  let u₁' := os2ip (b.extract 0 48)
+  let u₀' := os2ip (b.extract 48 b.size)
   let u₁  := Fq1.ofNat u₁'
   let u₀  := Fq1.ofNat u₀'
   if u₁.t.val = u₁' ∧ u₀.t.val = u₀'
@@ -780,43 +773,44 @@ def Fq2.findY (x : Fq2) (bigger : Bool) : Option Fq2 :=
   | .one y     => .some y
   | .two y₁ y₂ => if bigger then y₂ else y₁
 
-def compressG1 : Point Fq1 → List UInt8
-  | .infinity   => 0b11000000 :: List.replicate 47 0
+def compressG1 : Point Fq1 → ByteArray
+  | .infinity   => ⟨#[(0b11000000 : UInt8)] ++ Array.replicate 47 0⟩
   | .affine x y =>
       -- For a correctly constructed point `findY` should always
       -- result in `some y`.
       let y' := Option.getD (Fq1.findY x false) 0
       let b  := i2ospN x.t.val 48
-      let b0 := b.headD 0
-      let b' := b.tail
+      let b0 := b[0]!
+      let b' := b.extract 1 b.size
       if y ≤ y'
-        then (0b10000000 ||| b0) :: b'
-        else (0b10100000 ||| b0) :: b'
+        then ⟨#[0b10000000 ||| b0]⟩ ++ b'
+        else ⟨#[0b10100000 ||| b0]⟩ ++ b'
 
-def compressG2 : Point Fq2 → List UInt8
-  | .infinity   => 0b11000000 :: List.replicate 95 0
+def compressG2 : Point Fq2 → ByteArray
+  | .infinity   => ⟨#[(0b11000000 : UInt8)] ++ Array.replicate 95 0⟩
   | .affine x y =>
       -- For a correctly constructed point `findY` should always
       -- result in `some y`.
       let y' := Option.getD (Fq2.findY x false) 0
       let b  := i2ospN x.u1.t.val 48 ++ i2ospN x.u0.t.val 48
-      let b0 := b.headD 0
-      let b' := b.tail
+      let b0 := b[0]!
+      let b' := b.extract 1 b.size
       if y ≤ y'
-        then (0b10000000 ||| b0) :: b'
-        else (0b10100000 ||| b0) :: b'
+        then ⟨#[0b10000000 ||| b0]⟩ ++ b'
+        else ⟨#[0b10100000 ||| b0]⟩ ++ b'
 
-def uncompress {α} [Field α] [DecidableEq α] (expectedLength : Nat) (he : expectedLength > 0) (ofBytes : List UInt8 → Option α) (findY : α → Bool → Option α) (b : List UInt8) : Option (Point α) :=
-  if h : List.length b ≠ expectedLength
+def uncompress {α} [Field α] [DecidableEq α] (expectedLength : Nat) (_he : expectedLength > 0) (ofBytes : ByteArray → Option α) (findY : α → Bool → Option α) (b : ByteArray) : Option (Point α) :=
+  if b.size ≠ expectedLength
     then .none
-    else let b0   := List.head b (by grind)
+    else let b0   := b[0]!
          let b₃₈₃ := decide (b0 &&& 0b10000000 > 0)
          let b₃₈₂ := decide (b0 &&& 0b01000000 > 0)
          let b₃₈₁ := decide (b0 &&& 0b00100000 > 0)
          let b0'  := b0 &&& 0b00011111
-         let b'   := b0' :: List.tail b
+         let b'   := ⟨#[b0']⟩ ++ b.extract 1 b.size
          match b₃₈₃, b₃₈₂, b₃₈₁ with
-         | true , true , false => if List.all b' (· = 0) then .some .infinity else .none
+         | true , true , false =>
+             if (List.range b'.size).all (λ i => b'[i]! = 0) then .some .infinity else .none
          | true , false, _     => do
              let x  ← ofBytes b'
              let y  ← findY x b₃₈₁
@@ -826,8 +820,8 @@ def uncompress {α} [Field α] [DecidableEq α] (expectedLength : Nat) (he : exp
                else .none
          | _, _, _ => .none
 
-def uncompressG1 : List UInt8 → Option (Point Fq1) := uncompress 48 (by simp) Fq1.ofBytesWithCheck Fq1.findY
-def uncompressG2 : List UInt8 → Option (Point Fq2) := uncompress 96 (by simp) Fq2.ofBytesWithCheck Fq2.findY
+def uncompressG1 : ByteArray → Option (Point Fq1) := uncompress 48 (by simp) Fq1.ofBytesWithCheck Fq1.findY
+def uncompressG2 : ByteArray → Option (Point Fq2) := uncompress 96 (by simp) Fq2.ofBytesWithCheck Fq2.findY
 
 end Internal
 

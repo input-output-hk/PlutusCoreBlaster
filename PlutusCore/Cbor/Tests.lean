@@ -1,7 +1,7 @@
 import PlutusCore.Cbor.Basic
 
 namespace PlutusCore.Cbor
-open PlutusCore.Cbor.CborInternal
+open PlutusCore.Cbor.Internal
 
 -- ==============
 -- =  Encoding  =
