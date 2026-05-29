@@ -61,7 +61,7 @@ def verify (publicKey : ByteArray) (message : ByteArray) (signature : ByteArray)
   if signature.size != 64 then false
   else
     -- Parse signature: r (32 bytes) || s (32 bytes)
-    let rBytes := signature.extract 0 32
+    let rBytes := signature.extract  0 32
     let sBytes := signature.extract 32 64
     let r := bytesToNat rBytes
     let s := bytesToNat sBytes
@@ -76,9 +76,9 @@ def verify (publicKey : ByteArray) (message : ByteArray) (signature : ByteArray)
       match Secp256k1Point.decompress publicKey with
       | none =>
         -- Try uncompressed format (0x04 || x || y)
-        if publicKey.size != 65 || publicKey[0]! != 0x04 then false
+        if publicKey.size != 65 || publicKey[0]? != some 0x04 then false
         else Option.getD (do
-          let xBytes := publicKey.extract 1 33
+          let xBytes := publicKey.extract  1 33
           let yBytes := publicKey.extract 33 65
           let x      ← Fp.fromBytesBE xBytes
           let y      ← Fp.fromBytesBE yBytes

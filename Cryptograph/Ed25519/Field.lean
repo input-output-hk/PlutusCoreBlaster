@@ -104,6 +104,21 @@ def toBytesLE (a : Fp) : ByteArray :=
     else loop (acc.push (n % 256).toUInt8) (n / 256) (count - 1)
   loop ByteArray.empty a.val 32
 
+theorem ByteArray.push_length (b : ByteArray) (x : UInt8) : ByteArray.size (b.push x) = b.size + 1 := by
+  simp [ByteArray.push, ByteArray.size]
+
+theorem toBytesLE_loop_length (acc : ByteArray) (n count : Nat) : ByteArray.size (toBytesLE.loop acc n count) = acc.size + count := by
+  induction count generalizing acc n with
+  | zero          => simp [toBytesLE.loop]
+  | succ count ih =>
+      unfold toBytesLE.loop
+      simp [ih, ByteArray.push_length]
+      omega
+
+theorem toBytesLE_length (a : Fp) : ByteArray.size (toBytesLE a) = 32 := by
+  simp [toBytesLE]
+  apply toBytesLE_loop_length
+
 end Fp
 
 end Cryptograph.Ed25519.Field

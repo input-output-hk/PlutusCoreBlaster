@@ -59,7 +59,7 @@ def Maj (x y z : UInt64) : UInt64 := (x &&& y) ^^^ (x &&& z) ^^^ (y &&& z)
 
 -- Convert 8 bytes (big-endian) to UInt64. Out-of-bounds reads contribute 0.
 def bytesToUInt64BE (bytes : ByteArray) (offset : Nat) : UInt64 :=
-  let get := fun i => if offset + i < bytes.size then bytes[offset + i]!.toUInt64 else 0
+  let get := λ i => if h : offset + i < bytes.size then bytes[offset + i].toUInt64 else 0
   (get 0 <<< 56) ||| (get 1 <<< 48) ||| (get 2 <<< 40) ||| (get 3 <<< 32) |||
   (get 4 <<< 24) ||| (get 5 <<< 16) ||| (get 6 <<<  8) |||  get 7
 
@@ -75,10 +75,10 @@ def padMessage (x : ByteArray) : ByteArray :=
 -- Process one 1024-bit chunk (128 bytes starting at `offset` in `x`)
 def processChunk (h : List UInt64) (x : ByteArray) (offset : Nat) : List UInt64 :=
   -- Parse chunk into 16 UInt64 words
-  let w0 := List.range 16 |>.map (fun i => bytesToUInt64BE x (offset + i * 8))
+  let w0 := List.range 16 |>.map (λ i => bytesToUInt64BE x (offset + i * 8))
 
   -- Extend to 80 words
-  let w := (List.range 64).foldl (fun w i =>
+  let w := (List.range 64).foldl (λ w i =>
     let w16 := w[i]!
     let w15 := w[i + 1]!
     let w7 := w[i + 9]!
@@ -97,7 +97,7 @@ def processChunk (h : List UInt64) (x : ByteArray) (offset : Nat) : List UInt64 
   let h₀ := h[7]!
 
   -- 80 rounds
-  let (a, b, c, d, e, f, g, h₀) := (List.range 80).zip (w.zip k) |>.foldl (fun (a, b, c, d, e, f, g, h) (_, (wi, ki)) =>
+  let (a, b, c, d, e, f, g, h₀) := (List.range 80).zip (w.zip k) |>.foldl (λ (a, b, c, d, e, f, g, h) (_, (wi, ki)) =>
     let T1 := h + bigSigma1 e + Ch e f g + ki + wi
     let T2 := bigSigma0 a + Maj a b c
     (T1 + T2, a, b, c, d + T1, e, f, g)
@@ -118,7 +118,7 @@ decreasing_by simp_wf; omega
 
 -- Pack the 8 final UInt64 hash values into a 64-byte ByteArray (big-endian)
 def wordsToBytes (h : List UInt64) : ByteArray :=
-  h.foldl (fun acc w => acc ++ UInt64.toUInt8BE w) ByteArray.empty
+  h.foldl (λ acc w => acc ++ UInt64.toUInt8BE w) ByteArray.empty
 
 -- Main hash function
 def hashMessage (x : ByteArray) : ByteArray :=

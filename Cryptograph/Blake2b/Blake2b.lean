@@ -37,17 +37,17 @@ private def rotr64 (x : UInt64) (n : Nat) : UInt64 :=
   (x >>> n.toUInt64) ||| (x <<< (64 - n).toUInt64)
 
 -- Convert 8 bytes (little-endian) to UInt64
-private def bytesToUInt64LE (bytes : ByteArray) (offset : Nat) : UInt64 :=
-  let b0 := if offset + 0 < bytes.size then bytes[offset + 0]!.toUInt64 else 0
-  let b1 := if offset + 1 < bytes.size then bytes[offset + 1]!.toUInt64 else 0
-  let b2 := if offset + 2 < bytes.size then bytes[offset + 2]!.toUInt64 else 0
-  let b3 := if offset + 3 < bytes.size then bytes[offset + 3]!.toUInt64 else 0
-  let b4 := if offset + 4 < bytes.size then bytes[offset + 4]!.toUInt64 else 0
-  let b5 := if offset + 5 < bytes.size then bytes[offset + 5]!.toUInt64 else 0
-  let b6 := if offset + 6 < bytes.size then bytes[offset + 6]!.toUInt64 else 0
-  let b7 := if offset + 7 < bytes.size then bytes[offset + 7]!.toUInt64 else 0
-  b0 ||| (b1 <<< 8) ||| (b2 <<< 16) ||| (b3 <<< 24) |||
-  (b4 <<< 32) ||| (b5 <<< 40) ||| (b6 <<< 48) ||| (b7 <<< 56)
+private def bytesToUInt64LE (b : ByteArray) (offset : Nat) : UInt64 :=
+  let b₀ := if h₀ : offset + 0 < b.size then b[offset + 0].toUInt64 else 0
+  let b₁ := if h₁ : offset + 1 < b.size then b[offset + 1].toUInt64 else 0
+  let b₂ := if h₂ : offset + 2 < b.size then b[offset + 2].toUInt64 else 0
+  let b₃ := if h₃ : offset + 3 < b.size then b[offset + 3].toUInt64 else 0
+  let b₄ := if h₄ : offset + 4 < b.size then b[offset + 4].toUInt64 else 0
+  let b₅ := if h₅ : offset + 5 < b.size then b[offset + 5].toUInt64 else 0
+  let b₆ := if h₆ : offset + 6 < b.size then b[offset + 6].toUInt64 else 0
+  let b₇ := if h₇ : offset + 7 < b.size then b[offset + 7].toUInt64 else 0
+  b₀ ||| (b₁ <<<  8) ||| (b₂ <<< 16) ||| (b₃ <<< 24)
+     ||| (b₄ <<< 32) ||| (b₅ <<< 40) ||| (b₆ <<< 48) ||| (b₇ <<< 56)
 
 -- Convert UInt64 to 8 bytes (little-endian)
 private def uint64ToBytes (x : UInt64) : Array UInt8 :=
@@ -128,7 +128,7 @@ def blake2b (inputBytes : ByteArray) (outputLen : Nat) : ByteArray :=
     -- Initialize state with IV XOR parameter block
     -- Parameter block: digest_length || key_length || fanout || depth || ...
     let h := iv.map id  -- Copy IV
-    let h := h.set! 0 (h[0]! ^^^ 0x01010000 ^^^ outputLen.toUInt64)
+    let h := h.set 0 (h[0] ^^^ 0x01010000 ^^^ outputLen.toUInt64)
 
     -- Process full blocks
     let blockSize := 128  -- Blake2b block size in bytes

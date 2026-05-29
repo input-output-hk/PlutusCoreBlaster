@@ -364,7 +364,7 @@ def millerLoop (p : Point Fq1) (q : Point Fq2) (r : Point Fq2) (acc : Fq12) : Li
 /-- Calculates the value of the pairing (E) for point `p` and `q` without the final exponentiation.
     Implementation uses the canonical Miller loop. -/
 def calculateMillerLoop (p : Point Fq1) (q : Point Fq2) : Option Fq12 :=
-  millerLoop p q q 1 (List.tail! millerLoopIterBinary)
+  millerLoop p q q 1 (List.tail millerLoopIterBinary)
 
 /-- Tail-recursive implementation of the binary power. -/
 def binaryPowLoop {α} [Field α] (a acc : α) (n : Nat) : α :=
@@ -472,6 +472,14 @@ def i2ospN (n : Nat) (len : Nat) : ByteArray :=
     | 0     => acc
     | k + 1 => loop (UInt8.ofNat (n % 256) :: acc) (n / 256) k
   ⟨(loop [] n len).toArray⟩
+
+theorem i2ospN_loop_length (acc : List UInt8) (n len : Nat) : List.length (i2ospN.loop acc n len) = List.length acc + len := by
+  induction len generalizing acc n with
+  | zero       => simp [i2ospN.loop]
+  | succ n' ih => simp [i2ospN.loop, ih]; omega
+
+theorem i2ospN_length (n len : Nat) : ByteArray.size (i2ospN n len) = len := by
+  simp [i2ospN, ByteArray.size, i2ospN_loop_length]
 
 /- RFC9380: OS2IP function -/
 def os2ip (x : ByteArray) : Nat :=
@@ -780,11 +788,15 @@ def compressG1 : Point Fq1 → ByteArray
       -- result in `some y`.
       let y' := Option.getD (Fq1.findY x false) 0
       let b  := i2ospN x.t.val 48
-      let b0 := b[0]!
+      have h : b.size = 48 := i2ospN_length x.t.val 48
+      let b0 := b[0]
       let b' := b.extract 1 b.size
       if y ≤ y'
         then ⟨#[0b10000000 ||| b0]⟩ ++ b'
         else ⟨#[0b10100000 ||| b0]⟩ ++ b'
+
+theorem ByteArray.append_length (x y : ByteArray) : ByteArray.size (x ++ y) = x.size + y.size := by
+  simp [ByteArray.size, ByteArray.append, ByteArray.copySlice]
 
 def compressG2 : Point Fq2 → ByteArray
   | .infinity   => ⟨#[(0b11000000 : UInt8)] ++ Array.replicate 95 0⟩
@@ -793,16 +805,17 @@ def compressG2 : Point Fq2 → ByteArray
       -- result in `some y`.
       let y' := Option.getD (Fq2.findY x false) 0
       let b  := i2ospN x.u1.t.val 48 ++ i2ospN x.u0.t.val 48
-      let b0 := b[0]!
+      have h : b.size = 96 := by simp [b, i2ospN_length, ByteArray.append_length]
+      let b0 := getElem b 0 (by simp [h])
       let b' := b.extract 1 b.size
       if y ≤ y'
         then ⟨#[0b10000000 ||| b0]⟩ ++ b'
         else ⟨#[0b10100000 ||| b0]⟩ ++ b'
 
 def uncompress {α} [Field α] [DecidableEq α] (expectedLength : Nat) (_he : expectedLength > 0) (ofBytes : ByteArray → Option α) (findY : α → Bool → Option α) (b : ByteArray) : Option (Point α) :=
-  if b.size ≠ expectedLength
+  if h : b.size ≠ expectedLength
     then .none
-    else let b0   := b[0]!
+    else let b0   := b[0]
          let b₃₈₃ := decide (b0 &&& 0b10000000 > 0)
          let b₃₈₂ := decide (b0 &&& 0b01000000 > 0)
          let b₃₈₁ := decide (b0 &&& 0b00100000 > 0)

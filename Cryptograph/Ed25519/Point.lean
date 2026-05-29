@@ -98,14 +98,14 @@ def basePoint : EdPoint :=
 -- Decompress a point from y-coordinate and sign bit
 -- Ed25519 uses point compression: only y and sign of x are stored
 def decompress (yBytes : ByteArray) : Option EdPoint :=
-  if yBytes.size ≠ 32 then none
+  if h : yBytes.size ≠ 32 then none
   else do
     -- Extract sign bit from last byte
-    let lastByte := yBytes[31]!
+    let lastByte := yBytes[31]
     let xSign := lastByte >>> 7
 
     -- Clear sign bit to get y coordinate
-    let yBytes := yBytes.set! 31 (lastByte &&& 0x7F)
+    let yBytes := yBytes.set 31 (lastByte &&& 0x7F)
     let y      ← Fp.fromBytesLE yBytes
 
     -- Recover x from y using curve equation: x^2 = (y^2 - 1) / (d*y^2 + 1)
@@ -145,10 +145,11 @@ def isInSubgroup (pt : EdPoint) : Bool := isZero (curveOrder * pt)
 def compress (p : EdPoint) : ByteArray :=
   let (x, y) := toAffine p
   let yBytes := Fp.toBytesLE y
+  have hyb   :  yBytes.size = 32 := Fp.toBytesLE_length y
   -- Set high bit of last byte to sign of x
-  let lastByte := yBytes[31]!
+  let lastByte := yBytes[31]
   let xSign := if x.val % 2 = 0 then 0 else 0x80
-  yBytes.set! 31 (lastByte ||| xSign)
+  yBytes.set 31 (lastByte ||| xSign)
 
 end EdPoint
 
