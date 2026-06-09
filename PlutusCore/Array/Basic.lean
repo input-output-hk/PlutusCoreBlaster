@@ -2,10 +2,10 @@ namespace PlutusCore.Array
 
 namespace Internal
 
-def lengthOfArray {α} : Array α → Nat     := Array.size   (α := α)
-def listToArray   {α} : List α  → Array α := List.toArray (α := α)
+def lengthOfArray {α} : List α → Nat    := List.length
+def listToArray   {α} : List α → List α := id
 
-def indexArray {α} (a : Array α) (n : Nat) : Option α := a[n]?
+def indexArray {α} (a : List α) (n : Nat) : Option α := a[n]?
 
 end Internal
 
