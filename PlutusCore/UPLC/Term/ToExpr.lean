@@ -48,7 +48,7 @@ partial def constToExpr : Const → Expr
   | .ConstList            l => .app (.const ``Const.ConstList            []) (listToExpr (α := Const) (.const ``Const []) constToExpr l)
   | .ConstDataList        l => .app (.const ``Const.ConstDataList        []) (toExpr l)
   | .ConstPairDataList    l => .app (.const ``Const.ConstPairDataList    []) (toExpr l)
-  | .ConstArray           a => .app (.const ``Const.ConstArray           []) (arrayToExpr (α := Const) (.const ``Const []) constToExpr a)
+  | .ConstArray           a => .app (.const ``Const.ConstArray           []) (listToExpr (α := Const) (.const ``Const []) constToExpr a)
   | .Pair                 p => .app (.const ``Const.Pair                 []) (pairToExpr (α := Const) (β := Const) (.const ``Const []) (.const ``Const []) constToExpr constToExpr p)
   | .PairData             p => .app (.const ``Const.PairData             []) (toExpr p)
   | .Data                 d => .app (.const ``Const.Data                 []) (toExpr d)
