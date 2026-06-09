@@ -27,7 +27,7 @@ mutual
     | .Bool a                , .Bool b                 => a == b
     | .ConstList a           , .ConstList b            => listBeq a b
     | .ConstDataList a       , .ConstDataList b        => a == b
-    | .ConstArray a          , .ConstArray b           => arrayBeq a b
+    | .ConstArray a          , .ConstArray b           => listBeq a b
     | .ConstPairDataList a   , .ConstPairDataList b    => a == b
     | .Pair (a1, a2)         , .Pair (b1, b2)          => constBeq a1 b1 && constBeq a2 b2
     | .PairData a            , .PairData b             => a == b

@@ -153,7 +153,7 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
              Prod.map id .ConstPairDataList <$> decodeList decodeConstPairData s
        | _ => Prod.map id Const.ConstList <$> decodeList (flip decodeConstValue t) s -- heterogenous list
   | .TypeOperator (.TypeArray t)    =>
-      Prod.map id (.ConstArray ∘ List.toArray) <$> decodeList (flip decodeConstValue t) s
+      Prod.map id .ConstArray <$> decodeList (flip decodeConstValue t) s
   | .TypeOperator (.TypePair t₁ t₂) => do
       let (s₁, c₁) ← decodeConstValue s  t₁
       let (s₂, c₂) ← decodeConstValue s₁ t₂

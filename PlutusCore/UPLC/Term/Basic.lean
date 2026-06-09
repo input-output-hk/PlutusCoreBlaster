@@ -44,7 +44,7 @@ inductive Const
   | ConstList             : List Const → Const
   | ConstDataList         : List Data → Const          -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | ConstPairDataList     : List (Data × Data) → Const -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
-  | ConstArray            : Array Const → Const
+  | ConstArray            : List Const → Const         -- TODO: Replace list with array once Blaster adds support
   | Pair                  : Const × Const → Const
   | PairData              : Data × Data → Const        -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | Data                  : Data → Const
