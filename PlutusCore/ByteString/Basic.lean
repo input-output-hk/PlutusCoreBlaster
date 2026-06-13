@@ -112,11 +112,15 @@ theorem UInt8.lt_irrefl (x : UInt8) : ¬ x < x := by
 instance : Std.Irrefl ( . < . : UInt8 → UInt8 → Prop) where
   irrefl := UInt8.lt_irrefl
 
+/-! Std.Irrefl instance for ByteString -/
 @[simp] theorem ByteString.lt_irrefl (x : ByteString) : ¬ x < x := by
   match x with
   | ByteString.mk v =>
        unfold LT.lt LTByteString
        apply List.lt_irrefl
+
+instance : Std.Irrefl (. < . : ByteString → ByteString → Prop) where
+  irrefl := ByteString.lt_irrefl
 
 @[simp] def ByteString.length (bs : ByteString) : Nat := bs.data.length
 
