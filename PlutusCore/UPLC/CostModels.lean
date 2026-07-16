@@ -200,7 +200,7 @@ def minArgSize (args : List CekValue) : Nat :=
 def valueMaxDepth (args : List CekValue) (i : Nat) : Nat :=
   match args[i]? with
   | some (.VCon (.Value v)) =>
-      let outerSize := v.size
+      let outerSize := v.length
       let innerSize := PlutusCore.Value.maxInnerSize v
       let logOuter := if outerSize == 0 then 0 else Nat.log2 outerSize + 1
       let logInner := if innerSize == 0 then 0 else Nat.log2 innerSize + 1
