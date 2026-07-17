@@ -79,16 +79,13 @@ def encodeBytestring (s : ByteArray) : Option ByteArray :=
 /-- Encodes a natural number as a list of bytes in big-endian. -/
 -- Spec B.6. itos
 def itos (n : Nat) : ByteArray :=
-  let rec loop (acc : ByteArray) (n : Nat) :=
-    if h : n == 0
+  let rec loop (acc : List UInt8) (n : Nat) : List UInt8 :=
+    if h : n = 0
       then acc
-      else loop (acc.push (n % 256).toUInt8) (n / 256)
+      else loop ((n % 256).toUInt8 :: acc) (n / 256)
   termination_by n
-  decreasing_by
-    apply Nat.div_lt_self
-    · simp at h; omega
-    · omega
-  loop .empty n
+  decreasing_by omega
+  (loop [] n).toByteArray
 
 /-- Encodes an integer using zigzag encoding. -/
 -- Spec B.6. ε_Z
