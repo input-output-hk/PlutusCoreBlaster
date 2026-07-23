@@ -525,8 +525,8 @@ mutual
   /-- Parse a UPLC `Term`.
       `ctx` is the stack of binder names in scope, innermost first; variable
       names are resolved to de Bruijn indices against it at parse time. An
-      unbound name resolves to the out-of-range index `ctx.length`, so open
-      terms parse successfully and fail at evaluation (as in plutus-core). -/
+      unbound name will trigger a parse error.
+  -/
   -- Dispatch on the first non-whitespace character to avoid peek lookup issues.
   partial def parseTerm (v : Version) (ctx : List String) : Parser Term := fun s =>
     match (ws : Parser Unit) s with
@@ -577,8 +577,11 @@ mutual
       | other     => fail s!"unknown term keyword '{other}'"
 
   /-- A bare identifier is a variable, resolved to its de Bruijn index. -/
-  partial def parseVar (ctx : List String) : Parser Term :=
-    (fun name => .Var (ctx.idxOf name)) <$> varName
+  partial def parseVar (ctx : List String) : Parser Term := do
+    let name ← varName
+    let idx := ctx.idxOf name
+    if idx == ctx.length then fail "unbound variable {name}"
+    else return .Var idx
 
 end
 

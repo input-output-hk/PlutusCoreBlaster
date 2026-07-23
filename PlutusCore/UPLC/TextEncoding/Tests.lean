@@ -2454,8 +2454,17 @@ example : programFromString? "-- ill-typed. This fails at runtime since the buil
 -- term/unlifting-unsat
 example : programFromString? "-- ill-typed but does not fail at runtime because the builtin application is not saturated.\n(program 1.0.0 [(builtin addInteger) (con unit ())])" |> Option.isSome := by native_decide
 
--- term/var
-example : programFromString? "(program 1.0.0 x)" |> Option.isSome := by native_decide
+-- term/var (unbounded variable)
+example : programFromString? "(program 1.0.0 x)" |> Option.isNone := by native_decide
+
+-- term/var (unbounded variable)
+example : programFromString? "(program 1.0.0 (lam x y)" |> Option.isNone := by native_decide
+
+-- term/var (unbounded variables)
+example : programFromString? "(program 1.0.0 (lam x [ (builtin addInteger) y z ]))" |> Option.isNone := by native_decide
+
+-- term/var (bounded variables)
+example : programFromString? "(program 1.0.0 (lam x [ (builtin addInteger) x x ]))" |> Option.isSome := by native_decide
 
 -- ====================
 -- =  Negative cases  =
