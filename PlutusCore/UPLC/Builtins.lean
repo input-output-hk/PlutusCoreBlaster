@@ -130,8 +130,18 @@ def expectedArgs (b : BuiltinFun) : ExpectedBuiltinArgs :=
   | Ripemd_160                      => One ArgV
   -- Batch 6
   | ExpModInteger                   => ArgV ⊙ ArgV ⊙ One ArgV
-  -- Batch 7
   | DropList                        => ArgQ ⊙ ArgV ⊙ One ArgV
+  | LengthOfArray                   => ArgQ ⊙ One ArgV
+  | ListToArray                     => ArgQ ⊙ One ArgV
+  | IndexArray                      => ArgQ ⊙ ArgV ⊙ One ArgV
+  -- Value builtins
+  | InsertCoin                      => ArgV ⊙ ArgV ⊙ ArgV ⊙ One ArgV
+  | LookupCoin                      => ArgV ⊙ ArgV ⊙ One ArgV
+  | UnionValue                      => ArgV ⊙ One ArgV
+  | ValueContains                   => ArgV ⊙ One ArgV
+  | ValueData                       => One ArgV
+  | UnValueData                     => One ArgV
+  | ScaleValue                      => ArgV ⊙ One ArgV
 
 namespace BuiltinNotations
 

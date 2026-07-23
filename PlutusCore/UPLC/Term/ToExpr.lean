@@ -5,6 +5,11 @@ namespace PlutusCore.UPLC.Term
 
 open Lean
 
+open PlutusCore.ByteString (ByteString)
+open PlutusCore.Data
+open PlutusCore.Integer (Integer)
+open PlutusCore.Value (Value)
+
 instance : ToExpr AtomicType where
   toTypeExpr := .const ``AtomicType []
   toExpr
@@ -14,6 +19,7 @@ instance : ToExpr AtomicType where
     | .TypeBool                 => .const ``AtomicType.TypeBool                 []
     | .TypeUnit                 => .const ``AtomicType.TypeUnit                 []
     | .TypeData                 => .const ``AtomicType.TypeData                 []
+    | .TypeValue                => .const ``AtomicType.TypeValue                []
     | .TypeBls12_381_G1_element => .const ``AtomicType.TypeBls12_381_G1_element []
     | .TypeBls12_381_G2_element => .const ``AtomicType.TypeBls12_381_G2_element []
     | .TypeBls12_381_MlResult   => .const ``AtomicType.TypeBls12_381_MlResult   []
@@ -24,8 +30,9 @@ mutual
     | .TypeOperator t => .app (.const ``BuiltinType.TypeOperator []) (TypeOperator.toExpr t)
 
   def TypeOperator.toExpr : TypeOperator → Expr
-    | .TypeList b     =>  .app  (.const ``TypeOperator.TypeList []) (BuiltinType.toExpr b)
-    | .TypePair b₁ b₂ => mkApp2 (.const ``TypeOperator.TypePair []) (BuiltinType.toExpr b₁) (BuiltinType.toExpr b₂)
+    | .TypeList b     =>  .app  (.const ``TypeOperator.TypeList  []) (BuiltinType.toExpr b)
+    | .TypeArray b    =>  .app  (.const ``TypeOperator.TypeArray []) (BuiltinType.toExpr b)
+    | .TypePair b₁ b₂ => mkApp2 (.const ``TypeOperator.TypePair  []) (BuiltinType.toExpr b₁) (BuiltinType.toExpr b₂)
 end
 
 instance : ToExpr BuiltinType where
@@ -36,6 +43,26 @@ instance : ToExpr TypeOperator where
   toTypeExpr := .const ``TypeOperator []
   toExpr     := TypeOperator.toExpr
 
+/-- Emits the Lean expression
+    `PlutusCore.Value.fromList! <assoc-list>`, where the assoc list is
+    obtained from `PlutusCore.Value.toAssocList`. `fromList!` is total and
+    round-trips for any normalised `Value`. -/
+private def valueToExpr (v : Value) : Expr :=
+  let bsType        : Expr := .const ``ByteString []
+  let intType       : Expr := .const ``Int []
+  let assetPairType : Expr := mkApp2 (.const ``Prod [.zero, .zero]) bsType intType
+  let assetsType    : Expr := .app  (.const ``List [.zero]) assetPairType
+  let entryType     : Expr := mkApp2 (.const ``Prod [.zero, .zero]) bsType assetsType
+  let assetsExpr : List (ByteString × Integer) → Expr :=
+    listToExpr (α := ByteString × Integer) assetPairType
+      (pairToExpr (α := ByteString) (β := Integer) bsType intType toExpr integerToExpr)
+  let assocListExpr : Expr :=
+    listToExpr (α := ByteString × List (ByteString × Integer)) entryType
+      (fun p => pairToExpr (α := ByteString) (β := List (ByteString × Integer))
+                  bsType assetsType toExpr assetsExpr p)
+      (PlutusCore.Value.toAssocList v)
+  .app (.app (.const ``PlutusCore.Value.fromListD []) assocListExpr) (.const ``PlutusCore.Value.empty [])
+
 partial def constToExpr : Const → Expr
   | .Integer              i => .app (.const ``Const.Integer              []) (toExpr i)
   | .ByteString           b => .app (.const ``Const.ByteString           []) (toExpr b)
@@ -45,9 +72,11 @@ partial def constToExpr : Const → Expr
   | .ConstList            l => .app (.const ``Const.ConstList            []) (listToExpr (α := Const) (.const ``Const []) constToExpr l)
   | .ConstDataList        l => .app (.const ``Const.ConstDataList        []) (toExpr l)
   | .ConstPairDataList    l => .app (.const ``Const.ConstPairDataList    []) (toExpr l)
+  | .ConstArray           a => .app (.const ``Const.ConstArray           []) (arrayToExpr (α := Const) (.const ``Const []) constToExpr a)
   | .Pair                 p => .app (.const ``Const.Pair                 []) (pairToExpr (α := Const) (β := Const) (.const ``Const []) (.const ``Const []) constToExpr constToExpr p)
   | .PairData             p => .app (.const ``Const.PairData             []) (toExpr p)
   | .Data                 d => .app (.const ``Const.Data                 []) (toExpr d)
+  | .Value                v => .app (.const ``Const.Value                []) (valueToExpr v)
   | .Bls12_381_G1_element p => .app (.const ``Const.Bls12_381_G1_element []) (toExpr p)
   | .Bls12_381_G2_element q => .app (.const ``Const.Bls12_381_G2_element []) (toExpr q)
   | .Bls12_381_MlResult   r => .app (.const ``Const.Bls12_381_MlResult   []) (toExpr r)
@@ -150,6 +179,16 @@ instance : ToExpr BuiltinFun where
     | .Ripemd_160                      => .const ``BuiltinFun.Ripemd_160 []
     | .ExpModInteger                   => .const ``BuiltinFun.ExpModInteger []
     | .DropList                        => .const ``BuiltinFun.DropList []
+    | .LengthOfArray                   => .const ``BuiltinFun.LengthOfArray []
+    | .ListToArray                     => .const ``BuiltinFun.ListToArray []
+    | .IndexArray                      => .const ``BuiltinFun.IndexArray []
+    | .InsertCoin                      => .const ``BuiltinFun.InsertCoin []
+    | .LookupCoin                      => .const ``BuiltinFun.LookupCoin []
+    | .UnionValue                      => .const ``BuiltinFun.UnionValue []
+    | .ValueContains                   => .const ``BuiltinFun.ValueContains []
+    | .ValueData                       => .const ``BuiltinFun.ValueData []
+    | .UnValueData                     => .const ``BuiltinFun.UnValueData []
+    | .ScaleValue                      => .const ``BuiltinFun.ScaleValue []
 
 partial def termToExpr : PlutusCore.UPLC.Term.Term → Expr
   | .Var     s   =>  .app  (.const ``Term.Var     []) (toExpr s)

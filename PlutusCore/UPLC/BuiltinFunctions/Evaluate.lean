@@ -1,6 +1,7 @@
 import PlutusCore.Default
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
+import PlutusCore.UPLC.BuiltinFunctions.Array
 import PlutusCore.UPLC.BuiltinFunctions.Bitwise
 import PlutusCore.UPLC.BuiltinFunctions.Bool
 import PlutusCore.UPLC.BuiltinFunctions.ByteString
@@ -12,12 +13,14 @@ import PlutusCore.UPLC.BuiltinFunctions.Pair
 import PlutusCore.UPLC.BuiltinFunctions.String
 import PlutusCore.UPLC.BuiltinFunctions.Trace
 import PlutusCore.UPLC.BuiltinFunctions.Unit
+import PlutusCore.UPLC.BuiltinFunctions.Value
 
 namespace PlutusCore.UPLC.BuiltinFunctions.Evaluate
 
 open PlutusCore.Default
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Array
 open PlutusCore.UPLC.BuiltinFunctions.Bitwise
 open PlutusCore.UPLC.BuiltinFunctions.Bool
 open PlutusCore.UPLC.BuiltinFunctions.ByteString
@@ -28,6 +31,7 @@ open PlutusCore.UPLC.BuiltinFunctions.Pair
 open PlutusCore.UPLC.BuiltinFunctions.String
 open PlutusCore.UPLC.BuiltinFunctions.Trace
 open PlutusCore.UPLC.BuiltinFunctions.Unit
+open PlutusCore.UPLC.BuiltinFunctions.Value
 
 -- Evaluate a builtin function based on its type.
 def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : BuiltinFun) : List CekValue → Option CekValue :=
@@ -142,7 +146,17 @@ def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : Bu
   | .Ripemd_160                      => Crypto.ripemd_160
   -- Batch 6
   | .ExpModInteger                   => expModInteger
-  -- Batch 7
   | .DropList                        => dropList
+  | .LengthOfArray                   => lengthOfArray
+  | .ListToArray                     => listToArray
+  | .IndexArray                      => indexArray
+  -- Value
+  | .InsertCoin                      => Value.insertCoin
+  | .LookupCoin                      => Value.lookupCoin
+  | .UnionValue                      => Value.unionValue
+  | .ValueContains                   => Value.valueContains
+  | .ValueData                       => Value.valueData
+  | .UnValueData                     => Value.unValueData
+  | .ScaleValue                      => Value.scaleValue
 
 end PlutusCore.UPLC.BuiltinFunctions.Evaluate
