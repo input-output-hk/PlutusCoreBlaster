@@ -496,11 +496,13 @@ def Fq1.sgn₀ (x : Fq1) : Fin 2 := ⟨x.t % 2, by omega⟩
 def sha256 (x : ByteArray) : ByteArray := Sha256.hashMessage x
 
 /-- Helper function to calculate running hashes of the message. -/
-def expandMessageXmdLoop (acc : ByteArray) (b₀ prev dst' : ByteArray) (ell i : Nat) : ByteArray :=
+def expandMessageXmdLoop (acc : List ByteArray) (totalLength : Nat) (b₀ prev dst' : ByteArray) (ell i : Nat) : ByteArray :=
   if i > ell
-    then acc
-    else let next := sha256 ((strxor b₀ prev) ++ ⟨#[i2osp₁ i]⟩ ++ dst')
-         expandMessageXmdLoop (acc ++ next) b₀ next dst' ell (i + 1)
+    then
+      List.foldl (· ++ ·) (.emptyWithCapacity totalLength) (List.reverse acc)
+    else
+      let next := sha256 ((strxor b₀ prev) ++ ⟨#[i2osp₁ i]⟩ ++ dst')
+      expandMessageXmdLoop (next :: acc) (totalLength + 8) b₀ next dst' ell (i + 1)
   termination_by (ell + 1 - i)
   decreasing_by omega
 
@@ -519,7 +521,7 @@ def expandMessageXmd (msg dst : ByteArray) (l : Nat) : Option ByteArray :=
       let msg'   := zPad ++ msg ++ libStr ++ ⟨#[i2osp₁ 0]⟩ ++ dst'
       let b₀     := sha256 msg'
       let b₁     := sha256 (b₀ ++ ⟨#[i2osp₁ 1]⟩ ++ dst')
-      let uBytes := b₁ ++ expandMessageXmdLoop .empty b₀ b₁ dst' ell 2
+      let uBytes := b₁ ++ expandMessageXmdLoop [] 0 b₀ b₁ dst' ell 2
       .some (uBytes.extract 0 l)
 
 /-- Hashes arbitrary-length byte strings to a pair of Fq1 values.
