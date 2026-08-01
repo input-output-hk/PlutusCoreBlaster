@@ -157,10 +157,20 @@ def mkNilPairData (Vs : List CekValue) : Option CekValue :=
       CekValue.VCon $ Const.ConstPairDataList (PLC.mkNilPairData ())
   | _ => none
 
+/-- Opaque alias of the CBOR encoder, used only by the SerializeData builtin.
+    Declared `opaque` so symbolic tools (e.g. Blaster) treat it as an
+    uninterpreted function instead of unfolding the recursive encoder — whose
+    higher-order recursion (`List.foldlM` closing over `encodeData`) and
+    byte-level `UInt8`/`BitVec` arithmetic they cannot translate. Compiled
+    evaluation (CEK execution, `native_decide`, conformance tests) is
+    unchanged: the provided value IS `encodeData`. `PlutusCore.Cbor.encodeData`
+    itself stays a plain def for direct use and proofs. -/
+opaque encodeDataOpaque (d : PlutusCore.Data.Data) : Option String := PLC.encodeData d
+
 -- Define serializeData
 def serializeData (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [CekValue.VCon (Const.Data d)] => (CekValue.VCon ∘ Const.ByteString ∘ ByteString.mk) <$> PLC.encodeData d
+  | [CekValue.VCon (Const.Data d)] => (CekValue.VCon ∘ Const.ByteString ∘ ByteString.mk) <$> encodeDataOpaque d
   | _                              => none
 
 end PlutusCore.UPLC.BuiltinFunctions.Data
