@@ -87,4 +87,18 @@ namespace Tests.BlueprintCodegen
         (NestBp.Vault.mk (NestBp.Credential.Script { data := "k" }) [NestBp.Asset.mk { data := "n" } 5]))
       : Option NestBp.Vault)
 
+-- ---------------------------------------------------------------------------
+-- pair fields encode via Data.Constr 0 [a, b] and recurse through both sides
+-- ---------------------------------------------------------------------------
+#import_blueprints PairBp "Tests/BlueprintCodegen/fixtures/pair.json"
+
+/-- info: Data.Constr (Int.ofNat 0) [Data.Constr (Int.ofNat 0) [Data.B { data := "a" }, Data.I (Int.ofNat 9)]] -/
+#guard_msgs in
+#eval IsData.toData ({ pt := ({ data := "a" }, (9 : Integer)) } : PairBp.PairDatum)
+
+/-- info: some { pt := (#61, 9) } -/
+#guard_msgs in
+#eval (IsData.fromData (Data.Constr 0 [Data.Constr 0 [Data.B { data := "a" }, Data.I 9]])
+        : Option PairBp.PairDatum)
+
 end Tests.BlueprintCodegen

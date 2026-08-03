@@ -487,6 +487,9 @@ private partial def encodeFieldStr (fieldExpr : String) : PlutusType → String
   | .map k v    =>
       "Data.Map ((" ++ fieldExpr ++ ").map (fun (_a, _b) => (" ++
         encodeFieldStr "_a" k ++ ", " ++ encodeFieldStr "_b" v ++ ")))"
+  | .pair a b   =>
+      "Data.Constr 0 [" ++ encodeFieldStr ("(" ++ fieldExpr ++ ").1") a ++ ", " ++
+        encodeFieldStr ("(" ++ fieldExpr ++ ").2") b ++ "]"
   | _           => "IsData.toData (" ++ fieldExpr ++ ")"
 
 /-- Generate a Lean expression string that decodes a `Data` value.
@@ -505,6 +508,10 @@ private partial def decodeFieldStr (dataExpr : String) : PlutusType → String
       "(match " ++ dataExpr ++ " with | Data.Map _m => _m.mapM (fun (_a, _b) => (" ++
         decodeFieldStr "_a" k ++ ").bind (fun _k => (" ++ decodeFieldStr "_b" v ++
         ").bind (fun _v => some (_k, _v)))) | _ => none)"
+  | .pair a b   =>
+      "(match " ++ dataExpr ++ " with | Data.Constr 0 [_a, _b] => (" ++
+        decodeFieldStr "_a" a ++ ").bind (fun _x => (" ++ decodeFieldStr "_b" b ++
+        ").bind (fun _y => some (_x, _y))) | _ => none)"
   | t           => "(IsData.fromData " ++ dataExpr ++ " : Option " ++ plutusTypeToTypeStr t ++ ")"
 
 /-- Returns `true` when every variant is a no-field constructor (simple enum). -/
