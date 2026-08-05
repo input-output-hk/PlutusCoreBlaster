@@ -32,15 +32,14 @@ def b_ (i n : Nat) : Char := Char.ofNat ((n / (256 ^ i)) % 256)
 
 /-- ε_head: Encodes the major type (`m`) × Nat pair -/
 -- Spec B.4.
-def encodeHead (m n : Nat) : Option (List Char) :=
-  if m ≤ 7 then
-         if n ≤                   23 then .some [Char.ofNat (32 * m + n)]
-    else if n ≤                  255 then .some (Char.ofNat (32 * m + 24) :: e₁ n)
-    else if n ≤                65535 then .some (Char.ofNat (32 * m + 25) :: e₂ n)
-    else if n ≤           4294967295 then .some (Char.ofNat (32 * m + 26) :: e₄ n)
-    else if n ≤ 18446744073709551615 then .some (Char.ofNat (32 * m + 27) :: e₈ n)
-    else .none
-  else .none
+def encodeHead (m n : Nat) (_h1 : m ≤ 7) (_h2 : n ≤ 18446744073709551615) : List Char :=
+ if n ≤                   23 then [Char.ofNat (32 * m + n)]
+ else if n ≤                  255 then Char.ofNat (32 * m + 24) :: e₁ n
+ else if n ≤                65535 then Char.ofNat (32 * m + 25) :: e₂ n
+ else if n ≤           4294967295 then Char.ofNat (32 * m + 26) :: e₄ n
+ else
+   -- case when n ≤ 18446744073709551615
+   Char.ofNat (32 * m + 27) :: e₈ n
 
 /-- Helper theorem used in  the termination proof for `splitToChunks` -/
 theorem String.data_length_of_nonEmpty_pos (s : String) (h : s ≠ "") : 0 < List.length s.data := by
@@ -68,35 +67,60 @@ def splitToChunksLoop (acc : List String) (s : String) : List String :=
 -- Spec B.5. "Canonical 64-byte decomposition"
 def splitToChunks := splitToChunksLoop []
 
+/-- Helper for `split_to_chunks_elem_leq_64`: every chunk produced by the loop has
+    length at most 64, provided every string already accumulated does. -/
+theorem splitToChunksLoop_elem_leq_64 (acc : List String) (s : String)
+    (hacc : ∀ e ∈ acc, e.length ≤ 64) :
+    ∀ e ∈ splitToChunksLoop acc s, e.length ≤ 64 := by
+  fun_induction splitToChunksLoop acc s with
+  | case1 acc =>
+    simpa using hacc
+  | case2 acc s hs ih =>
+    apply ih
+    intro e he
+    rcases List.mem_cons.mp he with h | h
+    · subst h
+      simp [String.length]
+      omega
+    · exact hacc e h
+
+theorem split_to_chunks_elem_leq_64 (s : String) (e : String) (h : e ∈ splitToChunks s) : e.length ≤ 64 := by
+  exact splitToChunksLoop_elem_leq_64 [] s (by simp) e h
+
 /-- Some sequences are encoded without a specified length (indefinite length encoding). -/
 -- Spec B.4. Heads for indefinite-length items.
 def encodeIndef (m : Nat) : Char := Char.ofNat (32 * m + 31)
 
 /-- Encodes a string chunk -/
 -- Spec B.5. ε_B*
-def encodeBytestringChunk (s : String) : Option (List Char) := do
-  let length := List.length s.data
-  if length ≤ 256 ^ 8
-    then .some ((←encodeHead 2 length) ++ s.data)
-    else .none
+def encodeBytestringChunk (s : String) (h : s.length ≤ 64) : List Char :=
+  (encodeHead 2 s.length (by decide) (Nat.le_trans h (by decide))) ++ s.data
 
 /-- Encodes a bytestring.
     Note: it first splits the byte string to 64 byte chunks
           as detailed in the specification. -/
 -- Spec B.5. ε_B*
-def encodeBytestring (s : String) : Option String :=
-  match splitToChunks s with
-  | []      => String.mk <$> encodeHead 2 0  -- empty bytestring is a definite 0-length string (0x40)
-  | h :: [] => String.mk <$> encodeBytestringChunk h
-  | chunks  => do .some ⟨encodeIndef 2 :: (List.concat (←List.flatMapM encodeBytestringChunk chunks) '\xFF')⟩
-
+def encodeBytestring (s : String) : String :=
+  match heq : splitToChunks s with
+  | []      => String.mk (encodeHead 2 0 (by decide) (by decide)) -- empty bytestring is a definite 0-length string (0x40)
+  | h :: [] => String.mk (encodeBytestringChunk h (split_to_chunks_elem_leq_64 s h (by simp [heq])))
+  | chunks  =>
+      String.mk (encodeIndef 2 :: List.concat
+        (encode_chunks chunks (heq ▸ split_to_chunks_elem_leq_64 s)) '\xFF')
+where
+  encode_chunks (xs : List String) (hxs : ∀ c ∈ xs, c.length ≤ 64) : List Char :=
+    match xs with
+    | [] => []
+    | c :: xs' =>
+       let cs := encodeBytestringChunk c (List.forall_mem_cons.mp hxs).1
+       cs ++ encode_chunks xs' (List.forall_mem_cons.mp hxs).2
 
 /-- Encodes a natural number as a list of characters in big-endian -/
 -- Spec B.6. itos
 def itos (n : Nat) : String :=
   if n == 0
     then ""
-    else itos (n / 256) ++ (n % 256 |> Char.ofNat |> String.singleton)
+    else itos (n / 256) ++ String.singleton (Char.ofNat (n % 256))
 
   decreasing_by
     apply Nat.div_lt_self
@@ -107,58 +131,68 @@ def itos (n : Nat) : String :=
 
 /-- Encodes an integer using zigzag encoding -/
 -- Spec B.6. ε_Z
-def encodeInt (n : Integer) : Option String :=
-       if (                    0 ≤ n) && (n ≤  18446744073709551615) then String.mk <$> encodeHead 0 (Int.toNat n)
-  else if ( 18446744073709551616 ≤ n)                                then do (String.mk (←encodeHead 6 2)) ++ (←encodeBytestring (n |> Int.toNat |> itos))
-  else if (-18446744073709551616 ≤ n) && (n ≤                    -1) then String.mk <$> encodeHead 1 ((-n - 1) |> Int.toNat)
-  else if                                (n ≤ -18446744073709551617) then do (String.mk (←encodeHead 6 3)) ++ (←encodeBytestring (-n - 1 |> Int.toNat |> itos))
-  else .none
+def encodeInt (n : Integer) : String :=
+  if h : 0 ≤ n ∧ n ≤ 18446744073709551615 then String.mk (encodeHead 0 (Int.toNat n) (by decide) (by simp [h]))
+  else if ( 18446744073709551616 ≤ n) then String.mk (encodeHead 6 2 (by decide) (by decide)) ++ (encodeBytestring (itos (Int.toNat n)))
+  else if h : -18446744073709551616 ≤ n ∧ n ≤ -1 then String.mk (encodeHead 1 (Int.toNat (-n - 1)) (by decide) (by simp only [Integer] at h; omega))
+  else -- case when n ≤ -18446744073709551617
+    (String.mk (encodeHead 6 3 (by decide) (by decide))) ++ (encodeBytestring (itos (Int.toNat (-n - 1))))
 
 /-- Encodes a ctag. -/
 -- Spec B.7. ε_ctag
-def encodeCtag (i : Integer) : Option String :=
-  String.mk <$>
-         if (0 ≤ i) && (i ≤   6) then encodeHead 6 ( 121 + i       |> Int.toNat)
-    else if (7 ≤ i) && (i ≤ 127) then encodeHead 6 (1280 + (i - 7) |> Int.toNat)
-    else do (←encodeHead 6 102) ++ (←encodeHead 4 2) ++ ((←encodeInt i).data)
+def encodeCtag (i : Integer) : String :=
+  if h : 0 ≤ i ∧ i ≤ 6 then String.mk (encodeHead 6 (Int.toNat (121 + i)) (by decide) (by simp only [Integer] at h; omega))
+  else if h : 7 ≤ i ∧ i ≤ 127 then String.mk (encodeHead 6 (Int.toNat (1280 + (i - 7))) (by decide) (by simp only [Integer] at h; omega))
+  else String.mk ((encodeHead 6 102 (by decide) (by decide)) ++ (encodeHead 4 2 (by decide) (by decide))) ++ (encodeInt i)
 
-/-- Encode data (builtinData). -/
 -- Spec B.7. Encoding and  decoding Data. ε_data
+
+mutual
+/-- Encode data (builtinData). -/
+def foldMap (xs : List (Data × Data)) (acc : String) : Option String :=
+  match xs with
+  | [] => some acc
+  | a :: as =>
+     match encodeData a.fst, encodeData a.snd with
+     | some s1, some s2 => foldMap as (acc ++ s1 ++ s2)
+     | _, _ => none
+
+def foldList (xs : List Data) (acc : String) : Option String :=
+  match xs with
+  | [] => some acc
+  | a :: as =>
+      match encodeData a with
+      | some s => foldList as (acc ++ s)
+      | _ => none
+
 def encodeData : Data → Option String
   | .Constr idx fields =>
-      if fields.isEmpty then do
-        -- empty field list is a DEFINITE empty array (0x80), matching the serialiseData builtin
-        (←encodeCtag idx) ++ (String.mk (←encodeHead 4 0))
-      else do
-        (←encodeCtag idx)
-        ++ (encodeIndef 4 |> String.singleton)
-        ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeData a))) "" fields)
-        ++ "\xFF"
-  | .Map mxs => do
-      ((←encodeHead 5 (List.length mxs)) |> String.mk)
-      ++ (←List.foldlM (λ s p => do .some (s ++ (←encodeData p.fst) ++ (←encodeData p.snd))) "" mxs)
+       if fields.isEmpty then
+          -- empty field list is a DEFINITE empty array (0x80), matching the serialiseData builtin
+          encodeCtag idx ++ (String.mk (encodeHead 4 0 (by decide) (by decide)))
+       else
+         if let some s := foldList fields "" then
+            encodeCtag idx ++ (String.singleton (encodeIndef 4)) ++ s ++ "\xFF"
+         else none
+  | .Map mxs =>
+       let l := mxs.length
+       if h : l ≤ 18446744073709551615 then
+         if let some s := foldMap mxs "" then
+          String.mk (encodeHead 5 l (by decide) h) ++ s
+         else none
+       else none
   | .List xs =>
       if xs.isEmpty then
         -- empty list is a DEFINITE empty array (0x80), matching the serialiseData builtin
-        String.mk <$> encodeHead 4 0
-      else do
-        (encodeIndef 4 |> String.singleton)
-        ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeData a))) "" xs)
-        ++ "\xFF"
+        String.mk (encodeHead 4 0 (by decide) (by decide))
+      else
+        if let some s := foldList xs "" then
+          (String.singleton (encodeIndef 4)) ++ s ++ "\xFF"
+        else none
   | .I i => encodeInt i
   | .B bs => encodeBytestring bs.data
 
-  decreasing_by
-    · have : sizeOf a     < sizeOf fields := by apply List.sizeOf_lt_of_mem; assumption
-      simp; omega
-    · have : sizeOf p.fst < sizeOf p      := by induction p; simp; omega
-      have : sizeOf p     < sizeOf mxs    := by apply List.sizeOf_lt_of_mem; assumption
-      simp; omega
-    · have : sizeOf p.snd < sizeOf p      := by induction p; simp; omega
-      have : sizeOf p     < sizeOf mxs    := by apply List.sizeOf_lt_of_mem; assumption
-      simp; omega
-    · have : sizeOf a     < sizeOf xs     := by apply List.sizeOf_lt_of_mem; assumption
-      simp; omega
+end
 
 -- ==============
 -- =  Decoding  =
@@ -631,7 +665,7 @@ def decodeCtag (s : List Char) : Option (List Char × Integer) :=
           let (s''', im, iv) ← decodeHead s''
           if im = 0 then .some (s''', Int.ofNat iv) else .none
         else .none
-  | .some (s', 6, i) =>      if  121 ≤ i ∧ i ≤  127 then .some (s',  i -  121     )
+  | .some (s', 6, i) => if  121 ≤ i ∧ i ≤  127 then .some (s',  i -  121     )
                         else if 1280 ≤ i ∧ i ≤ 1400 then .some (s', (i - 1280) + 7)
                         else .none
   | _ => .none
