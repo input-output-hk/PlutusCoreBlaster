@@ -1,7 +1,9 @@
+import Blaster
 import PlutusCore.Cbor.Basic
 
 namespace PlutusCore.Cbor
 open PlutusCore.Cbor.CborInternal
+open PlutusCore.Integer (Integer)
 
 -- ==============
 -- =  Encoding  =
@@ -9,37 +11,50 @@ open PlutusCore.Cbor.CborInternal
 
 example : e₈ 7234295460216005990 = "deadbeef".toList := rfl
 
-example : splitToChunks "" = [] := by native_decide
+def example_1 : Prop := splitToChunks "" = []
+example : example_1 := by simp [example_1]; native_decide
 
-example : splitToChunks "1234567890123456789012345678901234567890123456789012345678901234" =
-  [ "1234567890123456789012345678901234567890123456789012345678901234" ] := by native_decide
+def example_2 : Prop :=
+  splitToChunks "1234567890123456789012345678901234567890123456789012345678901234" =
+  [ "1234567890123456789012345678901234567890123456789012345678901234" ]
 
-example : splitToChunks  "12345678901234567890123456789012345678901234567890123456789012345" =
+example : example_2 := by simp [example_2]; native_decide
+
+def example_3 : Prop := splitToChunks  "12345678901234567890123456789012345678901234567890123456789012345" =
   [ "1234567890123456789012345678901234567890123456789012345678901234"
   , "5"
-  ] := by native_decide
+  ]
 
-example : splitToChunks "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
+example : example_3 := by simp [example_3]; native_decide
+
+def example_4 : Prop :=
+  splitToChunks "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
   [ "1234567890123456789012345678901234567890123456789012345678901234"
   , "1234567890123456789012345678901234567890123456789012345678901234"
   , "56"
-  ] := by native_decide
+  ]
+example : example_4 := by simp [example_4]; native_decide
 
-example : encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234" =
-  .some ("\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234") := by native_decide
+def example_5 : Prop :=
+  encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234" =
+  "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
+example : example_5 := by simp [example_5]; native_decide
 
-example : encodeBytestring "12345678901234567890123456789012345678901234567890123456789012345" =
-  .some ("\x5F"
-         ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
-         ++ "\x41"     ++ "5"
-         ++ "\xFF") := by native_decide
+def example_6 : Prop :=
+  encodeBytestring "12345678901234567890123456789012345678901234567890123456789012345" =
+  "\x5F"
+  ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
+  ++ "\x41"     ++ "5"
+  ++ "\xFF"
+
+example : example_6 := by simp [example_6]; native_decide
 
 example : encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
-  .some ("\x5F"
-         ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
-         ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
-         ++ "\x42"     ++ "56"
-         ++ "\xFF") := by native_decide
+  "\x5F"
+  ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
+  ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
+  ++ "\x42"     ++ "56"
+  ++ "\xFF" := by native_decide
 
 example : encodeData (.I 12) = .some "\x0c"     := by simp [encodeData, encodeInt, encodeHead]
 example : encodeData (.I 42) = .some "\x18\x2a" := by simp [encodeData, encodeInt, encodeHead]
@@ -119,6 +134,8 @@ example : (encodeData (.List [.B { data := "" }, .I 5])).bind decodeData
 -- indices (128, 2^63-1, 2^64-1) are byte-anchored in the reference fixtures below. An index >= 2^64
 -- or a negative index is rejected on decode, matching the real ledger decoder (decodeWord64), even
 -- though serialiseData will emit it (write-only).
+
+example : encodeData (.Constr (2 ^ 64) [.I 1]) = some "\xD8\x66\x82\xC2\x49\x01\x00\x00\x00\x00\x00\x00\x00\x00\x9F\x01\xFF" := by native_decide
 example : (encodeData (.Constr (2 ^ 64) [.I 1])).bind decodeData = .none := by native_decide
 example : (encodeData (.Constr (-1) [])).bind decodeData = .none := by native_decide
 
@@ -225,5 +242,57 @@ example : decodeData "\xa1\x00\x01" = .some ("", .Map [(.I 0, .I 1)]) := by nati
 -- listII
 example : encodeData (.List [.I 1, .I 2]) = .some "\x9f\x01\x02\xff" := by native_decide
 example : decodeData "\x9f\x01\x02\xff" = .some ("", .List [.I 1, .I 2]) := by native_decide
+
+
+-- Blaster Test Cases on encodeData
+
+set_option warn.sorry false
+
+#blaster (only-optimize: 1) [example_1]
+#blaster (only-optimize: 1) [example_2]
+#blaster (only-optimize: 1) [example_3]
+#blaster (only-optimize: 1) [example_4]
+#blaster (only-optimize: 1) [example_5]
+#blaster (only-optimize: 1) [example_6]
+
+example : encodeData (.List [.I 1]) ≠ none := by blaster (only-optimize: 1)
+
+-- example : encodeBytestring "12345678901234567890123456789012345678901234567890123456789012345" =
+--   "\x5F"
+--   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
+--   ++ "\x41"     ++ "5"
+--   ++ "\xFF" := by blaster (solve-result: 2) (only-optimize: 1)
+
+-- example : encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
+--   "\x5F"
+--   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
+--   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
+--   ++ "\x42"     ++ "56"
+--   ++ "\xFF" := by blaster
+
+example : encodeData (.I 12) = .some "\x0c"     := by blaster (only-optimize: 1)
+example : encodeData (.I 42) = .some "\x18\x2a" := by blaster (only-optimize: 1)
+
+example :
+    encodeData (
+      .Constr 0 [
+        .Constr 0 [.I 1284531],
+        .I 1739713998000
+      ]
+    ) = .some "\xd8\x79\x9f\xd8\x79\x9f\x1a\x00\x13\x99\xb3\xff\x1b\x00\x00\x01\x95\x0f\x08\xec\xb0\xff" := by blaster (only-optimize: 1)
+
+example :
+  encodeData (
+    .Constr 0 [
+      .I 144375414,
+      .I 22710,
+      .I 4387720097
+    ]
+  ) = .some "\xd8\x79\x9f\x1a\x08\x9a\xfe\x76\x19\x58\xb6\x1b\x00\x00\x00\x01\x05\x87\x4b\xa1\xff" := by native_decide
+
+-- theorem ser_one : ∀ (i : Integer), 0 ≤ i ∧ i ≤ 18446744073709551615 → (encodeInt i).length = 1 := by blaster
+
+-- theorem ser_one_bis : ∀ (i : Integer), 18446744073709551616 ≤ i → (encodeInt i).length = 1 := by sorry
+-- theorem itos_blabla : ∀ (i : Nat), (itos i).length = 1 := by blaster
 
 end PlutusCore.Cbor
