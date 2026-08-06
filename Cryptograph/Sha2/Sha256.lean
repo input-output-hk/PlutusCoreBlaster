@@ -19,22 +19,27 @@ def k : Vector UInt32 64 :=
     , 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     ]
 
-def List.pairs {α} (x : List α) : List (α × α) :=
-  let rec loop (acc : List (α × α)) : List α → List (α × α)
-    | h₁ :: h₂ :: t => loop ((h₁, h₂) :: acc) t
-    | _             => List.reverse acc
-  loop [] x
+/-- Pack the 64 bytes of `b` starting at `start` into 16 big-endian `UInt32`s.
+    Caller must ensure `start + 64 ≤ b.size`. -/
+def chunkToWords (b : ByteArray) (start : Nat) : Vector UInt32 16 :=
+  #v[ UInt32.ofUInt8BE b (start +  0), UInt32.ofUInt8BE b (start +  4)
+    , UInt32.ofUInt8BE b (start +  8), UInt32.ofUInt8BE b (start + 12)
+    , UInt32.ofUInt8BE b (start + 16), UInt32.ofUInt8BE b (start + 20)
+    , UInt32.ofUInt8BE b (start + 24), UInt32.ofUInt8BE b (start + 28)
+    , UInt32.ofUInt8BE b (start + 32), UInt32.ofUInt8BE b (start + 36)
+    , UInt32.ofUInt8BE b (start + 40), UInt32.ofUInt8BE b (start + 44)
+    , UInt32.ofUInt8BE b (start + 48), UInt32.ofUInt8BE b (start + 52)
+    , UInt32.ofUInt8BE b (start + 56), UInt32.ofUInt8BE b (start + 60) ]
 
-def UInt32.listOfUInt8 (x : List UInt8) : List UInt32 :=
-  List.map (λ ((b₀, b₁), b₂, b₃) => UInt32.ofUInt8BE #v[b₀, b₁, b₂, b₃]) (List.pairs (List.pairs x))
-
-def padMessage (x : List UInt8) : List UInt8 :=
-  let l      := List.length x
+/-- Pad the message to a multiple of 64 bytes:
+    append `0x80`, then enough `0x00` bytes, then the original length-in-bits as a 64-bit BE int. -/
+def padMessage (x : ByteArray) : ByteArray :=
+  let l      := x.size
   let padn   := (120 - ((l + 1) % 64)) % 64
-  let zeroes := List.replicate padn 0x00
+  let zeroes := ⟨Array.replicate padn 0x00⟩
   if l ≥ 2 ^ 61
     then panic! "Message too long!"
-    else x ++ (0x80 :: zeroes) ++ UInt64.toUInt8BE (UInt64.ofNat (l * 8))
+    else x ++ ⟨#[0x80]⟩ ++ zeroes ++ UInt64.toUInt8BE (UInt64.ofNat (l * 8))
 
 def σ₀ (x : UInt32) : UInt32 := rotr  7 x ^^^ rotr 18 x ^^^ shr  3 x
 def σ₁ (x : UInt32) : UInt32 := rotr 17 x ^^^ rotr 19 x ^^^ shr 10 x
@@ -62,31 +67,32 @@ def hashLoop (m : Vector UInt32 16) (v : Vector UInt32 8) (t : Fin 64) : Vector 
     else v'
   termination_by (63 - t)
 
-def processChunks (v : Vector UInt32 8) (x : List UInt8) : Vector UInt32 8 :=
-  if List.length x = 0
+/-- Process `x` 64 bytes at a time starting from byte index `i`. Caller must ensure
+    `x.size` is a multiple of 64 and `i ≤ x.size`. -/
+def processChunks (v : Vector UInt32 8) (x : ByteArray) (i : Nat) : Vector UInt32 8 :=
+  if h : i ≥ x.size
     then v
     else
-      let x'    := List.drop 64 x
-      let chunk := List.toArray (UInt32.listOfUInt8 (List.take 64 x))
-      if harray_size : Array.size chunk = 16
-        then let m  := Vector.mk chunk harray_size
-             let h  := hashLoop m v 0
-             let v' := h + v
-             processChunks v' x'
-        else unreachable!
-  termination_by (List.length x)
-  decreasing_by simp; omega
+      let m  := chunkToWords x i
+      let h' := hashLoop m v 0
+      let v' := h' + v
+      processChunks v' x (i + 64)
+  termination_by (x.size - i)
+  decreasing_by simp_wf; simp at h; omega
 
 def initial : Vector UInt32 8 := #v[ 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 ]
 
-def hashMessage (x : List UInt8) : Vector UInt32 8 :=
+/-- Pack 8 `UInt32`s into a 32-byte big-endian `ByteArray`. -/
+def wordsToBytes (v : Vector UInt32 8) : ByteArray :=
+  UInt32.toUInt8BE v[0] ++ UInt32.toUInt8BE v[1] ++ UInt32.toUInt8BE v[2] ++ UInt32.toUInt8BE v[3] ++
+  UInt32.toUInt8BE v[4] ++ UInt32.toUInt8BE v[5] ++ UInt32.toUInt8BE v[6] ++ UInt32.toUInt8BE v[7]
+
+def hashMessage (x : ByteArray) : ByteArray :=
   let padded := padMessage x
-  processChunks initial padded
+  wordsToBytes (processChunks initial padded 0)
 
 def hash (x : String) : String :=
-  let message := String.toByteList x
-  let hashed  := hashMessage message
-  uint32ListToHex (Vector.toList hashed)
+  byteArrayToHex (hashMessage x.toByteArray)
 
 end Internal
 

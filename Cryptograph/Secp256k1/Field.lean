@@ -90,20 +90,18 @@ def div (a b : Fp) : Fp :=
 instance : Div Fp := ⟨div⟩
 
 -- Convert from bytes (big-endian, 32 bytes)
-def fromBytesBE (bytes : List UInt8) : Option Fp :=
+def fromBytesBE (bytes : ByteArray) : Option Fp :=
   let n := bytes.foldl (fun acc b => acc * 256 + b.toNat) 0
   if n < p
     then some (ofNat n)
     else none
 
 -- Convert to bytes (big-endian, 32 bytes)
-partial def toBytesBE (a : Fp) : List UInt8 :=
-  let rec loop (n : Nat) (count : Nat) : List UInt8 :=
-    if count = 0 then []
-    else
-      let byte := (n % 256).toUInt8
-      loop (n / 256) (count - 1) ++ [byte]
-  loop a.val 32
+def toBytesBE (a : Fp) : ByteArray :=
+  let rec loop (acc : List UInt8) (n : Nat) (count : Nat) : List UInt8 :=
+    if count = 0 then acc
+    else loop ((n % 256).toUInt8 :: acc) (n / 256) (count - 1)
+  ⟨(loop [] a.val 32).toArray⟩
 
 end Fp
 
