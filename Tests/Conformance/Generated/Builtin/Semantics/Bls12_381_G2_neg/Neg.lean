@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G2_neg_neg 332646 436
+#eval! budgetMatches builtin_semantics_bls12_381_G2_neg_neg 78323037 884
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G2_neg.Neg

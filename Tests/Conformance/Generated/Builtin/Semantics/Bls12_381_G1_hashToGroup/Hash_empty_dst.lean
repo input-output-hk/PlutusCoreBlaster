@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G1_hashToGroup_hash_empty_dst 52621911 618
+#eval! budgetMatches builtin_semantics_bls12_381_G1_hashToGroup_hash_empty_dst 55434589 824
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G1_hashToGroup.Hash_empty_dst

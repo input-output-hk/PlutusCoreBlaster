@@ -6,12 +6,8 @@ namespace Tests.Conformance.Generated.Term.Var
 
 open Tests.Conformance
 
-/-- info: Successfully decoded textual '.plutus-conformance/plutus-conformance/test-cases/uplc/evaluation/term/var/var.uplc' -/
+/-- error: Parsing error -/
 #guard_msgs in
-#import_uplc term_var PlutusV3 textual ".plutus-conformance/plutus-conformance/test-cases/uplc/evaluation/term/var/var.uplc"
-
-/-- info: true -/
-#guard_msgs in
-#eval programEvalsToError term_var
+#conformance_import_uplc term_var ".plutus-conformance/plutus-conformance/test-cases/uplc/evaluation/term/var/var.uplc"
 
 end Tests.Conformance.Generated.Term.Var

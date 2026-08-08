@@ -10,7 +10,7 @@ Three leaf shapes are emitted, chosen from the first line of `*.uplc.expected`:
   * `parse error`        → `#conformance_import_uplc` with a `Parsing error` guard;
   * `evaluation failure` → `#import_uplc` + `programEvalsToError`;
   * otherwise            → `#import_uplc` (program + expected) + `programsEvalEquiv`
-                           + `budgetMatches` (cpu/mem read from `*.uplc.budget.expected`).
+                           + `budgetMatches` (cpu/mem read from `*.budget.expected`).
 
 Usage:
   gen_conformance_tests <conformance-root> [--out <dir>] [--embed-root <prefix>]
@@ -36,6 +36,8 @@ structure Config where
 def notImplementedPaths : List (List String) := [
   ["builtin", "constant", "array"],
   ["builtin", "constant", "value"],
+  ["builtin", "parser", "array"],
+  ["builtin", "parser", "value"],
   ["builtin", "semantics", "indexArray"],
   ["builtin", "semantics", "insertCoin"],
   ["builtin", "semantics", "lengthOfArray"],
@@ -99,7 +101,7 @@ private def parseBudget (s : String) : Option (Nat × Nat) :=
 private def classifyExpected
     (expectedContent budgetContent : String) : Except String ExpectedKind :=
   let line := firstLine expectedContent
-  if line.startsWith "parse error" then
+  if line.startsWith "parse error" || line.startsWith "parse/decode error" then
     .ok .parseError
   else if line.startsWith "evaluation failure" then
     .ok .evalFailure
@@ -282,7 +284,7 @@ mutual
     match uplcStem with
     | some stem =>
         let expectedPath := srcDir / s!"{stem}.uplc.expected"
-        let budgetPath   := srcDir / s!"{stem}.uplc.budget.expected"
+        let budgetPath   := srcDir / s!"{stem}.budget.expected"
         let expectedContent ← IO.FS.readFile expectedPath
         let budgetContent ← (try IO.FS.readFile budgetPath catch _ => pure "")
         match classifyExpected expectedContent budgetContent with

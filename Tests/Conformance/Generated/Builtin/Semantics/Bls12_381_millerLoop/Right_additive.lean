@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_millerLoop_right_additive 1100438507 2925
+#eval! budgetMatches builtin_semantics_bls12_381_millerLoop_right_additive 1558300761 4523
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_millerLoop.Right_additive

@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G2_add_add_commutative 5100794 1473
+#eval! budgetMatches builtin_semantics_bls12_381_G2_add_add_commutative 304022682 2417
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G2_add.Add_commutative

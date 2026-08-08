@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G1_multiScalarMul_multiScalarMul_11 648563249 1019
+#eval! budgetMatches builtin_semantics_bls12_381_G1_multiScalarMul_multiScalarMul_11 1711060567 15487
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G1_multiScalarMul.MultiScalarMul_11

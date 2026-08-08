@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_millerLoop_random_pairing 842070360 1545
+#eval! budgetMatches builtin_semantics_bls12_381_millerLoop_random_pairing 1097491548 2453
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_millerLoop.Random_pairing
