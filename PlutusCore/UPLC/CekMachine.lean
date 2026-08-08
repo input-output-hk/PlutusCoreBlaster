@@ -57,7 +57,7 @@ open UPLC.Builtins
 open ExpectedBuiltinArgs
 open BuiltinNotations
 
-def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
+def step (semanticsVariant : BuiltinSemanticsVariant) (protocolVer : ProtocolVersion) (Sigma : State) : State :=
   match Sigma with
   | State.Eval s ρ Tr =>
       match Tr with
@@ -126,96 +126,103 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
                   | some mi => State.Eval (folding Vs s) ρ mi
                   | none => State.Error
 
-             | CekValue.VCon (Const.Integer n) =>
-                  if 0 ≤ n && n.toNat < Ms.length then
-                    match Ms[n.toNat]? with
-                    | some mi => State.Eval s ρ mi
-                    | none => State.Error
-                  else State.Error
+             -- `case` on anything other than a `constr` value (a plain
+             -- constant) is only available from the Van Rossem hard fork
+             -- onward; earlier protocol versions must reject it outright.
+             | _ =>
+                 if ¬ protocolVer.supportsCaseOnConstants then State.Error
+                 else
+                   match Vr with
+                   | CekValue.VCon (Const.Integer n) =>
+                        if 0 ≤ n && n.toNat < Ms.length then
+                          match Ms[n.toNat]? with
+                          | some mi => State.Eval s ρ mi
+                          | none => State.Error
+                        else State.Error
 
-             | CekValue.VCon (Const.Bool false) =>
-                  if Ms.length == 1 || Ms.length == 2 then
-                    match List.get?Internal Ms 0 with
-                    | some mi => State.Eval s ρ mi
-                    | none => State.Error
-                  else State.Error
+                   | CekValue.VCon (Const.Bool false) =>
+                        if Ms.length == 1 || Ms.length == 2 then
+                          match List.get?Internal Ms 0 with
+                          | some mi => State.Eval s ρ mi
+                          | none => State.Error
+                        else State.Error
 
-             | CekValue.VCon (Const.Bool true) =>
-                  if Ms.length == 2 then
-                    match List.get?Internal Ms 1 with
-                    | some mi => State.Eval s ρ mi
-                    | none => State.Error
-                  else State.Error
+                   | CekValue.VCon (Const.Bool true) =>
+                        if Ms.length == 2 then
+                          match List.get?Internal Ms 1 with
+                          | some mi => State.Eval s ρ mi
+                          | none => State.Error
+                        else State.Error
 
-             | CekValue.VCon Const.Unit =>
-                   if Ms.length == 1 then
-                     match Ms[0]? with
-                     | some mi => State.Eval s ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon Const.Unit =>
+                         if Ms.length == 1 then
+                           match Ms[0]? with
+                           | some mi => State.Eval s ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | CekValue.VCon (Const.Pair p) =>
-                   if Ms.length == 1 then
-                     let Vs := [CekValue.VCon p.1, CekValue.VCon p.2]
-                     match List.get?Internal Ms 0 with
-                     | some mi => State.Eval (folding Vs s) ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon (Const.Pair p) =>
+                         if Ms.length == 1 then
+                           let Vs := [CekValue.VCon p.1, CekValue.VCon p.2]
+                           match List.get?Internal Ms 0 with
+                           | some mi => State.Eval (folding Vs s) ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | CekValue.VCon (Const.PairData p) =>
-                   if Ms.length == 1 then
-                     let Vs := [CekValue.VCon (Const.Data p.1), CekValue.VCon (Const.Data p.2)]
-                     match List.get?Internal Ms 0 with
-                     | some mi => State.Eval (folding Vs s) ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon (Const.PairData p) =>
+                         if Ms.length == 1 then
+                           let Vs := [CekValue.VCon (Const.Data p.1), CekValue.VCon (Const.Data p.2)]
+                           match List.get?Internal Ms 0 with
+                           | some mi => State.Eval (folding Vs s) ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | CekValue.VCon (Const.ConstList (c :: cs)) =>
-                   if Ms.length == 1 || Ms.length == 2 then
-                     let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
-                     match List.get?Internal Ms 0 with
-                     | some mi => State.Eval (folding Vs s) ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon (Const.ConstList (c :: cs)) =>
+                         if Ms.length == 1 || Ms.length == 2 then
+                           let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
+                           match List.get?Internal Ms 0 with
+                           | some mi => State.Eval (folding Vs s) ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | CekValue.VCon (Const.ConstList []) =>
-                   if Ms.length == 2 then
-                     match List.get?Internal Ms 1 with
-                     | some mi => State.Eval s ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon (Const.ConstList []) =>
+                         if Ms.length == 2 then
+                           match List.get?Internal Ms 1 with
+                           | some mi => State.Eval s ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | CekValue.VCon (Const.ConstDataList (c :: cs)) =>
-                   if Ms.length == 1 || Ms.length == 2 then
-                     let Vs := [CekValue.VCon (.Data c), CekValue.VCon (Const.ConstDataList cs)]
-                     match Ms[0]? with
-                     | some mi => State.Eval (folding Vs s) ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon (Const.ConstDataList (c :: cs)) =>
+                         if Ms.length == 1 || Ms.length == 2 then
+                           let Vs := [CekValue.VCon (.Data c), CekValue.VCon (Const.ConstDataList cs)]
+                           match Ms[0]? with
+                           | some mi => State.Eval (folding Vs s) ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | CekValue.VCon (Const.ConstDataList []) =>
-                   if Ms.length == 2 then
-                     match List.get?Internal Ms 1 with
-                     | some mi => State.Eval s ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon (Const.ConstDataList []) =>
+                         if Ms.length == 2 then
+                           match List.get?Internal Ms 1 with
+                           | some mi => State.Eval s ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | CekValue.VCon (Const.ConstPairDataList (c :: cs)) =>
-                   if Ms.length == 1 || Ms.length == 2 then
-                     let Vs := [CekValue.VCon (.PairData c), CekValue.VCon (Const.ConstPairDataList cs)]
-                     match List.get?Internal Ms 0 with
-                     | some mi => State.Eval (folding Vs s) ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon (Const.ConstPairDataList (c :: cs)) =>
+                         if Ms.length == 1 || Ms.length == 2 then
+                           let Vs := [CekValue.VCon (.PairData c), CekValue.VCon (Const.ConstPairDataList cs)]
+                           match List.get?Internal Ms 0 with
+                           | some mi => State.Eval (folding Vs s) ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | CekValue.VCon (Const.ConstPairDataList []) =>
-                   if Ms.length == 2 then
-                     match List.get?Internal Ms 1 with
-                     | some mi => State.Eval s ρ mi
-                     | none => State.Error
-                   else State.Error
+                   | CekValue.VCon (Const.ConstPairDataList []) =>
+                         if Ms.length == 2 then
+                           match List.get?Internal Ms 1 with
+                           | some mi => State.Eval s ρ mi
+                           | none => State.Error
+                         else State.Error
 
-             | _ => State.Error
+                   | _ => State.Error
 
   | _ => State.Error
 
@@ -226,12 +233,12 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
       | x :: xs' => Frame.LeftApplicationToValue x :: (folding xs' init)
 
 -- Define Run Steps
-def runSteps (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) : State :=
+def runSteps (semanticsVariant : BuiltinSemanticsVariant) (protocolVer : ProtocolVersion) (Sigma : State) (n : Nat) : State :=
   match n, Sigma with
   | _, State.Halt V => Sigma
   | _, State.Error => Sigma
   | 0, _ => State.Error -- change to error when num steps exhausted
-  | Nat.succ n, _ => runSteps semanticsVariant (step semanticsVariant Sigma) n
+  | Nat.succ n, _ => runSteps semanticsVariant protocolVer (step semanticsVariant protocolVer Sigma) n
 
 -- Define Apply Params
 def applyParams (body : Term) (params : List Term) : Term :=
@@ -243,13 +250,15 @@ def applyParams (body : Term) (params : List Term) : Term :=
 def initialState (t : Term) : State :=
   State.Eval [] [] t
 
-def cekExecuteProgramWithSemanticVariant (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State :=
+def cekExecuteProgramWithSemanticVariant
+    (semanticVariant : BuiltinSemanticsVariant) (protocolVer : ProtocolVersion)
+    (p : Program) (params : List Term) (n : Nat) : State :=
   match p with
   | Program.Program _ body =>
-      runSteps semanticVariant (initialState (applyParams body params)) n
+      runSteps semanticVariant protocolVer (initialState (applyParams body params)) n
 
 -- Define CEK Execution
-def cekExecuteProgram : Program → List Term →  Nat → State := cekExecuteProgramWithSemanticVariant default
+def cekExecuteProgram : Program → List Term →  Nat → State := cekExecuteProgramWithSemanticVariant default default
 
 
 -- Budget aware CEK execution
@@ -285,6 +294,7 @@ def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) 
 
 def stepWithBudget
     (semanticsVariant : BuiltinSemanticsVariant)
+    (protocolVer : ProtocolVersion)
     (costs : CekMachineCosts)
     (Sigma : State)
     (budget : ExBudget) : Option (State × ExBudget) :=
@@ -292,12 +302,13 @@ def stepWithBudget
     let builtinCost := getBuiltinCostIfExecuted semanticsVariant Sigma
     let totalCost := stepCost + builtinCost
     if budget.canAfford totalCost then
-        some (step semanticsVariant Sigma, budget - totalCost)
+        some (step semanticsVariant protocolVer Sigma, budget - totalCost)
     else
         none
 
 def runStepsWithBudget
     (semanticsVariant : BuiltinSemanticsVariant)
+    (protocolVer : ProtocolVersion)
     (costs : CekMachineCosts)
     (Sigma : State)
     (budget : ExBudget)
@@ -306,9 +317,9 @@ def runStepsWithBudget
     | State.Halt V  => EvaluationResult.Success V (initialBudget - budget)
     | State.Error   => EvaluationResult.EvaluationError
     | _ =>
-        match stepWithBudget semanticsVariant costs Sigma budget with
+        match stepWithBudget semanticsVariant protocolVer costs Sigma budget with
         | none => EvaluationResult.BudgetExhausted budget
-        | some (newState, newBudget) => runStepsWithBudget semanticsVariant costs newState newBudget initialBudget
+        | some (newState, newBudget) => runStepsWithBudget semanticsVariant protocolVer costs newState newBudget initialBudget
     termination_by budget.exBudgetCPU.unExCPU + budget.exBudgetMemory.unExMemory
     decreasing_by
         sorry
@@ -338,7 +349,7 @@ def cekExecuteProgramWithBudget
         let costs  := semVarToCosts semVar
         -- Startup cost is charged once up front, matching the Plutus reference
         if budget.canAfford costs.startupCost then
-            runStepsWithBudget semVar costs (initialState (applyParams body params))
+            runStepsWithBudget semVar protocolVer costs (initialState (applyParams body params))
                 (budget - costs.startupCost) budget
         else
             EvaluationResult.BudgetExhausted budget
