@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G1_compress_compress 2828778 406
+#eval! budgetMatches builtin_semantics_bls12_381_G1_compress_compress 55808900 624
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G1_compress.Compress

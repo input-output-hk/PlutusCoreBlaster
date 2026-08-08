@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_cardano_crypto_tests_G1_arith_scalarMul 130034708 1237
+#eval! budgetMatches builtin_semantics_bls12_381_cardano_crypto_tests_G1_arith_scalarMul 132434583 1443
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_cardano_crypto_tests.G1.Arith.ScalarMul

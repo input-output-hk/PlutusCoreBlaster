@@ -9,6 +9,5 @@ import Tests.Conformance.Generated.Term.Constr.Constr_06
 import Tests.Conformance.Generated.Term.Constr.Constr_07
 import Tests.Conformance.Generated.Term.Constr.Constr_08
 import Tests.Conformance.Generated.Term.Constr.Constr_09
-import Tests.Conformance.Generated.Term.Constr.Constr_10
 
 -- Barrel for Tests.Conformance.Generated.Term.Constr

@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G1_scalarMul_mulperiodic_02 153726928 1842
+#eval! budgetMatches builtin_semantics_bls12_381_G1_scalarMul_mulperiodic_02 259687172 2278
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G1_scalarMul.Mulperiodic_02

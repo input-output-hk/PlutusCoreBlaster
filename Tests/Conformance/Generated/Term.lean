@@ -10,6 +10,7 @@ import Tests.Conformance.Generated.Term.Delay
 import Tests.Conformance.Generated.Term.Force
 import Tests.Conformance.Generated.Term.Lam
 import Tests.Conformance.Generated.Term.NonFunctionalApplication
+import Tests.Conformance.Generated.Term.Parser
 import Tests.Conformance.Generated.Term.Unlifting_sat
 import Tests.Conformance.Generated.Term.Unlifting_unsat
 import Tests.Conformance.Generated.Term.Var

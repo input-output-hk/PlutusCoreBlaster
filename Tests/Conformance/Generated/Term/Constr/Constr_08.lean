@@ -6,20 +6,8 @@ namespace Tests.Conformance.Generated.Term.Constr.Constr_08
 
 open Tests.Conformance
 
-/-- info: Successfully decoded textual '.plutus-conformance/plutus-conformance/test-cases/uplc/evaluation/term/constr/constr-08/constr-08.uplc' -/
+/-- error: Parsing error -/
 #guard_msgs in
-#import_uplc term_constr_constr_08 PlutusV3 textual ".plutus-conformance/plutus-conformance/test-cases/uplc/evaluation/term/constr/constr-08/constr-08.uplc"
-
-/-- info: Successfully decoded textual '.plutus-conformance/plutus-conformance/test-cases/uplc/evaluation/term/constr/constr-08/constr-08.uplc.expected' -/
-#guard_msgs in
-#import_uplc term_constr_constr_08_expected PlutusV3 textual ".plutus-conformance/plutus-conformance/test-cases/uplc/evaluation/term/constr/constr-08/constr-08.uplc.expected"
-
-/-- info: true -/
-#guard_msgs in
-#eval programsEvalEquiv term_constr_constr_08 term_constr_constr_08_expected
-
-/-- info: true -/
-#guard_msgs in
-#eval! budgetMatches term_constr_constr_08 48100 400
+#conformance_import_uplc term_constr_constr_08 ".plutus-conformance/plutus-conformance/test-cases/uplc/evaluation/term/constr/constr-08/constr-08.uplc"
 
 end Tests.Conformance.Generated.Term.Constr.Constr_08

@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G2_uncompress_on_curve_bit3_clear 74746572 436
+#eval! budgetMatches builtin_semantics_bls12_381_G2_uncompress_on_curve_bit3_clear 78006491 648
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G2_uncompress.On_curve_bit3_clear

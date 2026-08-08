@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_millerLoop_balanced 1076888097 2399
+#eval! budgetMatches builtin_semantics_bls12_381_millerLoop_balanced 1332309285 3307
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_millerLoop.Balanced

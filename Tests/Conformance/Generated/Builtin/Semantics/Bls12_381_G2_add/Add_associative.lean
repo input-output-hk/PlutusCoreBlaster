@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G2_add_add_associative 9220466 2345
+#eval! budgetMatches builtin_semantics_bls12_381_G2_add_add_associative 457603298 3761
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G2_add.Add_associative

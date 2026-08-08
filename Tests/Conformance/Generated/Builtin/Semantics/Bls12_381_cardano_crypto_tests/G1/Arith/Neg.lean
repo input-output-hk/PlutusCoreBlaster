@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_cardano_crypto_tests_G1_arith_neg 53802159 1037
+#eval! budgetMatches builtin_semantics_bls12_381_cardano_crypto_tests_G1_arith_neg 56202034 1243
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_cardano_crypto_tests.G1.Arith.Neg

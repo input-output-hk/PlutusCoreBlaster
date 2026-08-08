@@ -20,6 +20,6 @@ open Tests.Conformance
 
 /-- info: true -/
 #guard_msgs in
-#eval! budgetMatches builtin_semantics_bls12_381_G2_hashToGroup_hash_dst_len_255 167002250 636
+#eval! budgetMatches builtin_semantics_bls12_381_G2_hashToGroup_hash_dst_len_255 170262169 848
 
 end Tests.Conformance.Generated.Builtin.Semantics.Bls12_381_G2_hashToGroup.Hash_dst_len_255
