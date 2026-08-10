@@ -8,7 +8,7 @@ import PlutusCore.Crypto.BLS12_381.G2
 -- words, G2 = 36 words), not EIP-2537 compressed-serialization byte lengths
 -- (48/96). The point's specific coordinates are irrelevant to `constSize`,
 -- so `default` (the point at infinity) is a fine stand-in.
-namespace Tests.Issues.Issue31
+namespace Tests.Issue31
 
 open PlutusCore.UPLC.Term (Const)
 open PlutusCore.UPLC.CostModels (constSize)
@@ -21,4 +21,4 @@ example : constSize (Const.Bls12_381_G1_element (default : BLS12_381_G1_Element)
 example : constSize (Const.Bls12_381_G2_element (default : BLS12_381_G2_Element)) = 288 := by
   native_decide
 
-end Tests.Issues.Issue31
+end Tests.Issue31

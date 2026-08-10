@@ -6,7 +6,7 @@ import PlutusCore.UPLC.BuiltinFunctions.Data
 -- constructor-index argument must fit in a Word64; out-of-range indices
 -- must fail the builtin rather than being silently accepted. Variants A/B/C
 -- keep accepting any Integer, matching pre-Conway behaviour.
-namespace Tests.Issues.Issue33
+namespace Tests.Issue33
 
 open PlutusCore.UPLC.BuiltinFunctions.Data
 open PlutusCore.UPLC.CekValue
@@ -43,4 +43,4 @@ example :
      | none => false) = true := by
   native_decide
 
-end Tests.Issues.Issue33
+end Tests.Issue33

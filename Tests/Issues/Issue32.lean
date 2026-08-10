@@ -7,7 +7,7 @@ import PlutusCore.Default
 -- `constr` value) is only valid from the Van Rossem hard fork onward; older
 -- protocol versions must reject it the same as if `case`-on-constants didn't
 -- exist.
-namespace Tests.Issues.Issue32
+namespace Tests.Issue32
 
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
@@ -39,4 +39,4 @@ example :
      | _ => false) = true := by
   native_decide
 
-end Tests.Issues.Issue32
+end Tests.Issue32
