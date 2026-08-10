@@ -6,7 +6,7 @@ import PlutusCore.UPLC.CekValue
 -- `mkCons` must reject consing an element of the wrong shape onto a
 -- non-empty `ConstList`, matching Haskell's builtin type-tag check. Args are
 -- reversed on the Cek machine stack: `[existingList, newElement]`.
-namespace Tests.Issues.Issue37
+namespace Tests.Issue37
 
 open PlutusCore.UPLC.BuiltinFunctions.List
 open PlutusCore.UPLC.CekValue
@@ -40,4 +40,4 @@ example :
      | none => false) = true := by
   native_decide
 
-end Tests.Issues.Issue37
+end Tests.Issue37
