@@ -13,7 +13,9 @@ import PlutusCore.UPLC.FlatEncoding.Tests
 import PlutusCore.UPLC.ScriptEncoding.Tests
 import PlutusCore.UPLC.TextEncoding.Tests
 
-import Tests.Issues
+import Tests.Issues.Issue31
+import Tests.Issues.Issue32
+import Tests.Issues.Issue33
 
 -- The conformance test suite (Tests.Conformance) is intentionally NOT imported
 -- here. It is built and run only by the manual `ci-conformance` workflow,
