@@ -1,0 +1,123 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance.json",
+  "preamble": {
+    "title": "Placeholder validator assurance",
+    "description": "Test-suite fixture: machine-checked claims about the all-todo placeholder validators.",
+    "version": "1.0.0",
+    "authors": ["PlutusCoreBlaster test suite"],
+    "created": "2026-08-12",
+    "license": "Apache-2.0"
+  },
+  "blueprint": {
+    "uri": "../../test/plutus.json",
+    "hash": {
+      "alg": "sha256",
+      "digest": "07a13b1d536a5bfe48feb213efd0caef0776608989c4d7872e1bdea65c246de2"
+    }
+  },
+  "languages": {
+    "lean": {
+      "name": "Lean",
+      "version": "4",
+      "uri": "https://lean-lang.org"
+    },
+    "ual": {
+      "name": "Universal Annotation Language",
+      "version": "0.4",
+      "uri": "https://github.com/input-output-hk/ual-spec"
+    }
+  },
+  "tools": {
+    "blaster": {
+      "name": "Blaster",
+      "version": "0.3.1",
+      "uri": "https://github.com/input-output-hk/Lean-blaster",
+      "description": "SMT-based formal verification tool for UPLC validators."
+    }
+  },
+  "properties": [
+    {
+      "id": "spend-always-rejects",
+      "title": "The placeholder spend handler rejects every transaction",
+      "scope": {
+        "validators": ["placeholder.placeholder.spend"]
+      },
+      "statement": {
+        "text": "For every script context, executing the compiled spend validator errors (every handler is a `todo`), so no UTxO locked at this script can ever be spent.",
+        "formal": {
+          "language": "lean",
+          "source": "∀ (d : Data), isErrorState (cekExecuteProgram placeholder_placeholder_spend.script [Term.Const (Const.Data d)] 2500)"
+        }
+      },
+      "assumptions": [
+        {
+          "text": "The CEK execution budget of 2500 steps is sufficient to reach the error."
+        }
+      ],
+      "tags": ["safety"],
+      "evidence": [
+        {
+          "method": "formal-proof",
+          "verifier": "PlutusCoreBlaster test suite",
+          "tool": "blaster",
+          "outcome": "verified",
+          "date": "2026-08-12",
+          "scriptHash": "f2388d136606a27c4a531d0040c3e12e07eb95cd5011793c160707dc",
+          "artifact": {
+            "uri": "https://example.com/placeholder-proofs.tar.gz",
+            "hash": {
+              "alg": "sha256",
+              "digest": "d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70819a2b3c4d5e6"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "documented-only",
+      "title": "Deployment note",
+      "scope": {
+        "validators": ["placeholder.placeholder.mint"]
+      },
+      "statement": {
+        "text": "The mint handler is a placeholder and must be replaced before deployment."
+      },
+      "evidence": [
+        {
+          "method": "manual-review",
+          "verifier": "PlutusCoreBlaster test suite",
+          "outcome": "verified",
+          "date": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "ual-property",
+      "title": "A property stated in UAL",
+      "scope": {
+        "validators": ["placeholder.placeholder.withdraw"]
+      },
+      "statement": {
+        "text": "The withdraw handler rejects every withdrawal.",
+        "formal": {
+          "language": "ual",
+          "source": "forall ctx. rejects(withdraw, ctx)"
+        }
+      }
+    },
+    {
+      "id": "uri-only",
+      "title": "A Lean property only available by URI",
+      "scope": {
+        "validators": ["placeholder.placeholder.publish"]
+      },
+      "statement": {
+        "text": "The publish handler rejects every certificate publication.",
+        "formal": {
+          "language": "lean",
+          "uri": "https://example.com/publish-rejects.lean"
+        }
+      }
+    }
+  ]
+}

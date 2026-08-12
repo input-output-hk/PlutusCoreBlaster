@@ -1,0 +1,26 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance.json",
+  "preamble": {
+    "title": "Tampered blueprint",
+    "authors": ["PlutusCoreBlaster test suite"],
+    "created": "2026-08-12"
+  },
+  "blueprint": {
+    "uri": "../../test/plutus.json",
+    "hash": {
+      "alg": "sha256",
+      "digest": "00000000000000000000000000000000000000000000000000000000000000ff"
+    }
+  },
+  "properties": [
+    {
+      "id": "never-checked",
+      "scope": {
+        "validators": ["placeholder.placeholder.spend"]
+      },
+      "statement": {
+        "text": "This document's blueprint hash is wrong on purpose; verification must stop before this property."
+      }
+    }
+  ]
+}

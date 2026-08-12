@@ -2,3 +2,4 @@
 -- Import modules here that should be built as part of the library.
 import Tests.Basic
 import Tests.BlueprintCodegen.Tests
+import Tests.BlueprintVerify.Tests

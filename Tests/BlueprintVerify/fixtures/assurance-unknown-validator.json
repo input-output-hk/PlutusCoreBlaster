@@ -1,0 +1,22 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance.json",
+  "preamble": {
+    "title": "Dangling validator reference",
+    "authors": ["PlutusCoreBlaster test suite"],
+    "created": "2026-08-12"
+  },
+  "blueprint": {
+    "uri": "../../test/plutus.json"
+  },
+  "properties": [
+    {
+      "id": "dangling-scope",
+      "scope": {
+        "validators": ["no.such.validator"]
+      },
+      "statement": {
+        "text": "This property references a validator that does not exist in the blueprint."
+      }
+    }
+  ]
+}
