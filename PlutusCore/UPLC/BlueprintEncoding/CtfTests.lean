@@ -7,7 +7,7 @@ the cardano-ctf repository (../cardano-ctf relative to the project root).
 
 Each test case exercises a different aspect of the import:
 - hello_world        : single validator, PlutusV2, no parameters
-- tipjar_v2          : two validators, PlutusV3, triple-dotted titles, shared compiledCode
+- tipjar_v2          : single validator, PlutusV2, dotted title, enum redeemer
 - multisig_treasury  : two validators, PlutusV2, one has an unapplied parameter
 -/
 
@@ -41,7 +41,7 @@ open PlutusCore.IsData (IsData)
 #guard_msgs in
 #eval HelloWorld.hello_world_hello_world.lang
 
-/-- info: "9c788ea513de98b19d5502d68752cbad401ee05d1db51b49eff2aca5" -/
+/-- info: "f255ff53f95e4c90e36c3fa4ae205e1d447871b356409816a6ad41e0" -/
 #guard_msgs in
 #eval HelloWorld.hello_world_hello_world_hash
 
@@ -49,25 +49,25 @@ open PlutusCore.IsData (IsData)
 -- Generated types — hello_world
 --
 --   datum:    Unit-like (no fields) → no type emitted
---   redeemer: struct { msg : Integer }
+--   redeemer: struct { msg : ByteString }
 -- ---------------------------------------------------------------------------
 
 #check (HelloWorld.Redeemer)
-#check (HelloWorld.Redeemer.mk : Integer → HelloWorld.Redeemer)
+#check (HelloWorld.Redeemer.mk : ByteString → HelloWorld.Redeemer)
 
 -- IsData round-trip
+/-- info: some { msg := #48656c6c6f2c20576f726c6421 } -/
+#guard_msgs in
 #eval
-  let r : HelloWorld.Redeemer := { msg := 42 }
+  let r : HelloWorld.Redeemer := { msg := { data := "Hello, World!" } }
   (IsData.fromData (IsData.toData r) : Option HelloWorld.Redeemer)
 
 -- ---------------------------------------------------------------------------
--- 06_tipjar_v2 — two validators, PlutusV3, triple-dotted titles
+-- 06_tipjar_v2 — single validator, PlutusV2, dotted title
 --
---   "tipjar.tipjar.spend" → tipjar_tipjar_spend
---   "tipjar.tipjar.else"  → tipjar_tipjar_else
+--   "tipjar.tipjar" → tipjar_tipjar
 --
--- Both validators share the same compiled code and therefore the same hash.
--- Neither declares parameters, so no _paramCount definitions are emitted.
+-- No parameters are declared, so no _paramCount definition is emitted.
 -- ---------------------------------------------------------------------------
 #import_blueprints TipjarV2 "../cardano-ctf/06_tipjar_v2/plutus.json"
 
@@ -75,25 +75,17 @@ open PlutusCore.IsData (IsData)
 #guard_msgs in
 #check TipjarV2
 
-/-- info: TipjarV2.tipjar_tipjar_spend : PlutusScript -/
+/-- info: TipjarV2.tipjar_tipjar : PlutusScript -/
 #guard_msgs in
-#check TipjarV2.tipjar_tipjar_spend
+#check TipjarV2.tipjar_tipjar
 
-/-- info: TipjarV2.tipjar_tipjar_else : PlutusScript -/
+/-- info: PlutusCore.UPLC.PlutusScript.PlutusLanguage.PlutusV2 -/
 #guard_msgs in
-#check TipjarV2.tipjar_tipjar_else
+#eval TipjarV2.tipjar_tipjar.lang
 
-/-- info: PlutusCore.UPLC.PlutusScript.PlutusLanguage.PlutusV3 -/
+/-- info: "dce13fe8eb6622ba1281eb7518c106e804a169dfbb08f4fcf8a0bbfd" -/
 #guard_msgs in
-#eval TipjarV2.tipjar_tipjar_spend.lang
-
-/-- info: "c77f6845928bb8b5516077daf149df76f0b8f39686ce23f793b8ce9a" -/
-#guard_msgs in
-#eval TipjarV2.tipjar_tipjar_spend_hash
-
-/-- info: "c77f6845928bb8b5516077daf149df76f0b8f39686ce23f793b8ce9a" -/
-#guard_msgs in
-#eval TipjarV2.tipjar_tipjar_else_hash
+#eval TipjarV2.tipjar_tipjar_hash
 
 -- ---------------------------------------------------------------------------
 -- Generated types — tipjar_v2
@@ -108,10 +100,14 @@ open PlutusCore.IsData (IsData)
 #check (TipjarV2.Redeemer.Claim : TipjarV2.Redeemer)
 #check (TipjarV2.Redeemer.AddTip : TipjarV2.Redeemer)
 
+/-- info: some { owner := #616c696365, messages := [#68656c6c6f] } -/
+#guard_msgs in
 #eval
   let d : TipjarV2.Datum := { owner := { data := "alice" }, messages := [{ data := "hello" }] }
   (IsData.fromData (IsData.toData d) : Option TipjarV2.Datum)
 
+/-- info: some (TipjarV2.Redeemer.AddTip) -/
+#guard_msgs in
 #eval
   let r := TipjarV2.Redeemer.AddTip
   (IsData.fromData (IsData.toData r) : Option TipjarV2.Redeemer)
@@ -169,23 +165,28 @@ open PlutusCore.IsData (IsData)
 -- ---------------------------------------------------------------------------
 -- Generated types — multisig_treasury
 --
---   datum:    struct { release_value : Integer; beneficiary : Data }
---             (Address has unnamed fields → falls back to Data)
+--   datum:    struct { release_value : Integer; beneficiary : Address; … }
+--             (Address / Credential / Optional / Referenced are emitted as
+--              real Lean types, dependencies first)
 --   redeemer: inspect below
 -- ---------------------------------------------------------------------------
 
 #check (MultisigTreasury.MultisigDatum)
--- release_value : Integer, beneficiary : Data (Address has unnamed fields),
+-- release_value : Integer, beneficiary : Address,
 -- required_signers : List ByteString, signed_users : List ByteString
 #check (MultisigTreasury.MultisigDatum.mk :
-  Integer → PlutusCore.Data.Data → List ByteString → List ByteString
+  Integer → MultisigTreasury.Address → List ByteString → List ByteString
   → MultisigTreasury.MultisigDatum)
 
-open PlutusCore.Data (Data) in
+-- Address itself is a record with typed credential fields.
+#check (MultisigTreasury.Address.mk :
+  MultisigTreasury.Credential → MultisigTreasury.Optional → MultisigTreasury.Address)
+
 #eval
   let d : MultisigTreasury.MultisigDatum := {
     release_value    := 1000000
-    beneficiary      := Data.Constr 0 [Data.Constr 0 [Data.B { data := "pubkeyhash" }], Data.Constr 1 []]
+    beneficiary      := { payment_credential := .VerificationKeyCredential { data := "pubkeyhash" }
+                          stake_credential   := .None }
     required_signers := [{ data := "signer1" }]
     signed_users     := []
   }

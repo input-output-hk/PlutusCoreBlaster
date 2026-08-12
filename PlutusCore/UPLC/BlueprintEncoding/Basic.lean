@@ -65,6 +65,9 @@ structure SchemaInfo where
 /-- Metadata for one validator entry in a CIP-57 blueprint. -/
 structure ValidatorInfo where
   title       : String
+  /-- Optional stable identifier (recommended by the blueprint-assurance CIP
+      so external documents can reference validators robustly). -/
+  id          : Option String
   description : Option String
   hash        : Option String
   /-- The compiled Plutus script, if present in the blueprint. -/
@@ -97,6 +100,7 @@ structure BlueprintPreamble where
 
 structure BlueprintValidator where
   title        : String
+  id           : Option String
   description  : Option String
   compiledCode : Option String
   hash         : Option String
@@ -115,13 +119,13 @@ structure Blueprint where
 -- JSON helpers
 -- ---------------------------------------------------------------------------
 
-private def getStr (j : Lean.Json) (key : String) : Except String String :=
+def getStr (j : Lean.Json) (key : String) : Except String String :=
   match j.getObjVal? key with
   | .ok (.str s) => .ok s
   | .ok _        => .error s!"field '{key}' must be a string"
   | .error _     => .error s!"missing required field '{key}'"
 
-private def getOptStr (j : Lean.Json) (key : String) : Option String :=
+def getOptStr (j : Lean.Json) (key : String) : Option String :=
   match j.getObjVal? key with
   | .ok (.str s) => .some s
   | _            => .none
@@ -134,12 +138,32 @@ private def decodeJsonPointer (s : String) : String :=
 -- Schema / PlutusType parsing
 -- ---------------------------------------------------------------------------
 
+/-- The untitled two-variant, field-less sum that plutus-tx emits for Haskell
+    `Bool` (`oneOf [constr 0 [], constr 1 []]`, no variant titles). Its `Data`
+    encoding is exactly the builtin boolean's, so schemas of this shape map to
+    `.bool` instead of a named type. -/
+private def isBoolShapeDef (defn : Lean.Json) : Bool :=
+  let arr := match defn.getObjVal? "anyOf" with
+    | .ok (.arr a) => some a
+    | _ => match defn.getObjVal? "oneOf" with | .ok (.arr a) => some a | _ => none
+  match arr with
+  | some #[v0, v1] =>
+    let isCtor (v : Lean.Json) (i : Nat) : Bool :=
+      (match v.getObjVal? "dataType" with | .ok (.str "constructor") => true | _ => false) &&
+      (getOptStr v "title").isNone &&
+      (match v.getObjVal? "index" with | .ok (.num n) => n.mantissa.toNat == i | _ => false) &&
+      (match v.getObjVal? "fields" with | .ok (.arr f) => f.isEmpty | .error _ => true | _ => false)
+    isCtor v0 0 && isCtor v1 1
+  | _ => false
+
 /-- A definition is "nameable" — worth emitting as its own Lean type — when it
-    is a sum type (`anyOf`/`oneOf`) or a single constructor (record). -/
+    is a sum type (`anyOf`/`oneOf`) or a single constructor (record), except
+    for the `Bool`-shaped sum which maps to the builtin boolean. -/
 private def isNameableDef (defn : Lean.Json) : Bool :=
-  (defn.getObjVal? "anyOf" |>.toOption.isSome) ||
-  (defn.getObjVal? "oneOf" |>.toOption.isSome) ||
-  (match defn.getObjVal? "dataType" with | .ok (.str "constructor") => true | _ => false)
+  ((defn.getObjVal? "anyOf" |>.toOption.isSome) ||
+   (defn.getObjVal? "oneOf" |>.toOption.isSome) ||
+   (match defn.getObjVal? "dataType" with | .ok (.str "constructor") => true | _ => false)) &&
+  !isBoolShapeDef defn
 
 /-- The Lean-facing name of a definition: its `title`, falling back to the key. -/
 private def defTypeName (key : String) (defn : Lean.Json) : String :=
@@ -170,6 +194,7 @@ private partial def parseSchemaType (defs : Lean.Json) (j : Lean.Json) (depth : 
     let variants := arr.toList.map (parseSchemaType defs · (depth - 1))
     match variants with
     | [single] => single
+    | [.constr none 0 [], .constr none 1 []] => .bool
     | _        => .anyOf variants
   | none =>
   match j.getObjVal? "dataType" with
@@ -255,6 +280,7 @@ private def parseValidator (defs : Lean.Json) (j : Lean.Json) : Except String Bl
     | _              => #[]
   return {
     title        := ← getStr j "title"
+    id           := getOptStr j "id"
     description  := getOptStr j "description"
     compiledCode := getOptStr j "compiledCode"
     hash         := getOptStr j "hash"
@@ -432,7 +458,7 @@ private def buildSchemaInfoArrayExpr (arr : Array SchemaInfo) : Expr :=
 -- to the already-emitted script definition, so the AST is not duplicated.
 private def buildValidatorInfoExpr (v : BlueprintValidator) (optScriptExpr : Expr) : Expr :=
   mkAppN (.const ``ValidatorInfo.mk [])
-    #[mkStrLit v.title, mkOptStrExpr v.description, mkOptStrExpr v.hash,
+    #[mkStrLit v.title, mkOptStrExpr v.id, mkOptStrExpr v.description, mkOptStrExpr v.hash,
       optScriptExpr,
       buildOptSchemaInfoExpr v.datum,
       buildOptSchemaInfoExpr v.redeemer,
@@ -454,7 +480,7 @@ def buildBlueprintInfoExpr (pre : BlueprintPreamble) (viExprs : Array Expr) : Ex
 
 /-- `open` command added inside every generated namespace block so that
     generated code can use the same short names as `IsData.Basic`. -/
-private def openDecl : String :=
+def openDecl : String :=
   "open PlutusCore.Data PlutusCore.Integer PlutusCore.ByteString PlutusCore.IsData"
 
 /-- Map a `PlutusType` to a Lean type name string using the short names
@@ -514,14 +540,8 @@ private partial def decodeFieldStr (dataExpr : String) : PlutusType → String
         ").bind (fun _y => some (_x, _y))) | _ => none)"
   | t           => "(IsData.fromData " ++ dataExpr ++ " : Option " ++ plutusTypeToTypeStr t ++ ")"
 
-/-- Returns `true` when every variant is a no-field constructor (simple enum). -/
-private def isSimpleEnum (variants : List PlutusType) : Bool :=
-  variants.all fun
-    | .constr _ _ [] => true
-    | _              => false
-
 /-- Parse a Lean command from a generated string (for code gen). -/
-private def parseCommand (s : String) : CommandElabM Syntax := do
+def parseCommand (s : String) : CommandElabM Syntax := do
   match Lean.Parser.runParserCategory (← getEnv) `command s with
   | .ok stx  => return stx
   | .error e => throwError s!"Failed to parse generated command:\n{e}\n---\n{s}"
@@ -529,7 +549,7 @@ private def parseCommand (s : String) : CommandElabM Syntax := do
 /-- Run `action` with the namespace temporarily set to `ns` (absolute path).
     Saves and restores the full scope stack so that opens added by `action`
     don't leak into the caller's namespace, and any exception still restores. -/
-private def withTempNamespace (ns : Name) (action : CommandElabM Unit) : CommandElabM Unit := do
+def withTempNamespace (ns : Name) (action : CommandElabM Unit) : CommandElabM Unit := do
   let savedScopes := (← get).scopes
   -- Point the top scope at the absolute target namespace
   modifyScope fun s => { s with currNamespace := ns }
@@ -541,44 +561,6 @@ private def withTempNamespace (ns : Name) (action : CommandElabM Unit) : Command
     throw e
   let postEnv := (← get).env
   modify fun st => { st with scopes := savedScopes, env := postEnv }
-
--- ---------------------------------------------------------------------------
--- Emit an enum inductive (anyOf with no-field constructors) + IsData instance.
--- ---------------------------------------------------------------------------
-
-private def emitEnumType (ns : Name) (typeName : String)
-    (variants : List PlutusType) : CommandElabM Unit := do
-  let shortName := sanitizeName typeName
-  if shortName.isEmpty then return
-  -- Skip if already defined
-  if (← getEnv).find? (Name.mkStr ns shortName) |>.isSome then return
-
-  let constrs : List (String × Nat) := variants.filterMap fun
-    | .constr (some t) idx [] => some (sanitizeName t, idx)
-    | _ => none
-  if constrs.isEmpty then return
-  -- Warn if the simple-enum check accepted a variant we cannot name/emit.
-  if constrs.length != variants.length then
-    logWarning s!"Blueprint: enum '{typeName}' has {variants.length - constrs.length} unnamed no-field \
-variant(s) that were dropped from the generated inductive."
-
-  let esc := escapeIdent shortName
-  let ctorLines := constrs.foldl (fun acc (cname, _) => acc ++ "  | " ++ escapeIdent cname ++ "\n") ""
-  let toArms := constrs.foldl (fun acc (cname, idx) =>
-    acc ++ "    | ." ++ escapeIdent cname ++ " => Data.Constr " ++ toString idx ++ " []\n") ""
-  let fromArms := constrs.foldl (fun acc (cname, idx) =>
-    acc ++ "    | Data.Constr " ++ toString idx ++ " [] => some (" ++ esc ++ "." ++ escapeIdent cname ++ ")\n") ""
-
-  withTempNamespace ns do
-    -- Bring PlutusCore short names into scope for the declarations below
-    elabCommand (← parseCommand openDecl)
-    elabCommand (← parseCommand (
-      "inductive " ++ esc ++ " where\n" ++ ctorLines ++ "  deriving Repr"))
-    elabCommand (← parseCommand (
-      "instance : IsData " ++ esc ++ " where\n" ++
-      "  toData x := match x with\n" ++ toArms ++
-      "  fromData x := match x with\n" ++ fromArms ++
-      "    | _ => none"))
 
 -- ---------------------------------------------------------------------------
 -- Emit a struct type (single constructor, named fields) + IsData instance.
@@ -648,7 +630,8 @@ sum-of-products / nested record not yet emitted; typed as Data."
       "        " ++ fromDataBody))
 
 -- ---------------------------------------------------------------------------
--- Emit a sum-of-products inductive (anyOf with fielded constructors) + IsData.
+-- Emit a sum-of-products inductive (anyOf with any constructors, fielded or
+-- not) + IsData instance. Enums are the no-field special case.
 -- ---------------------------------------------------------------------------
 
 private def emitSopType (ns : Name) (typeName : String)
@@ -656,14 +639,24 @@ private def emitSopType (ns : Name) (typeName : String)
   let shortName := sanitizeName typeName
   if shortName.isEmpty then return
   if (← getEnv).find? (Name.mkStr ns shortName) |>.isSome then return
-  -- Each variant must be a named constructor; keep (ctorName, index, fieldTypes).
-  let ctors : List (String × Nat × List PlutusType) := variants.filterMap fun
-    | .constr (some t) idx fields => some (sanitizeName t, idx, fields.map (·.2))
+  -- Each variant must be a constructor; keep (title?, index, fieldTypes).
+  let parsed : List (Option String × Nat × List PlutusType) := variants.filterMap fun
+    | .constr t idx fields => some (t, idx, fields.map (·.2))
     | _ => none
-  if ctors.length != variants.length then
-    logWarning s!"Blueprint: sum type '{typeName}' has variants that are not named \
+  if parsed.length != variants.length then
+    logWarning s!"Blueprint: sum type '{typeName}' has variants that are not \
 constructors; no Lean type emitted (the slot stays raw Data)."
     return
+  -- Constructor names: the sanitized variant title when present (suffixed with
+  -- the constructor index when several variants share one — plutus-tx reuses
+  -- the type name), `mk` for a single untitled variant (a record), and
+  -- `c<index>` otherwise.
+  let sanitizedTitles := parsed.filterMap fun (t, _, _) => t.map sanitizeName
+  let ctors : List (String × Nat × List PlutusType) := parsed.map fun (t, idx, ftypes) =>
+    let cname := match t.map sanitizeName with
+      | some s => if sanitizedTitles.count s > 1 then s!"{s}_{idx}" else s
+      | none   => if parsed.length == 1 then "mk" else s!"c{idx}"
+    (cname, idx, ftypes)
 
   let esc := escapeIdent shortName
   -- Per-constructor: field binders, encode list, decode bind-chain.
@@ -703,9 +696,7 @@ constructors; no Lean type emitted (the slot stays raw Data)."
 /-- Emit a Lean type + `IsData` instance for one named definition or inline slot. -/
 private def emitNamedType (ns : Name) (typeName : String) (pt : PlutusType) : CommandElabM Unit := do
   match pt with
-  | .anyOf variants =>
-    if isSimpleEnum variants then emitEnumType ns typeName variants
-    else emitSopType ns typeName variants
+  | .anyOf variants => emitSopType ns typeName variants
   | .constr _ _ [] => return          -- Unit/Void-like: no Lean type needed
   | .constr _ idx fields =>
     -- Named-field record → structure; positional fields → single-ctor inductive.
@@ -743,13 +734,10 @@ Emits (per validator with `compiledCode`):
 -/
 syntax (name := import_blueprints) "#import_blueprints" ident str : command
 
-@[command_elab import_blueprints]
-def importBlueprintsImpl : CommandElab := fun stx => do
-  let nsIdent  := stx[1]
-  let pathLit  := stx[2]
-  let some filepath := pathLit.isStrLit? | throwErrorAt pathLit "string literal expected"
-  let ns := nsIdent.getId
-
+/-- Core of `#import_blueprints`: parse the blueprint file at `filepath` and
+    emit every declaration into namespace `ns`. Returns the parsed blueprint so
+    other commands (e.g. `#verify_blueprint`) can inspect it. -/
+def elabBlueprintImport (ns : Name) (filepath : String) : CommandElabM Internal.Blueprint := do
   let content  ← liftM (IO.FS.readFile (System.FilePath.mk filepath))
   let blueprint ← match parseBlueprint content with
     | .ok b    => pure b
@@ -816,5 +804,14 @@ no Lean type emitted (references to it stay raw Data)."
   -- Emit top-level BlueprintInfo value
   liftCoreM <| addAndCompile <|
     mkAbbrevDecl ns (mkConst ``BlueprintInfo) (buildBlueprintInfoExpr blueprint.preamble viExprs)
+
+  return blueprint
+
+@[command_elab import_blueprints]
+def importBlueprintsImpl : CommandElab := fun stx => do
+  let nsIdent  := stx[1]
+  let pathLit  := stx[2]
+  let some filepath := pathLit.isStrLit? | throwErrorAt pathLit "string literal expected"
+  discard <| elabBlueprintImport nsIdent.getId filepath
 
 end PlutusCore.UPLC.BlueprintEncoding
