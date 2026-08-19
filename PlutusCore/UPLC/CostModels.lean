@@ -126,9 +126,9 @@ def constSize (c : Const) : Nat :=
   -- Sizes are in 8-byte words, matching ExMemoryUsage.hs: G1 = 18 words, G2 = 36
   -- words, MlResult = 72 words. Not the EIP-2537 compressed serialization
   -- byte lengths (48/96/576) -- those are 3x too small for G1/G2 in this unit.
-  | Const.Bls12_381_G1_element _ => 144
-  | Const.Bls12_381_G2_element _ => 288
-  | Const.Bls12_381_MlResult _ => 576
+  | Const.Bls12_381_G1_element _ => 18
+  | Const.Bls12_381_G2_element _ => 36
+  | Const.Bls12_381_MlResult _ => 72
 
 def cekValueSize (v : CekValue) : Nat :=
   match v with
