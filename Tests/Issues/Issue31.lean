@@ -1,3 +1,4 @@
+import Blaster
 import PlutusCore.UPLC.CostModels
 import PlutusCore.Crypto.BLS12_381.G1
 import PlutusCore.Crypto.BLS12_381.G2
@@ -15,10 +16,12 @@ open PlutusCore.UPLC.CostModels (constSize)
 open PlutusCore.Crypto.BLS12_381.G1 (BLS12_381_G1_Element)
 open PlutusCore.Crypto.BLS12_381.G2 (BLS12_381_G2_Element)
 
+set_option warn.sorry false
+
 example : constSize (Const.Bls12_381_G1_element (default : BLS12_381_G1_Element)) = 144 := by
-  native_decide
+  blaster
 
 example : constSize (Const.Bls12_381_G2_element (default : BLS12_381_G2_Element)) = 288 := by
-  native_decide
+  blaster
 
 end Tests.Issue31

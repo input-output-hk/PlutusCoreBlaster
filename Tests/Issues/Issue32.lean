@@ -1,3 +1,4 @@
+import Blaster
 import PlutusCore.UPLC.CekMachine
 import PlutusCore.Default
 
@@ -14,6 +15,8 @@ open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.CekMachine
 open PlutusCore.Default
 
+set_option warn.sorry false
+
 -- `case 0 [111, 222]` -- Case scrutinizing a bare Integer constant, not a
 -- `constr` value; should select branch 0.
 def caseOnConstantProgram : Program :=
@@ -22,21 +25,17 @@ def caseOnConstantProgram : Program :=
       [Term.Const (Const.Integer 111), Term.Const (Const.Integer 222)])
 
 example :
-    (match cekExecuteProgramWithSemanticVariant default .preConway caseOnConstantProgram [] 10 with
-     | State.Error => true
-     | _ => false) = true := by
-  native_decide
+    cekExecuteProgramWithSemanticVariant default .preConway caseOnConstantProgram [] 10 = State.Error := by
+  blaster
 
 example :
-    (match cekExecuteProgramWithSemanticVariant default .postConwayPreVanRossem caseOnConstantProgram [] 10 with
-     | State.Error => true
-     | _ => false) = true := by
-  native_decide
+    cekExecuteProgramWithSemanticVariant default .postConwayPreVanRossem caseOnConstantProgram [] 10
+      = State.Error := by
+  blaster
 
 example :
-    (match cekExecuteProgramWithSemanticVariant default .postVanRossem caseOnConstantProgram [] 10 with
-     | State.Halt (CekValue.VCon (Const.Integer n)) => n == 111
-     | _ => false) = true := by
-  native_decide
+    cekExecuteProgramWithSemanticVariant default .postVanRossem caseOnConstantProgram [] 10
+      = State.Halt (CekValue.VCon (Const.Integer 111)) := by
+  blaster
 
 end Tests.Issue32
