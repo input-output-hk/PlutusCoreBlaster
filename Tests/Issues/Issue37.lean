@@ -1,3 +1,4 @@
+import Blaster
 import PlutusCore.UPLC.BuiltinFunctions.List
 import PlutusCore.UPLC.CekValue
 
@@ -12,32 +13,27 @@ open PlutusCore.UPLC.BuiltinFunctions.List
 open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.Term (Const)
 
+set_option warn.sorry false
+
 -- Consing a Bool onto a non-empty list(integer) must fail.
 example :
-    (match mkCons
-       [ CekValue.VCon (Const.ConstList [Const.Integer 1, Const.Integer 2])
-       , CekValue.VCon (Const.Bool true) ] with
-     | none => true
-     | some _ => false) = true := by
-  native_decide
+    mkCons [ CekValue.VCon (Const.ConstList [Const.Integer 1, Const.Integer 2])
+           , CekValue.VCon (Const.Bool true) ] = none := by
+  blaster
 
 -- Consing an Integer onto a non-empty list(integer) must still succeed.
 example :
-    (match mkCons
-       [ CekValue.VCon (Const.ConstList [Const.Integer 1, Const.Integer 2])
-       , CekValue.VCon (Const.Integer 3) ] with
-     | some (CekValue.VCon (Const.ConstList [Const.Integer 3, Const.Integer 1, Const.Integer 2])) => true
-     | _ => false) = true := by
-  native_decide
+    mkCons [ CekValue.VCon (Const.ConstList [Const.Integer 1, Const.Integer 2])
+           , CekValue.VCon (Const.Integer 3) ]
+      = some (CekValue.VCon (Const.ConstList [Const.Integer 3, Const.Integer 1, Const.Integer 2])) := by
+  blaster
 
 -- Consing onto an empty list is still accepted unconditionally: the
 -- declared element type isn't retained once the list is empty, so this
 -- case can't be checked without a representation change (see issue #37).
 example :
-    (match mkCons
-       [ CekValue.VCon (Const.ConstList []), CekValue.VCon (Const.Bool true) ] with
-     | some _ => true
-     | none => false) = true := by
-  native_decide
+    mkCons [ CekValue.VCon (Const.ConstList []), CekValue.VCon (Const.Bool true) ]
+      = some (CekValue.VCon (Const.ConstList [Const.Bool true])) := by
+  blaster
 
 end Tests.Issue37
