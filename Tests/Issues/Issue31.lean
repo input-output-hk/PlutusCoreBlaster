@@ -18,10 +18,10 @@ open PlutusCore.Crypto.BLS12_381.G2 (BLS12_381_G2_Element)
 
 set_option warn.sorry false
 
-example : constSize (Const.Bls12_381_G1_element (default : BLS12_381_G1_Element)) = 144 := by
+example : constSize (Const.Bls12_381_G1_element (default : BLS12_381_G1_Element)) = 18 := by
   blaster
 
-example : constSize (Const.Bls12_381_G2_element (default : BLS12_381_G2_Element)) = 288 := by
+example : constSize (Const.Bls12_381_G2_element (default : BLS12_381_G2_Element)) = 36 := by
   blaster
 
 end Tests.Issue31
