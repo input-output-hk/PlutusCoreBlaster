@@ -3,7 +3,10 @@ open Lake DSL
 
 package «PlutusCore» where
   -- add package configuration options here
-  require Blaster from git "https://github.com/input-output-hk/Lean-blaster" @ "main"
+  -- `fix-abbrev-in-codomain` (Lean-blaster#193) rather than `main`: it carries the
+  -- `abbrev`-in-codomain fix that the BLS builtins' return types need. Move back to
+  -- `main` once that PR merges.
+  require Blaster from git "https://github.com/input-output-hk/Lean-blaster" @ "fix-abbrev-in-codomain"
 
 @[default_target]
 lean_lib «PlutusCore» where

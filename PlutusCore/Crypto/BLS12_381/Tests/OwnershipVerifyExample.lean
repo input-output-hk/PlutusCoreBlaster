@@ -27,12 +27,16 @@ import PlutusCore.Crypto.BLS12_381.Axioms
                 serialization axiom is used, and nothing depends on
                 `g*_order`, hence not on `decide +native`.
     * HASH   -- blake2b_256 / expand_message_xmd as opaque functions; exactly one
-                fact is used (`pubScalar_injective`).
+                fact is used (`pubScalar_collision_dichotomy`), and the two theorems
+                that consume it carry the collision case in their conclusions rather
+                than assuming it away -- see the axiom's own comment for why the
+                injectivity form would be unsatisfiable. `bsLen` is not assumed at all;
+                it is the real `lengthOfByteString`.
     * SNARK  -- Groth16(+BSB22) knowledge soundness (`groth16KnowledgeSoundness`):
                 the extractor. NOT a consequence of the curve axioms.
 -/
 
-namespace PlutusCore.Crypto.BLS12_381.OwnershipVerifyExample
+namespace PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample
 
 open Cryptograph.BLS12_381
 
@@ -43,9 +47,8 @@ open PlutusCore.Crypto.BLS12_381.Pairing
 open PlutusCore.Crypto.BLS12_381.Axioms
 
 /- Byte / hash layer (HASH assumptions, tracked separately).
-   Modeled opaquely: the reclaim argument consumes only `pubScalar_injective`. -/
+   Modeled opaquely: the reclaim argument consumes only `pubScalar_collision_dichotomy`. -/
 
-axiom bsLen                 : ByteString → Int
 axiom byteStringToIntegerLE : ByteString → Int
 axiom byteStringToIntegerBE : ByteString → Int
 
@@ -211,7 +214,7 @@ axiom deriveCredential : MasterXprv → Path → ByteString
 def circuitStatement (pub : Int) : Prop :=
   ∃ (xprv : MasterXprv) (path : Path) (dest : ByteString),
   --------------------------------------------------------
-  bsLen dest = 58 ∧ pub = pubScalar (deriveCredential xprv path) dest
+  lengthOfByteString dest = 58 ∧ pub = pubScalar (deriveCredential xprv path) dest
 
 /- Groth16(+BSB22) knowledge soundness (SNARK assumption; NOT a curve consequence).
    `vk` is the honest CRS for this circuit — on-chain, the parameter-bound,
@@ -237,24 +240,48 @@ axiom groth16KnowledgeSoundness (vk : ParsedVK) (pr : ParsedProof) (pkh dest : B
   -----------------------------------
   → circuitStatement (pubScalar pkh dest)
 
-/- Collision resistance of the public-input encoding, in the only form used:
-   `(cred, dest) ↦ pubScalar cred dest` is injective on canonical inputs.
-   (blake2b-256 CR + injective LE-mod-r read.) A HASH-layer assumption. -/
-axiom pubScalar_injective (c d c' d' : ByteString) :
-  pubScalar c d = pubScalar c' d' → c = c' ∧ d = d'
+/- Collision resistance of the public-input encoding (blake2b-256 CR + LE-mod-r read).
+   A HASH-layer assumption.
+
+   Deliberately NOT stated as injectivity of `pubScalar`. That form —
+     `pubScalar c d = pubScalar c' d' → c = c' ∧ d = d'`
+   — is unsatisfiable, and so would make every theorem consuming it vacuous:
+   `pubScalar` is reduced mod `r`, hence lands in a set of exactly `r` values, while
+   `ByteString × ByteString` is infinite, and no injection from an infinite type into a
+   finite one exists. (Exhibiting the contradiction inside Lean needs a pigeonhole
+   argument, which this Mathlib-free environment does not have; that does not make the
+   axiom any less false.)
+
+   What collision resistance actually asserts is a dichotomy: an equality of public
+   inputs is *either* the same statement *or* a collision — the latter being the event
+   assumed to be infeasible to exhibit, not impossible. `PubScalarCollision` names that
+   event and stays opaque. The axiom set is then satisfiable (interpret
+   `PubScalarCollision` as identically `True`), and the two theorems below carry the
+   collision case explicitly in their conclusions rather than silently resting on a
+   falsehood. -/
+axiom PubScalarCollision : ByteString → ByteString → ByteString → ByteString → Prop
+
+axiom pubScalar_collision_dichotomy (c d c' d' : ByteString) :
+  pubScalar c d = pubScalar c' d'
+  ---------------------------------------------------
+  → (c = c' ∧ d = d') ∨ PubScalarCollision c d c' d'
 
 /- Ownership soundness (WHAT it ensures).
    An accepted proof for a reclaim of payment-key-hash `pkh` to destination `dest` implies the prover
-   KNEW a master key + path deriving to exactly `pkh` -- i.e. controls the Cardano key.
-   (extractor ⇒ ∃ witness with pubScalar(cred) dest' = pubScalar pkh dest; `pubScalar_injective` ⇒ cred = pkh.)
+   KNEW a master key + path deriving to exactly `pkh` -- i.e. controls the Cardano key -- UNLESS a
+   collision in the public-input encoding is exhibited.
+   (extractor ⇒ ∃ witness with pubScalar(cred) dest' = pubScalar pkh dest;
+   `pubScalar_collision_dichotomy` ⇒ cred = pkh, or else that collision.)
    Note the assumption footprint: this theorem consumes NO curve axiom at all -- the curve content sits inside `groth16KnowledgeSoundness`.
    The curve algebra is done separately, in `acceptedPubUnique`. -/
 theorem destinationReclaimSound (vk : ParsedVK) (pr : ParsedProof) (pkh dest : ByteString) (hvk : IsHonestSetup vk) (hwf : ProofWellFormed pr) (hverify : verifyDestination vk pr pkh dest) :
-  ∃ xprv path, deriveCredential xprv path = pkh :=
+  (∃ xprv path, deriveCredential xprv path = pkh)
+  ∨ (∃ c d, PubScalarCollision c d pkh dest) :=
     by
-      have ⟨xprv, path, _, _, hpub⟩ := groth16KnowledgeSoundness vk pr pkh dest hvk hwf hverify
-      have ⟨hc, _⟩ := pubScalar_injective _ _ _ _ hpub.symm
-      exists xprv, path
+      have ⟨xprv, path, dest', _, hpub⟩ := groth16KnowledgeSoundness vk pr pkh dest hvk hwf hverify
+      match pubScalar_collision_dichotomy _ _ _ _ hpub.symm with
+      | .inl ⟨hc, _⟩ => exact .inl ⟨xprv, path, hc⟩
+      | .inr hcol    => exact .inr ⟨deriveCredential xprv path, dest', hcol⟩
 
 /- Uniqueness of the accepted public input for a FIXED proof -- the curve-algebra core of destination binding. With `pr` fixed, `finalVerify` pins `e(vkX,γ)`;
    γ non-degeneracy pins `vkX`; `IC₁` of order r pins `pub` mod r.
@@ -311,12 +338,13 @@ theorem acceptedPubUnique (vk : ParsedVK) (pr : ParsedProof) (pub eCmt pub' : In
 /- Destination binding (anti-front-running). One proof cannot authorize two
    statements: `eCmt` depends only on `pr.commitmentBytes`, so both accept under
    the same `eCmt`; `acceptedPubUnique` equates the (already reduced) public
-   scalars; `pubScalar_injective` finishes. A valid proof in the mempool cannot be
-   re-pointed to another destination — the reason `Pub` hashes `dest` in. -/
+   scalars; `pubScalar_collision_dichotomy` finishes, leaving the collision case
+   explicit. A valid proof in the mempool cannot be re-pointed to another destination
+   without exhibiting such a collision — the reason `Pub` hashes `dest` in. -/
 theorem destinationBinding (vk : ParsedVK) (pr : ParsedProof) (pkh dest pkh' dest' : ByteString)
     (hvk : IsHonestSetup vk) (hwf : ProofWellFormed pr)
     (h : verifyDestination vk pr pkh dest) (h' : verifyDestination vk pr pkh' dest') :
-  pkh = pkh' ∧ dest = dest' :=
+  (pkh = pkh' ∧ dest = dest') ∨ PubScalarCollision pkh dest pkh' dest' :=
     by
       -- from h.1, h'.1: groth16Holds vk pr (pubScalar ·) (eCmtScalar pr.commitmentBytes)
       -- — the SAME eCmt, because it is derived from the proof's own commitment bytes
@@ -326,6 +354,6 @@ theorem destinationBinding (vk : ParsedVK) (pr : ParsedProof) (pkh dest pkh' des
       -- then collision resistance of the public-input encoding finishes.
       have hred : ∀ c d : ByteString, pubScalar c d % r = pubScalar c d := by intro c d; simp only [pubScalar, Int.emod_emod]
       rw [hred, hred] at hmod
-      exact pubScalar_injective _ _ _ _ hmod
+      exact pubScalar_collision_dichotomy _ _ _ _ hmod
 
-end PlutusCore.Crypto.BLS12_381.OwnershipVerifyExample
+end PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample
