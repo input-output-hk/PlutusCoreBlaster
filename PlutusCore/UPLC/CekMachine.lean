@@ -9,6 +9,7 @@ import PlutusCore.UPLC.CostModels
 namespace PlutusCore.UPLC.CekMachine
 
 open PlutusCore.Default
+open PlutusCore.Integer (Integer)
 open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.Builtins
 open PlutusCore.UPLC.BuiltinFunctions.Evaluate
@@ -56,6 +57,19 @@ def evalBuiltin (semanticsVariant : BuiltinSemanticsVariant) (s : Stack) (b : Bu
 open UPLC.Builtins
 open ExpectedBuiltinArgs
 open BuiltinNotations
+
+/-- Branch selection for `case` on an integer scrutinee: the `i`-th branch of
+    `Ms` when `0 ≤ i < Ms.length`, and `none` otherwise, so that a negative or
+    out-of-range tag is a machine error as in the Plutus reference implementation.
+
+    This is `if 0 ≤ i then Ms[i.toNat]? else none` (see
+    `PlutusCore.UPLC.CekMachine.caseBranch_eq_getElem?`), written as a fold over
+    the branch list so that the tag never appears as a `match` discriminant:
+    `Ms[i.toNat]?` cannot be reduced by the SMT backend when `i` is symbolic,
+    whereas this definition unfolds, for a literal branch list, to a plain chain
+    of integer comparisons. -/
+def caseBranch (Ms : List Term) (i : Integer) : Option Term :=
+  Ms.foldr (fun M rest i => if i = 0 then some M else rest (i - 1)) (fun _ => none) i
 
 def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
   match Sigma with
@@ -119,6 +133,12 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
              | M :: Ms => State.Eval (Frame.ConstructorArgument i (Vr :: Vs) Ms ρ :: s) ρ M
              | [] => State.Return s (CekValue.VConstr i (List.reverse (Vr :: Vs)))
 
+         -- NOTE: every alternative below matches at most down to the `Const`
+         -- constructor and binds its payload; any further case analysis on that
+         -- payload is done in the body of the alternative.  This keeps the whole
+         -- `match` reducible as soon as `Vr` is a known `CekValue`/`Const`
+         -- constructor, even when the payload is symbolic, which is what the SMT
+         -- backend needs in order to see through a `case`.
          | Frame.CaseScrutinee Ms ρ =>
              match Vr with
              | CekValue.VConstr i Vs =>
@@ -127,25 +147,23 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
                   | none => State.Error
 
              | CekValue.VCon (Const.Integer n) =>
-                  if 0 ≤ n && n.toNat < Ms.length then
-                    match Ms[n.toNat]? with
-                    | some mi => State.Eval s ρ mi
-                    | none => State.Error
-                  else State.Error
+                  match caseBranch Ms n with
+                  | some mi => State.Eval s ρ mi
+                  | none => State.Error
 
-             | CekValue.VCon (Const.Bool false) =>
-                  if Ms.length == 1 || Ms.length == 2 then
-                    match List.get?Internal Ms 0 with
-                    | some mi => State.Eval s ρ mi
-                    | none => State.Error
-                  else State.Error
-
-             | CekValue.VCon (Const.Bool true) =>
-                  if Ms.length == 2 then
-                    match List.get?Internal Ms 1 with
-                    | some mi => State.Eval s ρ mi
-                    | none => State.Error
-                  else State.Error
+             | CekValue.VCon (Const.Bool b) =>
+                  if b then
+                    if Ms.length == 2 then
+                      match List.get?Internal Ms 1 with
+                      | some mi => State.Eval s ρ mi
+                      | none => State.Error
+                    else State.Error
+                  else
+                    if Ms.length == 1 || Ms.length == 2 then
+                      match List.get?Internal Ms 0 with
+                      | some mi => State.Eval s ρ mi
+                      | none => State.Error
+                    else State.Error
 
              | CekValue.VCon Const.Unit =>
                    if Ms.length == 1 then
@@ -170,50 +188,53 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
                      | none => State.Error
                    else State.Error
 
-             | CekValue.VCon (Const.ConstList (c :: cs)) =>
-                   if Ms.length == 1 || Ms.length == 2 then
-                     let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
-                     match List.get?Internal Ms 0 with
-                     | some mi => State.Eval (folding Vs s) ρ mi
-                     | none => State.Error
-                   else State.Error
+             | CekValue.VCon (Const.ConstList l) =>
+                   match l with
+                   | c :: cs =>
+                     if Ms.length == 1 || Ms.length == 2 then
+                       let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
+                       match List.get?Internal Ms 0 with
+                       | some mi => State.Eval (folding Vs s) ρ mi
+                       | none => State.Error
+                     else State.Error
+                   | [] =>
+                     if Ms.length == 2 then
+                       match List.get?Internal Ms 1 with
+                       | some mi => State.Eval s ρ mi
+                       | none => State.Error
+                     else State.Error
 
-             | CekValue.VCon (Const.ConstList []) =>
-                   if Ms.length == 2 then
-                     match List.get?Internal Ms 1 with
-                     | some mi => State.Eval s ρ mi
-                     | none => State.Error
-                   else State.Error
+             | CekValue.VCon (Const.ConstDataList l) =>
+                   match l with
+                   | c :: cs =>
+                     if Ms.length == 1 || Ms.length == 2 then
+                       let Vs := [CekValue.VCon (.Data c), CekValue.VCon (Const.ConstDataList cs)]
+                       match Ms[0]? with
+                       | some mi => State.Eval (folding Vs s) ρ mi
+                       | none => State.Error
+                     else State.Error
+                   | [] =>
+                     if Ms.length == 2 then
+                       match List.get?Internal Ms 1 with
+                       | some mi => State.Eval s ρ mi
+                       | none => State.Error
+                     else State.Error
 
-             | CekValue.VCon (Const.ConstDataList (c :: cs)) =>
-                   if Ms.length == 1 || Ms.length == 2 then
-                     let Vs := [CekValue.VCon (.Data c), CekValue.VCon (Const.ConstDataList cs)]
-                     match Ms[0]? with
-                     | some mi => State.Eval (folding Vs s) ρ mi
-                     | none => State.Error
-                   else State.Error
-
-             | CekValue.VCon (Const.ConstDataList []) =>
-                   if Ms.length == 2 then
-                     match List.get?Internal Ms 1 with
-                     | some mi => State.Eval s ρ mi
-                     | none => State.Error
-                   else State.Error
-
-             | CekValue.VCon (Const.ConstPairDataList (c :: cs)) =>
-                   if Ms.length == 1 || Ms.length == 2 then
-                     let Vs := [CekValue.VCon (.PairData c), CekValue.VCon (Const.ConstPairDataList cs)]
-                     match List.get?Internal Ms 0 with
-                     | some mi => State.Eval (folding Vs s) ρ mi
-                     | none => State.Error
-                   else State.Error
-
-             | CekValue.VCon (Const.ConstPairDataList []) =>
-                   if Ms.length == 2 then
-                     match List.get?Internal Ms 1 with
-                     | some mi => State.Eval s ρ mi
-                     | none => State.Error
-                   else State.Error
+             | CekValue.VCon (Const.ConstPairDataList l) =>
+                   match l with
+                   | c :: cs =>
+                     if Ms.length == 1 || Ms.length == 2 then
+                       let Vs := [CekValue.VCon (.PairData c), CekValue.VCon (Const.ConstPairDataList cs)]
+                       match List.get?Internal Ms 0 with
+                       | some mi => State.Eval (folding Vs s) ρ mi
+                       | none => State.Error
+                     else State.Error
+                   | [] =>
+                     if Ms.length == 2 then
+                       match List.get?Internal Ms 1 with
+                       | some mi => State.Eval s ρ mi
+                       | none => State.Error
+                     else State.Error
 
              | _ => State.Error
 
