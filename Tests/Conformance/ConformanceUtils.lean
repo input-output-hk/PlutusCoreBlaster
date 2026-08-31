@@ -131,9 +131,9 @@ def programEvalsToError (p : PlutusScript) : Bool :=
   | _           => false
 
 /-- Check whether a program's cpu and memory budget matches the expected values.
-    Uses PlutusV3 post-Conway semantics, which matches the conformance test defaults. -/
+    Uses PlutusV3 post-Van-Rossem semantics, which matches the conformance test defaults. -/
 def budgetMatches (p : PlutusScript) (expectedCpu expectedMem : Nat) : Bool :=
-  match cekExecuteProgramWithBudget p.script .plutusV3 .postConway [] conformanceMaxBudget with
+  match cekExecuteProgramWithBudget p.script .plutusV3 .postVanRossem [] conformanceMaxBudget with
   | EvaluationResult.Success _ b =>
       -- Haskell uses Int64 saturation arithmetic: costs exceeding Int64.max
       -- saturate to Int64.max rather than overflowing. Apply the same cap here.
