@@ -6,8 +6,7 @@ import PlutusCore.UPLC
 
   The artifact is the locked Preprod deployment of `Ownership.ReclaimGlobalV2`
   (script hash `a4da74e7cb6ea4f4e60456a0a6eabf0ccf83464ebe55664390ef39f8`), a
-  **rewarding** (withdrawal) script. Source of truth for every shape below:
-  `.proof-tool/contracts/ownership-verifier/src/Ownership/ReclaimGlobalV2.hs`.
+  **rewarding** (withdrawal) script.
 
   Why raw `Data` and not typed `CardanoLedgerApi` structures: that library is not a
   dependency of this package and cannot become one — `CardanoLedgerApiBlaster` itself

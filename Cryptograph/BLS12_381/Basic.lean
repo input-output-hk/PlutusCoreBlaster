@@ -68,12 +68,7 @@ structure Fq12 where
 
 def Fq1.ofNat (n : Nat) : Fq1 := ⟨n % fieldPrime⟩
 
-/-- Canonicity invariant, formerly carried by the `Fin fieldPrime` bound on `Fq1.t`.
-    Every `Fq1` in this development is built through `Fq1.ofNat` — directly, via the
-    `OfNat`/`Field` instances, or via `Fq1.add`/`sub`/`neg`/`mul`/`inv`, all of which
-    funnel through it — so the representative is always reduced. `compressG1`,
-    `Fq1.sub` (truncated subtraction) and the derived `DecidableEq` each depend on
-    this; state it as a hypothesis when reasoning about an arbitrary `Fq1`. -/
+/-- Canonicity invariant, formerly carried by the `Fin fieldPrime` bound on `Fq1.t`. -/
 theorem Fq1.ofNat_lt (n : Nat) : (Fq1.ofNat n).t < fieldPrime := by
   simp [Fq1.ofNat]; omega
 

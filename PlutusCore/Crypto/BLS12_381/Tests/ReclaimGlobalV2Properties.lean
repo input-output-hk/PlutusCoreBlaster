@@ -179,9 +179,7 @@ import PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2
     the import and by the byte-offset provenance recorded in the loader.
   * **SMT.** `blaster` closes a valid goal with no proof term, so those theorems depend
     on `Blaster.Tactic.blasterProven`; their trust base is Blaster's optimizer, its
-    Lean→SMT translation and Z3. `#print axioms` is emitted after each so the dependence
-    is visible in the build log. (This axiom used to be plain `sorryAx`, which was
-    indistinguishable from an ordinary hole; `warn.sorry` still governs the warning.)
+    Lean→SMT translation and Z3.
     The `erroredWithin` lemmas in `PlutusCore/UPLC/CekMachine/Lemmas.lean` are by contrast
     fully kernel-checked, as are the three specialisations of them here. The one remaining
     `native_decide` use is `vk*_ok`, the nine decoding facts, which additionally trust the

@@ -9,16 +9,7 @@ import PlutusCore.Crypto.BLS12_381
   This is a tool-capability check, not a statement about the curve. Every goal below
   is trivially true (reflexivity, excluded middle, `True` in both branches); the only
   thing under test is whether `Translate` can build an SMT-LIB encoding of the *types*
-  involved. Before `Fq1` was changed from `Fin fieldPrime` to a bare `Nat`
-  (see `Cryptograph/BLS12_381/Basic.lean`), tests 1-6 all failed to elaborate with
-
-      Inductive datatype with instance parameters not supported: Fin
-
-  thrown by `genIndParams` (`Blaster/Smt/Translate/Quantifier.lean:959`), because `Fin`
-  is parameterized by a *term* rather than a type universe. That error propagated up
-  through `Fq2`/`Fq6`/`Fq12`, `Point Fq1` and `Option Fq12`, which is why no symbolic
-  reasoning about this curve — or about any UPLC residual retaining a BLS value — was
-  possible.
+  involved.
 
   Expected encodings, in increasing order of what they exercise:
     1. `Fq1`                    -> one parameterless datatype, a single `Nat` selector
@@ -38,10 +29,8 @@ import PlutusCore.Crypto.BLS12_381
 
 namespace PlutusCore.Crypto.BLS12_381.Tests.BlasterSmoke
 
--- `Internal` rather than `Cryptograph.BLS12_381`: the latter re-`export`s the *type*
--- `Point`, but constructor dot-notation then resolves against the alias and misses
--- `Internal.Point.infinity`. `Cryptograph/BLS12_381/TestVectors.lean` opens it the same way.
 open Cryptograph.BLS12_381.Internal
+
 open PlutusCore.ByteString
 open PlutusCore.Crypto.BLS12_381.G1
 open PlutusCore.Crypto.BLS12_381.Pairing
