@@ -51,9 +51,11 @@ import Tests.Conformance.Generated.Builtin.Semantics.FstPair
 import Tests.Conformance.Generated.Builtin.Semantics.HeadList
 import Tests.Conformance.Generated.Builtin.Semantics.IData
 import Tests.Conformance.Generated.Builtin.Semantics.IfThenElse
+import Tests.Conformance.Generated.Builtin.Semantics.IndexArray
 import Tests.Conformance.Generated.Builtin.Semantics.IndexByteString
 import Tests.Conformance.Generated.Builtin.Semantics.IntegerToByteString
 import Tests.Conformance.Generated.Builtin.Semantics.Keccak_256
+import Tests.Conformance.Generated.Builtin.Semantics.LengthOfArray
 import Tests.Conformance.Generated.Builtin.Semantics.LengthOfByteString
 import Tests.Conformance.Generated.Builtin.Semantics.LessThanByteString
 import Tests.Conformance.Generated.Builtin.Semantics.LessThanEqualsByteString
@@ -62,6 +64,7 @@ import Tests.Conformance.Generated.Builtin.Semantics.LessThanInteger
 import Tests.Conformance.Generated.Builtin.Semantics.ListData
 import Tests.Conformance.Generated.Builtin.Semantics.ListOfList
 import Tests.Conformance.Generated.Builtin.Semantics.ListOfPair
+import Tests.Conformance.Generated.Builtin.Semantics.ListToArray
 import Tests.Conformance.Generated.Builtin.Semantics.MapData
 import Tests.Conformance.Generated.Builtin.Semantics.MkCons
 import Tests.Conformance.Generated.Builtin.Semantics.MkNilData
