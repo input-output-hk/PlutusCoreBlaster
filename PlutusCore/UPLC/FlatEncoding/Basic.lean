@@ -331,7 +331,7 @@ def varName (debruijn : Nat) : String := s!"dbi_{debruijn}"
 /- Decodes a DeBruijn index.
    Flat encodes 1-based relative indices (index 0 is invalid); `Term.Var`
    uses 0-based indices (0 = innermost binder), so we subtract 1. -/
-def decodeVar (nextDebruijn : Nat) (d : DecodeState) : Option (DecodeState × Nat) := do
+def decodeVar (d : DecodeState) : Option (DecodeState × Nat) := do
   let (d', n) ← decodeNat d
   let _       ← Option.filter (λ () => n > 0) (.some ())
   .some (d', n - 1)
@@ -340,7 +340,7 @@ def decodeVar (nextDebruijn : Nat) (d : DecodeState) : Option (DecodeState × Na
 partial def decodeTerm (v : Version) (nextDeBruijn : Nat) (d : DecodeState) : Option (DecodeState × Term) := do
   let (d, op) ← decodeFixedNat 4 d
   match op with
-  | 0 => Prod.map id .Var                          <$> decodeVar nextDeBruijn d
+  | 0 => Prod.map id .Var                          <$> decodeVar d
   | 1 => Prod.map id .Delay                        <$> decodeTerm v nextDeBruijn d
   | 2 => Prod.map id (.Lam (varName nextDeBruijn)) <$> decodeTerm v (nextDeBruijn + 1) d
   | 3 => do
