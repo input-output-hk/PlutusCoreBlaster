@@ -8,7 +8,7 @@ import PlutusCore.UPLC.TextEncoding
 
 namespace PlutusCore.UPLC.ScriptEncoding
 
-open FlatEncoding (decodeProgramFromByteString)
+open FlatEncoding (decodeProgramFromByteArray)
 open PlutusCore.Cbor (decodeLargeBytestring)
 open PlutusCore.UPLC.TextEncoding (programFromString)
 open PlutusScript
@@ -38,13 +38,18 @@ def hexDigitValue : Char → Option Nat
   | 'f' | 'F' => .some 15
   | _   => .none
 
-/-- Convert a sequence of hexadecimal digits to their base 256 representation (bytestring). -/
-partial def hexStringToString : List Char -> List Char → Option (List Char)
+/-- Convert a sequence of hexadecimal digits to the corresponding `ByteArray`.
+    Each pair of hex digits becomes one byte. Returns `.none` if the input has
+    an odd length or contains a non-hex character. -/
+partial def hexStringToByteArray (s : String) : Option ByteArray :=
+  go s.data []
+where
+  go : List Char → List UInt8 → Option ByteArray
   | h₁ :: h₂ :: t, acc =>
       match hexDigitValue h₁, hexDigitValue h₂ with
-      | .some h, .some l => hexStringToString t (Char.ofNat (16 * h + l) :: acc)
+      | .some h, .some l => go t ((16 * h + l).toUInt8 :: acc)
       | _      , _       => .none
-  | []           , acc => .some (List.reverse acc)
+  | []           , acc => .some acc.reverse.toByteArray
   | _            , _   => .none
 
 /-- Helper function to simplify adding error messages to computations resulting in `Option` values. -/
@@ -65,9 +70,9 @@ def fromStringTermElaborator {α} [ToExpr α] (fn : String → Except String α)
 
 /-- Decodes an UPLC program from it's single-cbor-encoded hexadecimal representation. -/
 def singleCborEncodedScriptFromHex? (s : String) : Except String Program := do
-  let hexDecoded       ← Option.toExcept (hexStringToString s.data [])             "Could not hexdecode input!"
-  let (_, decodedCbor) ← Option.toExcept (decodeLargeBytestring ⟨hexDecoded⟩)      "Could not cbor decode input!"
-  let program          ← Option.toExcept (decodeProgramFromByteString decodedCbor) "Could not decode program!"
+  let bytes            ← Option.toExcept (hexStringToByteArray s)                 "Could not hexdecode input!"
+  let (_, decodedCbor) ← Option.toExcept (decodeLargeBytestring bytes)            "Could not cbor decode input!"
+  let program          ← Option.toExcept (decodeProgramFromByteArray decodedCbor) "Could not decode program!"
   return program
 
 /-- Decodes an UPLC program from it's single-cbor-encoded hexadecimal representation.
@@ -83,10 +88,10 @@ def elabSingleCborEncodedScriptFromHexM : TermElab := fromStringTermElaborator s
 
 /-- Decodes an UPLC program from it's double-cbor-encoded hexadecimal representation. -/
 def doubleCborEncodedScriptFromHex? (s : String) : Except String Program := do
-  let hexDecoded        ← Option.toExcept (hexStringToString s.data [])              "Could not hexdecode input!"
-  let (_, decodedCbor₁) ← Option.toExcept (decodeLargeBytestring ⟨hexDecoded⟩)       "Could not cbor decode input (first pass)!"
-  let (_, decodedCbor₂) ← Option.toExcept (decodeLargeBytestring decodedCbor₁)       "Could not cbor decode input (second pass)!"
-  let program           ← Option.toExcept (decodeProgramFromByteString decodedCbor₂) "Could not decode program!"
+  let bytes             ← Option.toExcept (hexStringToByteArray s)                  "Could not hexdecode input!"
+  let (_, decodedCbor₁) ← Option.toExcept (decodeLargeBytestring bytes)             "Could not cbor decode input (first pass)!"
+  let (_, decodedCbor₂) ← Option.toExcept (decodeLargeBytestring decodedCbor₁)      "Could not cbor decode input (second pass)!"
+  let program           ← Option.toExcept (decodeProgramFromByteArray decodedCbor₂) "Could not decode program!"
   return program
 
 /-- Decodes an UPLC program from it's double-cbor-encoded hexadecimal representation.
@@ -101,24 +106,17 @@ syntax (name := doubleCborEncodedScriptFromHexMacro) "doubleCborEncodedScriptFro
 def elabDoubleCborEncodedScriptFromHexM : TermElab := fromStringTermElaborator doubleCborEncodedScriptFromHex?
 
 /-- Decodes an UPLC program from it's raw flat representation. -/
-def flatEncodedScriptFromBytestring? (b : String) : Except String Program :=
-  Option.toExcept (decodeProgramFromByteString b) "Could not decode program!"
+def flatEncodedScriptFromByteArray? (b : ByteArray) : Except String Program :=
+  Option.toExcept (decodeProgramFromByteArray b) "Could not decode program!"
 
 /-- Decodes an UPLC program from it's raw flat representation.
     Panics if the script cannot be decoded. -/
-def flatEncodedScriptFromBytestring! (b : String) : Program := Except.orDie! (flatEncodedScriptFromBytestring? b)
-
-/-- Macro version of flatEncodedScriptFromByteString.
-    Implemented as a term elaborator, generates the program as a Lean term. -/
-syntax (name := flatEncodedScriptFromBytestringMacro) "flatEncodedScriptFromBytestringM" str : term
-
-@[term_elab flatEncodedScriptFromBytestringMacro]
-def elabFlatEncodedScriptFromBytestringM : TermElab := fromStringTermElaborator flatEncodedScriptFromBytestring?
+def flatEncodedScriptFromByteArray! (b : ByteArray) : Program := Except.orDie! (flatEncodedScriptFromByteArray? b)
 
 /-- Decodes an UPLC program from it's flat hexadecimal representation. -/
 def flatEncodedScriptFromHex? (s : String) : Except String Program := do
-  let hexDecoded ← Option.toExcept (hexStringToString s.data [])              "Could not hexdecode input!"
-  let program    ← Option.toExcept (decodeProgramFromByteString ⟨hexDecoded⟩) "Could not decode program!"
+  let bytes   ← Option.toExcept (hexStringToByteArray s)           "Could not hexdecode input!"
+  let program ← Option.toExcept (decodeProgramFromByteArray bytes) "Could not decode program!"
   return program
 
 /-- Decodes an UPLC program from it's flat hexadecimal representation.
@@ -146,6 +144,31 @@ Example:
 ```
 -/
 syntax (name := import_uplc) "#import_uplc" ident ident ident str : command
+
+/-- Cached representations of a file's contents.
+    Binary formats need raw bytes; textual/hex formats need UTF-8 text.
+    Whichever representation a parser already read is reused; the other is
+    loaded lazily by the format-suggestion helper if needed. -/
+structure FileContents where
+  path : System.FilePath
+  text : Option String     := .none
+  bin  : Option ByteArray  := .none
+
+/-- Returns the UTF-8 text of the file, reading it if not already loaded. -/
+def FileContents.getText (fc : FileContents) : IO (FileContents × String) :=
+  match fc.text with
+  | some t => pure (fc, t)
+  | none   => do
+      let t ← IO.FS.readFile fc.path
+      pure ({ fc with text := some t }, t)
+
+/-- Returns the raw byte contents of the file, reading it if not already loaded. -/
+def FileContents.getBin (fc : FileContents) : IO (FileContents × ByteArray) :=
+  match fc.bin with
+  | some b => pure (fc, b)
+  | none   => do
+      let b ← IO.FS.readBinFile fc.path
+      pure ({ fc with bin := some b }, b)
 
 /-- Elaboration for the #import_uplc command -/
 @[command_elab import_uplc]
@@ -185,28 +208,25 @@ def importUplcImp : CommandElab := fun stx => do
     let some s := f.isStrLit? | throwErrorAt f m!"string literal expected for filename"
     return s
 
-  /-- Tries to decode content with all formats and returns the first one that succeeds.
-      Hex-based formats are checked against the trimmed content to mirror the
-      real decoders (which call `String.trim` before decoding). -/
-  findWorkingFormat (content : String) : Option Name :=
-    let trimmed := String.trim content
-    -- Try textual
-    if (programFromString content).isOk then
-      some `textual
-    -- Try flat
-    else if (decodeProgramFromByteString content).isSome then
-      some `flat
-    -- Try flat_hex
-    else if (flatEncodedScriptFromHex? trimmed).isOk then
-      some `flat_hex
-    -- Try single_cbor_hex
-    else if (singleCborEncodedScriptFromHex? trimmed).isOk then
-      some `single_cbor_hex
-    -- Try double_cbor_hex
-    else if (doubleCborEncodedScriptFromHex? trimmed).isOk then
-      some `double_cbor_hex
-    else
-      none
+  /-- Tries to decode the file's contents in every supported format and returns
+      the first one that succeeds. Lazily loads either the textual or the binary
+      representation depending on what each format needs, reusing whatever
+      representation the caller already loaded. -/
+  findWorkingFormat (fc : FileContents) : IO (Option Name) := do
+    -- Try textual (needs text)
+    let (fc, text) ← fc.getText
+    if (programFromString text).isOk then return some `textual
+    -- Try flat (needs binary)
+    let (_, bin) ← fc.getBin
+    if (decodeProgramFromByteArray bin).isSome then return some `flat
+    let trimmed := text.trim
+    -- Try flat_hex (needs text)
+    if (flatEncodedScriptFromHex? trimmed).isOk then return some `flat_hex
+    -- Try single_cbor_hex (needs text)
+    if (singleCborEncodedScriptFromHex? trimmed).isOk then return some `single_cbor_hex
+    -- Try double_cbor_hex (needs text)
+    if (doubleCborEncodedScriptFromHex? trimmed).isOk then return some `double_cbor_hex
+    return none
 
   /-- Formats a format name as a suggestion string -/
   formatSuggestion (format : Name) : String :=
@@ -214,79 +234,83 @@ def importUplcImp : CommandElab := fun stx => do
     s!"Did you mean '{formatName}'?"
 
   /-- Creates an error message with format suggestions for decoding failures -/
-  decodingErrorWithSuggestion (content : String) (excludeFormat : Name) (filename : String) (errorMsg? : Option String := none) : String :=
-    let suggestion := match findWorkingFormat content with
-      | some fmt => if fmt != excludeFormat then formatSuggestion fmt else ""
-      | none => ""
+  decodingErrorWithSuggestion (fc : FileContents) (excludeFormat : Name) (errorMsg? : Option String := none) : TermElabM String := do
+    let alt? ← (findWorkingFormat fc).toBaseIO
+    let suggestion := match alt? with
+      | .ok (some fmt) => if fmt != excludeFormat then formatSuggestion fmt else ""
+      | _ => ""
     let baseMsg := match errorMsg? with
-      | some msg => s!"Decoding error in '{filename}': {msg}"
-      | none => s!"Decoding error in '{filename}'"
-    if suggestion.isEmpty then baseMsg else s!"{baseMsg}. {suggestion}"
-
-  /-- Reads file at path `filename` contents as text. -/
-  readFileContents (filename : String) : TermElabM String :=
-    liftM $ do
-      let path := System.FilePath.mk filename
-      IO.FS.readFile path
+      | some msg => s!"Decoding error in '{fc.path}': {msg}"
+      | none     => s!"Decoding error in '{fc.path}'"
+    return if suggestion.isEmpty then baseMsg else s!"{baseMsg}. {suggestion}"
 
   /-- Parses a textual UPLC file and returns the resulting expression -/
   parseTextualUplc (filename : String) : TermElabM Expr := do
-    let content ← readFileContents filename
+    let path := System.FilePath.mk filename
+    let content ← liftM <| IO.FS.readFile path
     match programFromString content with
     | .ok p =>
         logInfo s!"Successfully decoded textual '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content `textual filename (some msg))
+        let fc : FileContents := { path, text := some content }
+        let msg' ← decodingErrorWithSuggestion fc `textual (some msg)
+        throwError msg'
 
   /-- Parses a flat-encoded UPLC file and returns the resulting expression -/
   parseFlatUplc (filename : String) : TermElabM Expr := do
-    let content ← readFileContents filename
-    match decodeProgramFromByteString content with
+    let path := System.FilePath.mk filename
+    let bytes ← liftM <| IO.FS.readBinFile path
+    match decodeProgramFromByteArray bytes with
     | .some p =>
         logInfo s!"Successfully decoded flat '{filename}'"
         return (toExpr p)
     | .none =>
-        throwError (decodingErrorWithSuggestion content `flat filename)
+        let fc : FileContents := { path, bin := some bytes }
+        let msg' ← decodingErrorWithSuggestion fc `flat
+        throwError msg'
 
   /-- Parses a flat hex-encoded UPLC file and returns the resulting expression -/
   parseFlatHexUplc (filename : String) : TermElabM Expr := do
-    let content ← liftM $ do
-      let path := System.FilePath.mk filename
-      IO.FS.readFile path
+    let path := System.FilePath.mk filename
+    let content ← liftM <| IO.FS.readFile path
     let content' := String.trim content
     match flatEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded flat hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content' `flat_hex filename (some msg))
+        let fc : FileContents := { path, text := some content }
+        let msg' ← decodingErrorWithSuggestion fc `flat_hex (some msg)
+        throwError msg'
 
   /-- Parses a single CBOR hex-encoded UPLC file and returns the resulting expression -/
   parseSingleCborHexUplc (filename : String) : TermElabM Expr := do
-    let content ← liftM $ do
-      let path := System.FilePath.mk filename
-      IO.FS.readFile path
+    let path := System.FilePath.mk filename
+    let content ← liftM <| IO.FS.readFile path
     let content' := String.trim content
     match singleCborEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded single CBOR hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content' `single_cbor_hex filename (some msg))
+        let fc : FileContents := { path, text := some content }
+        let msg' ← decodingErrorWithSuggestion fc `single_cbor_hex (some msg)
+        throwError msg'
 
   /-- Parses a double CBOR hex-encoded UPLC file and returns the resulting expression -/
   parseDoubleCborHexUplc (filename : String) : TermElabM Expr := do
-    let content ← liftM $ do
-      let path := System.FilePath.mk filename
-      IO.FS.readFile path
+    let path := System.FilePath.mk filename
+    let content ← liftM <| IO.FS.readFile path
     let content' := String.trim content
     match doubleCborEncodedScriptFromHex? content' with
     | .ok p =>
         logInfo s!"Successfully decoded double CBOR hex '{filename}'"
         return (toExpr p)
     | .error msg =>
-        throwError (decodingErrorWithSuggestion content' `double_cbor_hex filename (some msg))
+        let fc : FileContents := { path, text := some content }
+        let msg' ← decodingErrorWithSuggestion fc `double_cbor_hex (some msg)
+        throwError msg'
 
   /-- Parses a UPLC file and returns the resulting expression based on format -/
   parseUplcFile (stx : Syntax) : TermElabM Expr := do
@@ -309,7 +333,7 @@ end Internal
 export Internal
   ( singleCborEncodedScriptFromHex!
     doubleCborEncodedScriptFromHex!
-    flatEncodedScriptFromBytestring!
+    flatEncodedScriptFromByteArray!
     flatEncodedScriptFromHex!
   )
 
