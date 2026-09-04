@@ -34,9 +34,17 @@ def millerLoopIterBinary : List Bool := millerLoopIter.getMsbD <$> List.range 64
     Note: this number is huge. -/
 def finalExponent : Nat := (fieldPrime ^ 12 - 1) / groupOrder
 
-/-- Field Fq1 -/
+/-- Field Fq1.
+
+    The representative is a bare `Nat` rather than a `Fin fieldPrime`: `Fin` is an
+    inductive parameterized by a *term*, which the Lean-blaster SMT translation
+    rejects outright (`genIndParams`, "Inductive datatype with instance parameters
+    not supported"), and that propagates all the way up through `Fq2`/`Fq6`/`Fq12`,
+    `Point Fq1` and `Option Fq12` — making every goal that mentions a BLS value
+    fail to elaborate. See `Fq1.ofNat_lt` for the canonicity invariant that the
+    `Fin` bound used to carry. -/
 structure Fq1 where
-  t : Fin fieldPrime
+  t : Nat
   deriving Repr, DecidableEq
 
 /-- Field Fq2 -/
@@ -58,7 +66,11 @@ structure Fq12 where
   w0 : Fq6
   deriving Repr, DecidableEq
 
-def Fq1.ofNat (n : Nat) : Fq1 := ⟨n % fieldPrime, by simp; omega⟩
+def Fq1.ofNat (n : Nat) : Fq1 := ⟨n % fieldPrime⟩
+
+/-- Canonicity invariant, formerly carried by the `Fin fieldPrime` bound on `Fq1.t`. -/
+theorem Fq1.ofNat_lt (n : Nat) : (Fq1.ofNat n).t < fieldPrime := by
+  simp [Fq1.ofNat]; omega
 
 instance (n : Nat) : OfNat Fq1 n where
   ofNat := Fq1.ofNat n
@@ -117,8 +129,8 @@ partial def binaryInversion (a p : Nat) : Nat :=
                     else loop u' (v' - u') x₁' (if x₂' ≥ x₁' then x₂' - x₁' else x₂' + p - x₁')
 
 def Fq1.add (x y : Fq1) : Fq1 := Fq1.ofNat (x.t + y.t)
-def Fq1.sub (x y : Fq1) : Fq1 := Fq1.ofNat ((Fin.val x.t) + fieldPrime - (Fin.val y.t))
-def Fq1.neg (x   : Fq1) : Fq1 := Fq1.ofNat (fieldPrime - (Fin.val x.t))
+def Fq1.sub (x y : Fq1) : Fq1 := Fq1.ofNat (x.t + fieldPrime - y.t)
+def Fq1.neg (x   : Fq1) : Fq1 := Fq1.ofNat (fieldPrime - x.t)
 def Fq1.mul (x y : Fq1) : Fq1 := Fq1.ofNat (x.t * y.t)
 
 instance : Field Fq1 where
@@ -127,7 +139,7 @@ instance : Field Fq1 where
   sub    := Fq1.sub
   neg    := Fq1.neg
   mul    := Fq1.mul
-  inv x  := Fq1.ofNat (binaryInversion (Fin.val x.t) fieldPrime)
+  inv x  := Fq1.ofNat (binaryInversion x.t fieldPrime)
   le x y := x.t ≤ y.t
   mulByNonResidual x := x
 
@@ -334,7 +346,7 @@ def millerDouble (r : Point Fq2) : Point Fq1 → Option Fq12
       let (x, y) ← untwist r
       let slope  := (3 * x * x) * (2 * y)⁻¹
       let v      := y - slope * x
-      pure ((Fq12.ofNat (Fin.val py.t)) - ((Fq12.ofNat (Fin.val px.t)) * slope) - v)
+      pure ((Fq12.ofNat py.t) - ((Fq12.ofNat px.t) * slope) - v)
 
 /-- "Addition" operation of the Miller loop. -/
 def millerAdd (r q : Point Fq2) : Point Fq1 → Option Fq12
@@ -343,10 +355,10 @@ def millerAdd (r q : Point Fq2) : Point Fq1 → Option Fq12
       let (rx, ry) ← untwist r
       let (qx, qy) ← untwist q
       if rx = qx ∧ ry = -qy
-        then pure ((Fq12.ofNat (Fin.val px.t)) - rx)
+        then pure ((Fq12.ofNat px.t) - rx)
         else let slope := (qy - ry) * (qx - rx)⁻¹
              let v     := ((qy * rx) - (ry * qx)) * (rx - qx)⁻¹
-             pure ((Fq12.ofNat (Fin.val py.t)) - (Fq12.ofNat (Fin.val px.t) * slope) - v)
+             pure ((Fq12.ofNat py.t) - (Fq12.ofNat px.t * slope) - v)
 
 /-- The Miller loop is used to calculate the pairing of points `p` and `q`. -/
 def millerLoop (p : Point Fq1) (q : Point Fq2) (r : Point Fq2) (acc : Fq12) : List Bool → Option Fq12
@@ -657,9 +669,9 @@ def Fq1.hashToCurve (message dst : List UInt8) : Option (Point Fq1) := do
 
 /- RFC9380: sgn0 function for Fq2 -/
 def Fq2.sgn₀ (x : Fq2) : Fin 2 :=
-  let sign₀ := ¬ 2 ∣ (Fin.toNat x.u0.t)
+  let sign₀ := ¬ 2 ∣ x.u0.t
   let zero₀ := x.u0 = 0
-  let sign₁ := ¬ 2 ∣ (Fin.toNat x.u1.t)
+  let sign₁ := ¬ 2 ∣ x.u1.t
   if sign₀ ∨ (zero₀ ∧ sign₁) then 1 else 0
 
 /-- Creates an Fq2 value from 128 bytes. -/
@@ -755,7 +767,7 @@ def Fq2.hashToCurve (message dst : List UInt8) : Option (Point Fq2) := do
 def Fq1.ofBytesWithCheck (b : List UInt8) : Option Fq1 :=
   let n := os2ip b
   let x := Fq1.ofNat n
-  if x.t.val = n
+  if x.t = n
     then .some x
     else .none
 
@@ -770,7 +782,7 @@ def Fq2.ofBytesWithCheck (b : List UInt8) : Option Fq2 :=
   let u₀' := os2ip (List.drop 48 b)
   let u₁  := Fq1.ofNat u₁'
   let u₀  := Fq1.ofNat u₀'
-  if u₁.t.val = u₁' ∧ u₀.t.val = u₀'
+  if u₁.t = u₁' ∧ u₀.t = u₀'
     then .some ⟨u₁, u₀⟩
     else .none
 
@@ -786,7 +798,7 @@ def compressG1 : Point Fq1 → List UInt8
       -- For a correctly constructed point `findY` should always
       -- result in `some y`.
       let y' := Option.getD (Fq1.findY x false) 0
-      let b  := i2ospN x.t.val 48
+      let b  := i2ospN x.t 48
       let b0 := b.headD 0
       let b' := b.tail
       if y ≤ y'
@@ -799,7 +811,7 @@ def compressG2 : Point Fq2 → List UInt8
       -- For a correctly constructed point `findY` should always
       -- result in `some y`.
       let y' := Option.getD (Fq2.findY x false) 0
-      let b  := i2ospN x.u1.t.val 48 ++ i2ospN x.u0.t.val 48
+      let b  := i2ospN x.u1.t 48 ++ i2ospN x.u0.t 48
       let b0 := b.headD 0
       let b' := b.tail
       if y ≤ y'
@@ -840,6 +852,8 @@ export Internal
     Point
     Residues
     -- constants
+    fieldPrime
+    groupOrder
     g1
     g2
     -- classes

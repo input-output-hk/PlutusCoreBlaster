@@ -9,6 +9,14 @@ import Cryptograph.Sha3.Sha3_256TestVectors
 
 import PlutusCore.Bitwise.Tests
 import PlutusCore.Cbor.Tests
+import PlutusCore.Crypto.BLS12_381.Tests.AxiomsBlasterHarvest
+import PlutusCore.Crypto.BLS12_381.Tests.AxiomsBlasterProbe
+import PlutusCore.Crypto.BLS12_381.Tests.AxiomsBlasterSealed
+import PlutusCore.Crypto.BLS12_381.Tests.BlasterSmoke
+import PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample
+import PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2
+import PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Bridge
+import PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Properties
 import PlutusCore.UPLC.FlatEncoding.Tests
 import PlutusCore.UPLC.ScriptEncoding.Tests
 import PlutusCore.UPLC.TextEncoding.Tests
