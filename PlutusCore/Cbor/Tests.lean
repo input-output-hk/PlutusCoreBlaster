@@ -11,70 +11,79 @@ open PlutusCore.Integer (Integer)
 
 example : e₈ 7234295460216005990 = "deadbeef".toList := rfl
 
-def example_1 : Prop := splitToChunks "" = []
-example : example_1 := by simp [example_1]; native_decide
+def encode_example_1 : Prop := splitToChunks "" = []
+example : encode_example_1 := by simp [encode_example_1]; native_decide
 
-def example_2 : Prop :=
+def encode_example_2 : Prop :=
   splitToChunks "1234567890123456789012345678901234567890123456789012345678901234" =
   [ "1234567890123456789012345678901234567890123456789012345678901234" ]
 
-example : example_2 := by simp [example_2]; native_decide
+example : encode_example_2 := by simp [encode_example_2]; native_decide
 
-def example_3 : Prop := splitToChunks  "12345678901234567890123456789012345678901234567890123456789012345" =
+def encode_example_3 : Prop := splitToChunks  "12345678901234567890123456789012345678901234567890123456789012345" =
   [ "1234567890123456789012345678901234567890123456789012345678901234"
   , "5"
   ]
 
-example : example_3 := by simp [example_3]; native_decide
+example : encode_example_3 := by simp [encode_example_3]; native_decide
 
-def example_4 : Prop :=
+def encode_example_4 : Prop :=
   splitToChunks "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
   [ "1234567890123456789012345678901234567890123456789012345678901234"
   , "1234567890123456789012345678901234567890123456789012345678901234"
   , "56"
   ]
-example : example_4 := by simp [example_4]; native_decide
+example : encode_example_4 := by simp [encode_example_4]; native_decide
 
-def example_5 : Prop :=
+def encode_example_5 : Prop :=
   encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234" =
   "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
-example : example_5 := by simp [example_5]; native_decide
+example : encode_example_5 := by simp [encode_example_5]; native_decide
 
-def example_6 : Prop :=
+def encode_example_6 : Prop :=
   encodeBytestring "12345678901234567890123456789012345678901234567890123456789012345" =
   "\x5F"
   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
   ++ "\x41"     ++ "5"
   ++ "\xFF"
 
-example : example_6 := by simp [example_6]; native_decide
-
-example : encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
+def encode_example_7 : Prop :=
+  encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
   "\x5F"
   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
   ++ "\x42"     ++ "56"
-  ++ "\xFF" := by native_decide
+  ++ "\xFF"
 
-example : encodeData (.I 12) = .some "\x0c"     := by simp [encodeData, encodeInt, encodeHead]
-example : encodeData (.I 42) = .some "\x18\x2a" := by simp [encodeData, encodeInt, encodeHead]
+example : encode_example_7 := by simp [encode_example_7]; native_decide
 
-example :
+def encode_example_8 : Prop := encodeData (.I 12) = .some "\x0c"
+def encode_example_9 : Prop := encodeData (.I 42) = .some "\x18\x2a"
+
+example : encode_example_8 := by simp [encode_example_8, encodeData, encodeInt, encodeHead]
+example : encode_example_9 := by simp [encode_example_9, encodeData, encodeInt, encodeHead]
+
+
+def encode_example_10 : Prop :=
     encodeData (
       .Constr 0 [
         .Constr 0 [.I 1284531],
         .I 1739713998000
       ]
-    ) = .some "\xd8\x79\x9f\xd8\x79\x9f\x1a\x00\x13\x99\xb3\xff\x1b\x00\x00\x01\x95\x0f\x08\xec\xb0\xff" := by native_decide
+    ) = .some "\xd8\x79\x9f\xd8\x79\x9f\x1a\x00\x13\x99\xb3\xff\x1b\x00\x00\x01\x95\x0f\x08\xec\xb0\xff"
 
-example :
+example : encode_example_10 := by simp [encode_example_10]; native_decide
+
+def encode_example_11 : Prop :=
   encodeData (
     .Constr 0 [
       .I 144375414,
       .I 22710,
       .I 4387720097
     ]
-  ) = .some "\xd8\x79\x9f\x1a\x08\x9a\xfe\x76\x19\x58\xb6\x1b\x00\x00\x00\x01\x05\x87\x4b\xa1\xff" := by native_decide
+  ) = .some "\xd8\x79\x9f\x1a\x08\x9a\xfe\x76\x19\x58\xb6\x1b\x00\x00\x00\x01\x05\x87\x4b\xa1\xff"
+
+example : encode_example_11 := by simp [encode_example_11]; native_decide
 
 -- ==============
 -- =  Decoding  =
@@ -111,8 +120,10 @@ example : decodeData "\xd8\x79\x9f\x1a\x08\x9a\xfe\x76\x19\x58\xb6\x1b\x00\x00\x
 -- Empty collections encode as a DEFINITE empty array (0x80), matching the on-chain
 -- serialiseData builtin (aiken/cbor.serialise), not an indefinite 0x9f..0xff.
 -- (The List [], Constr 0, and nested cases are byte-anchored in the reference fixtures below.)
-example : encodeData (.Constr 1 []) = .some "\xd8\x7a\x80" := by native_decide
-example : encodeData (.Constr 7 []) = .some "\xd9\x05\x00\x80" := by native_decide
+def encode_example_12 : Prop := encodeData (.Constr 1 []) = .some "\xd8\x7a\x80"
+def encode_example_13 : Prop := encodeData (.Constr 7 []) = .some "\xd9\x05\x00\x80"
+example : encode_example_12 := by simp [encode_example_12]; native_decide
+example : encode_example_13 := by simp [encode_example_13]; native_decide
 
 -- decodeData round-trips negative bignums (tag 3), not just positive (tag 2).
 example : (encodeData (.I (-(2 ^ 512 + 1)))).bind decodeData = .some ("", .I (-(2 ^ 512 + 1))) := by native_decide
@@ -135,7 +146,10 @@ example : (encodeData (.List [.B { data := "" }, .I 5])).bind decodeData
 -- or a negative index is rejected on decode, matching the real ledger decoder (decodeWord64), even
 -- though serialiseData will emit it (write-only).
 
-example : encodeData (.Constr (2 ^ 64) [.I 1]) = some "\xD8\x66\x82\xC2\x49\x01\x00\x00\x00\x00\x00\x00\x00\x00\x9F\x01\xFF" := by native_decide
+def encode_example_14 : Prop :=
+  encodeData (.Constr (2 ^ 64) [.I 1]) = some "\xD8\x66\x82\xC2\x49\x01\x00\x00\x00\x00\x00\x00\x00\x00\x9F\x01\xFF"
+example : encode_example_14 := by simp [encode_example_14]; native_decide
+
 example : (encodeData (.Constr (2 ^ 64) [.I 1])).bind decodeData = .none := by native_decide
 example : (encodeData (.Constr (-1) [])).bind decodeData = .none := by native_decide
 
@@ -151,19 +165,23 @@ example : (encodeData (.Map [(.I 1, .B { data := "aa" }), (.List [], .Constr 3 [
 -- encoding, not merely to acceptance.
 
 -- Map [(I 1, I 2)]
-example : encodeData (.Map [(.I 1, .I 2)]) = .some "\xa1\x01\x02"          := by native_decide
+def encode_example_15 : Prop := encodeData (.Map [(.I 1, .I 2)]) = .some "\xa1\x01\x02"
+example : encode_example_15 := by simp [encode_example_15]; native_decide
 example : decodeData "\xa1\x01\x02"        = .some ("", .Map [(.I 1, .I 2)]) := by native_decide
 example : decodeData "\xbf\x01\x02\xff"    = .some ("", .Map [(.I 1, .I 2)]) := by native_decide
 -- Map []
-example : encodeData (.Map []) = .some "\xa0"        := by native_decide
+def encode_example_16 : Prop := encodeData (.Map []) = .some "\xa0"
+example : encode_example_16 := by simp [encode_example_16]; native_decide
 example : decodeData "\xa0"    = .some ("", .Map []) := by native_decide
 example : decodeData "\xbf\xff" = .some ("", .Map []) := by native_decide
 -- Constr 200 [] (index > 127 uses the tag-102 wrapper)
-example : encodeData (.Constr 200 [])   = .some "\xd8\x66\x82\x18\xc8\x80"     := by native_decide
+def encode_example_17 : Prop := encodeData (.Constr 200 []) = .some "\xd8\x66\x82\x18\xc8\x80"
+example : encode_example_17 := by simp [encode_example_17]; native_decide
 example : decodeData "\xd8\x66\x82\x18\xc8\x80"     = .some ("", .Constr 200 []) := by native_decide
 example : decodeData "\xd8\x66\x9f\x18\xc8\x80\xff" = .some ("", .Constr 200 []) := by native_decide
 -- Constr 200 [I 1, I 2]
-example : encodeData (.Constr 200 [.I 1, .I 2]) = .some "\xd8\x66\x82\x18\xc8\x9f\x01\x02\xff"      := by native_decide
+def encode_example_18 : Prop := encodeData (.Constr 200 [.I 1, .I 2]) = .some "\xd8\x66\x82\x18\xc8\x9f\x01\x02\xff"
+example : encode_example_18 := by simp [encode_example_18]; native_decide
 example : decodeData "\xd8\x66\x82\x18\xc8\x9f\x01\x02\xff"      = .some ("", .Constr 200 [.I 1, .I 2]) := by native_decide
 example : decodeData "\xd8\x66\x9f\x18\xc8\x9f\x01\x02\xff\xff"  = .some ("", .Constr 200 [.I 1, .I 2]) := by native_decide
 
@@ -204,43 +222,59 @@ example : decodeData "\xd8\x66\x9f\x18\xc8\x9f\xbf\x01\x02\xff\xff\xff" = .some 
 -- reference (`Data.hs` / cborg / RFC 8949), hand-verifiable byte by byte, so the encode direction
 -- is a genuine anchor and not a self-referential round-trip.
 -- emptyList
-example : encodeData (.List []) = .some "\x80" := by native_decide
+def encode_example_19 : Prop := encodeData (.List []) = .some "\x80"
+example : encode_example_19 := by simp [encode_example_19]; native_decide
 example : decodeData "\x80" = .some ("", .List []) := by native_decide
 -- emptyConstr0
-example : encodeData (.Constr 0 []) = .some "\xd8\x79\x80" := by native_decide
+def encode_example_20 : Prop := encodeData (.Constr 0 []) = .some "\xd8\x79\x80"
+example : encode_example_20 := by simp [encode_example_20]; native_decide
 example : decodeData "\xd8\x79\x80" = .some ("", .Constr 0 []) := by native_decide
 -- emptyConstr5
-example : encodeData (.Constr 5 []) = .some "\xd8\x7e\x80" := by native_decide
+def encode_example_21 : Prop := encodeData (.Constr 5 []) = .some "\xd8\x7e\x80"
+example : encode_example_21 := by simp [encode_example_21]; native_decide
 example : decodeData "\xd8\x7e\x80" = .some ("", .Constr 5 []) := by native_decide
 -- emptyB
-example : encodeData (.B { data := "" }) = .some "\x40" := by native_decide
+def encode_example_22 : Prop := encodeData (.B { data := "" }) = .some "\x40"
+example : encode_example_22 := by simp [encode_example_22]; native_decide
 example : decodeData "\x40" = .some ("", .B { data := "" }) := by native_decide
 -- mapEmptyB
-example : encodeData (.Map [(.B { data := "" }, .I 0)]) = .some "\xa1\x40\x00" := by native_decide
+def encode_example_23 : Prop := encodeData (.Map [(.B { data := "" }, .I 0)]) = .some "\xa1\x40\x00"
+example : encode_example_23 := by simp [encode_example_23]; native_decide
 example : decodeData "\xa1\x40\x00" = .some ("", .Map [(.B { data := "" }, .I 0)]) := by native_decide
 -- negBignum64
-example : encodeData (.I (-(2 ^ 64 + 1))) = .some "\xc3\x49\x01\x00\x00\x00\x00\x00\x00\x00\x00" := by native_decide
+def encode_example_24 : Prop := encodeData (.I (-(2 ^ 64 + 1))) = .some "\xc3\x49\x01\x00\x00\x00\x00\x00\x00\x00\x00"
+example : encode_example_24 := by simp [encode_example_24]; native_decide
 example : decodeData "\xc3\x49\x01\x00\x00\x00\x00\x00\x00\x00\x00" = .some ("", .I (-(2 ^ 64 + 1))) := by native_decide
 -- negBignum128
-example : encodeData (.I (-(2 ^ 128))) = .some "\xc3\x50\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" := by native_decide
+def encode_example_25 : Prop :=
+  encodeData (.I (-(2 ^ 128))) = .some "\xc3\x50\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+example : encode_example_25 := by simp [encode_example_25]; native_decide
 example : decodeData "\xc3\x50\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" = .some ("", .I (-(2 ^ 128))) := by native_decide
 -- constr128
-example : encodeData (.Constr 128 []) = .some "\xd8\x66\x82\x18\x80\x80" := by native_decide
+def encode_example_26 : Prop := encodeData (.Constr 128 []) = .some "\xd8\x66\x82\x18\x80\x80"
+example : encode_example_26 := by simp [encode_example_26]; native_decide
 example : decodeData "\xd8\x66\x82\x18\x80\x80" = .some ("", .Constr 128 []) := by native_decide
 -- constrBig (2^63-1)
-example : encodeData (.Constr (2 ^ 63 - 1) [.I 1]) = .some "\xd8\x66\x82\x1b\x7f\xff\xff\xff\xff\xff\xff\xff\x9f\x01\xff" := by native_decide
+def encode_example_27 : Prop :=
+  encodeData (.Constr (2 ^ 63 - 1) [.I 1]) = .some "\xd8\x66\x82\x1b\x7f\xff\xff\xff\xff\xff\xff\xff\x9f\x01\xff"
+example : encode_example_27 := by simp [encode_example_27]; native_decide
 example : decodeData "\xd8\x66\x82\x1b\x7f\xff\xff\xff\xff\xff\xff\xff\x9f\x01\xff" = .some ("", .Constr (2 ^ 63 - 1) [.I 1]) := by native_decide
 -- constrMax (2^64-1, the largest in-range Word64 index)
-example : encodeData (.Constr (2 ^ 64 - 1) [.I 1]) = .some "\xd8\x66\x82\x1b\xff\xff\xff\xff\xff\xff\xff\xff\x9f\x01\xff" := by native_decide
+def encode_example_28 : Prop :=
+  encodeData (.Constr (2 ^ 64 - 1) [.I 1]) = .some "\xd8\x66\x82\x1b\xff\xff\xff\xff\xff\xff\xff\xff\x9f\x01\xff"
+example : encode_example_28 := by simp [encode_example_28]; native_decide
 example : decodeData "\xd8\x66\x82\x1b\xff\xff\xff\xff\xff\xff\xff\xff\x9f\x01\xff" = .some ("", .Constr (2 ^ 64 - 1) [.I 1]) := by native_decide
 -- nested
-example : encodeData (.Constr 0 [.List [], .I 5]) = .some "\xd8\x79\x9f\x80\x05\xff" := by native_decide
+def encode_example_29 : Prop := encodeData (.Constr 0 [.List [], .I 5]) = .some "\xd8\x79\x9f\x80\x05\xff"
+example : encode_example_29 := by simp [encode_example_29]; native_decide
 example : decodeData "\xd8\x79\x9f\x80\x05\xff" = .some ("", .Constr 0 [.List [], .I 5]) := by native_decide
 -- mapKV
-example : encodeData (.Map [(.I 0, .I 1)]) = .some "\xa1\x00\x01" := by native_decide
+def encode_example_30 : Prop := encodeData (.Map [(.I 0, .I 1)]) = .some "\xa1\x00\x01"
+example : encode_example_30 := by simp [encode_example_30]; native_decide
 example : decodeData "\xa1\x00\x01" = .some ("", .Map [(.I 0, .I 1)]) := by native_decide
 -- listII
-example : encodeData (.List [.I 1, .I 2]) = .some "\x9f\x01\x02\xff" := by native_decide
+def encode_example_31 : Prop := encodeData (.List [.I 1, .I 2]) = .some "\x9f\x01\x02\xff"
+example : encode_example_31 := by simp [encode_example_31]; native_decide
 example : decodeData "\x9f\x01\x02\xff" = .some ("", .List [.I 1, .I 2]) := by native_decide
 
 
@@ -248,51 +282,51 @@ example : decodeData "\x9f\x01\x02\xff" = .some ("", .List [.I 1, .I 2]) := by n
 
 set_option warn.sorry false
 
-#blaster (only-optimize: 1) [example_1]
-#blaster (only-optimize: 1) [example_2]
-#blaster (only-optimize: 1) [example_3]
-#blaster (only-optimize: 1) [example_4]
-#blaster (only-optimize: 1) [example_5]
-#blaster (only-optimize: 1) [example_6]
+#blaster (only-optimize: 1) [encode_example_1]
+#blaster (only-optimize: 1) [encode_example_2]
+#blaster (only-optimize: 1) [encode_example_3]
+#blaster (only-optimize: 1) [encode_example_4]
+#blaster (only-optimize: 1) [encode_example_5]
+#blaster (only-optimize: 1) [encode_example_6]
+#blaster (only-optimize: 1) [encode_example_7]
+#blaster (only-optimize: 1) [encode_example_8]
+#blaster (only-optimize: 1) [encode_example_9]
+#blaster (only-optimize: 1) [encode_example_10]
+#blaster (only-optimize: 1) [encode_example_11]
+#blaster (only-optimize: 1) [encode_example_12]
+#blaster (only-optimize: 1) [encode_example_13]
+#blaster (only-optimize: 1) [encode_example_14]
+#blaster (only-optimize: 1) [encode_example_15]
+#blaster (only-optimize: 1) [encode_example_16]
+#blaster (only-optimize: 1) [encode_example_17]
+#blaster (only-optimize: 1) [encode_example_18]
+#blaster (only-optimize: 1) [encode_example_19]
+#blaster (only-optimize: 1) [encode_example_20]
+#blaster (only-optimize: 1) [encode_example_21]
+#blaster (only-optimize: 1) [encode_example_22]
+#blaster (only-optimize: 1) [encode_example_23]
+#blaster (only-optimize: 1) [encode_example_24]
+#blaster (only-optimize: 1) [encode_example_25]
+#blaster (only-optimize: 1) [encode_example_26]
+#blaster (only-optimize: 1) [encode_example_27]
+#blaster (only-optimize: 1) [encode_example_28]
+#blaster (only-optimize: 1) [encode_example_29]
+#blaster (only-optimize: 1) [encode_example_30]
+#blaster (only-optimize: 1) [encode_example_31]
 
-example : encodeData (.List [.I 1]) ≠ none := by blaster (only-optimize: 1)
+example : encodeData (.List []) = some "\x80" := by blaster
+example : encodeData (.List [.I 1]) ≠ none := by blaster
 
--- example : encodeBytestring "12345678901234567890123456789012345678901234567890123456789012345" =
---   "\x5F"
---   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
---   ++ "\x41"     ++ "5"
---   ++ "\xFF" := by blaster (solve-result: 2) (only-optimize: 1)
+def cex_encode_int_leq_2_pow_64_minus_one : Prop := ∀ (i : Integer), 0 ≤ i ∧ i ≤ 18446744073709551615 → (encodeInt i).length = 1
+-- NOTE: remove solver options once Char opacified or BitVec supported
+#blaster (only-optimize: 1) (solve-result: 2) [cex_encode_int_leq_2_pow_64_minus_one]
 
--- example : encodeBytestring "1234567890123456789012345678901234567890123456789012345678901234123456789012345678901234567890123456789012345678901234567890123456" =
---   "\x5F"
---   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
---   ++ "\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234"
---   ++ "\x42"     ++ "56"
---   ++ "\xFF" := by blaster
+def cex_encode_int_geq_2_pow_64 : Prop := ∀ (i : Integer), 18446744073709551616 ≤ i → (encodeInt i).length = 1
+-- NOTE: remove solver options once Char opacified or BitVec supported
+#blaster (only-optimize: 1) (solve-result: 2) [cex_encode_int_geq_2_pow_64]
 
-example : encodeData (.I 12) = .some "\x0c"     := by blaster (only-optimize: 1)
-example : encodeData (.I 42) = .some "\x18\x2a" := by blaster (only-optimize: 1)
-
-example :
-    encodeData (
-      .Constr 0 [
-        .Constr 0 [.I 1284531],
-        .I 1739713998000
-      ]
-    ) = .some "\xd8\x79\x9f\xd8\x79\x9f\x1a\x00\x13\x99\xb3\xff\x1b\x00\x00\x01\x95\x0f\x08\xec\xb0\xff" := by blaster (only-optimize: 1)
-
-example :
-  encodeData (
-    .Constr 0 [
-      .I 144375414,
-      .I 22710,
-      .I 4387720097
-    ]
-  ) = .some "\xd8\x79\x9f\x1a\x08\x9a\xfe\x76\x19\x58\xb6\x1b\x00\x00\x00\x01\x05\x87\x4b\xa1\xff" := by native_decide
-
--- theorem ser_one : ∀ (i : Integer), 0 ≤ i ∧ i ≤ 18446744073709551615 → (encodeInt i).length = 1 := by blaster
-
--- theorem ser_one_bis : ∀ (i : Integer), 18446744073709551616 ≤ i → (encodeInt i).length = 1 := by sorry
--- theorem itos_blabla : ∀ (i : Nat), (itos i).length = 1 := by blaster
+def example_split_chunks : Prop := ∀ (s : String), s ≠ "" → (splitToChunks s).head!.length ≤ 64
+-- NOTE: remove solver options once Char opacified or BitVec supported
+#blaster (only-optimize: 1) (solve-result: 2) [example_split_chunks]
 
 end PlutusCore.Cbor
