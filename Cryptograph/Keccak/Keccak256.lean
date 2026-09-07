@@ -7,24 +7,26 @@ namespace Cryptograph.Keccak.Keccak256
 
 namespace Internal
 
+open Cryptograph.String
+
 -- Type aliases
-private abbrev Lane := UInt64
+private abbrev Lane  := UInt64
 private abbrev State := Array (Array Lane)
 
 -- Constants
-private def stateWidth : Nat := 5
-private def rounds : Nat := 24
-private def rate : Nat := 136          -- 1088 bits for Keccak-256
-private def capacity : Nat := 64       -- 512 bits
-private def outputLength : Nat := 32   -- 256 bits
+private def stateWidth   : Nat :=   5
+private def rounds       : Nat :=  24
+private def rate         : Nat := 136   -- 1088 bits for Keccak-256
+private def capacity     : Nat :=  64   -- 512 bits
+private def outputLength : Nat :=  32   -- 256 bits
 
 -- Rotation offsets for ρ (rho) step
 private def rotationOffsets : Array (Array Nat) :=
-  #[#[0, 1, 62, 28, 27],
-    #[36, 44, 6, 55, 20],
-    #[3, 10, 43, 25, 39],
-    #[41, 45, 15, 21, 8],
-    #[18, 2, 61, 56, 14]]
+  #[#[ 0,  1, 62, 28, 27],
+    #[36, 44,  6, 55, 20],
+    #[ 3, 10, 43, 25, 39],
+    #[41, 45, 15, 21,  8],
+    #[18,  2, 61, 56, 14]]
 
 -- Round constants for ι (iota) step
 private def roundConstants : Array UInt64 :=
@@ -199,20 +201,16 @@ private def squeeze (state : State) (outputLen : Nat) : ByteArray :=
 /-! ### Main Hash Function -/
 
 -- Keccak-256 hash function
--- Takes a list of bytes and returns 32-byte hash
-def hashBytes (input : List UInt8) : List UInt8 :=
-  let inputBytes := ByteArray.mk input.toArray
-  let padded := pad inputBytes
-  let state := absorb initState padded
-  let outputBytes := squeeze state outputLength
-  outputBytes.toList
+-- Takes a ByteArray and returns a 32-byte ByteArray hash
+def hashBytes (input : ByteArray) : ByteArray :=
+  let padded := pad input
+  let state  := absorb initState padded
+  squeeze state outputLength
 
 -- Keccak-256 hash function for strings
 -- Takes a string and returns hex-encoded hash
 def hash (input : String) : String :=
-  let inputBytes := input.toUTF8.toList
-  let hashBytes := hashBytes inputBytes
-  Cryptograph.String.uint8ListToHex hashBytes
+  byteArrayToHex (hashBytes input.toUTF8)
 
 /-! ### SHA3-256 Hash Function
 
@@ -221,20 +219,16 @@ but with a different padding suffix (0x06 instead of 0x01).
 -/
 
 -- SHA3-256 hash function
--- Takes a list of bytes and returns 32-byte hash
-def sha3_256_hashBytes (input : List UInt8) : List UInt8 :=
-  let inputBytes := ByteArray.mk input.toArray
-  let padded := pad inputBytes 0x06  -- SHA3 domain separation
-  let state := absorb initState padded
-  let outputBytes := squeeze state outputLength
-  outputBytes.toList
+-- Takes a ByteArray and returns a 32-byte ByteArray hash
+def sha3_256_hashBytes (input : ByteArray) : ByteArray :=
+  let padded := pad input 0x06  -- SHA3 domain separation
+  let state  := absorb initState padded
+  squeeze state outputLength
 
 -- SHA3-256 hash function for strings
 -- Takes a string and returns hex-encoded hash
 def sha3_256_hash (input : String) : String :=
-  let inputBytes := input.toUTF8.toList
-  let hashBytes := sha3_256_hashBytes inputBytes
-  Cryptograph.String.uint8ListToHex hashBytes
+  byteArrayToHex (sha3_256_hashBytes input.toUTF8)
 
 end Internal
 

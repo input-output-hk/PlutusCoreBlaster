@@ -18,16 +18,16 @@ namespace Internal
 -- pk: 33 bytes (compressed), msg: 32 bytes (hash), sig: 64 bytes (compact r||s).
 -- Returns .error for invalid lengths or unparseable key/sig (→ EvaluationError in CEK).
 opaque verifyEcdsaSecp256k1Signature (publicKey message signature : ByteString) : Except String Bool :=
-  let pk  := Char.toUInt8 <$> publicKey.data.data
-  let msg := Char.toUInt8 <$> message.data.data
-  let sig := Char.toUInt8 <$> signature.data.data
-  if pk.length != 33 then .error "verifyEcdsaSecp256k1Signature: pk must be 33 bytes"
-  else if msg.length != 32 then .error "verifyEcdsaSecp256k1Signature: msg must be 32 bytes"
-  else if sig.length != 64 then .error "verifyEcdsaSecp256k1Signature: sig must be 64 bytes"
+  let pk  := byteStringToByteArray publicKey
+  let msg := byteStringToByteArray message
+  let sig := byteStringToByteArray signature
+  if pk.size != 33 then .error "verifyEcdsaSecp256k1Signature: pk must be 33 bytes"
+  else if msg.size != 32 then .error "verifyEcdsaSecp256k1Signature: msg must be 32 bytes"
+  else if sig.size != 64 then .error "verifyEcdsaSecp256k1Signature: sig must be 64 bytes"
   else
     -- Per Plutus spec: r or s equal to 0 or ≥ curveOrder is an evaluation error (not False)
-    let r := ECDSA.bytesToNat (sig.take 32)
-    let s := ECDSA.bytesToNat (sig.drop 32)
+    let r := ECDSA.bytesToNat (sig.extract 0 32)
+    let s := ECDSA.bytesToNat (sig.extract 32 64)
     if r == 0 || Nat.ble ECDSA.curveOrder r then .error "verifyEcdsaSecp256k1Signature: r out of range"
     else if s == 0 || Nat.ble ECDSA.curveOrder s then .error "verifyEcdsaSecp256k1Signature: s out of range"
     else match Secp256k1Point.decompress pk with
@@ -38,11 +38,11 @@ opaque verifyEcdsaSecp256k1Signature (publicKey message signature : ByteString) 
 -- pk: 32 bytes (x-only), msg: any length, sig: 64 bytes.
 -- Returns .error for invalid lengths or unparseable key (→ EvaluationError in CEK).
 opaque verifySchnorrSecp256k1Signature (publicKey message signature : ByteString) : Except String Bool :=
-  let pk  := Char.toUInt8 <$> publicKey.data.data
-  let msg := Char.toUInt8 <$> message.data.data
-  let sig := Char.toUInt8 <$> signature.data.data
-  if pk.length != 32 then .error "verifySchnorrSecp256k1Signature: pk must be 32 bytes"
-  else if sig.length != 64 then .error "verifySchnorrSecp256k1Signature: sig must be 64 bytes"
+  let pk  := byteStringToByteArray publicKey
+  let msg := byteStringToByteArray message
+  let sig := byteStringToByteArray signature
+  if pk.size != 32 then .error "verifySchnorrSecp256k1Signature: pk must be 32 bytes"
+  else if sig.size != 64 then .error "verifySchnorrSecp256k1Signature: sig must be 64 bytes"
   else match Schnorr.liftX pk with
   | none   => .error "verifySchnorrSecp256k1Signature: invalid public key"
   | some _ => .ok (Schnorr.verify pk msg sig)

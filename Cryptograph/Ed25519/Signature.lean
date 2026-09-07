@@ -11,23 +11,23 @@ open Cryptograph.Ed25519.Field
 open Cryptograph.Sha2.Sha512
 
 -- Convert bytes (little-endian) to Nat
-def bytesToNat (bytes : List UInt8) : Nat :=
-  bytes.foldr (fun b acc => b.toNat + acc * 256) 0
+def bytesToNat (bytes : ByteArray) : Nat :=
+  (List.range bytes.size).foldr (λ i acc => bytes[i]!.toNat + acc * 256) 0
 
 -- Reduce a 512-bit hash to a scalar modulo L (little-endian bytes)
-def reduceModL (hash : List UInt8) : Nat :=
+def reduceModL (hash : ByteArray) : Nat :=
   bytesToNat hash % curveOrder
 
 -- Verify Ed25519 signature
 -- Returns true if signature is valid
-def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UInt8) : Bool :=
+def verify (publicKey : ByteArray) (message : ByteArray) (signature : ByteArray) : Bool :=
   -- Check lengths
-  if publicKey.length != 32 then false
-  else if signature.length != 64 then false
+  if publicKey.size != 32 then false
+  else if signature.size != 64 then false
   else
     -- Split signature into R (32 bytes) and s (32 bytes)
-    let rBytes := signature.take 32
-    let sBytes := signature.drop 32
+    let rBytes := signature.extract 0 32
+    let sBytes := signature.extract 32 64
 
     -- Decode public key A
     match EdPoint.decompress publicKey with
@@ -44,9 +44,8 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
         if Nat.ble curveOrder s then false
         else
           -- Compute hash: h = SHA-512(R || A || M)
-          let hashInput  := rBytes ++ publicKey ++ message
-          let hashOutput := Internal.hashMessage hashInput
-          let hashBytes  := hashOutput.flatMap Cryptograph.Integer.UInt64.toUInt8BE
+          let hashInput := rBytes ++ publicKey ++ message
+          let hashBytes := Internal.hashMessage hashInput
 
           -- Reduce hash modulo L
           let h := reduceModL hashBytes

@@ -7,6 +7,8 @@ namespace Cryptograph.Blake2b.Blake2b
 
 namespace Internal
 
+open Cryptograph.String
+
 -- Blake2b initialization vectors (first 64 bits of fractional parts of sqrt of first 8 primes)
 private def iv : Array UInt64 :=
   #[0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
@@ -35,17 +37,17 @@ private def rotr64 (x : UInt64) (n : Nat) : UInt64 :=
   (x >>> n.toUInt64) ||| (x <<< (64 - n).toUInt64)
 
 -- Convert 8 bytes (little-endian) to UInt64
-private def bytesToUInt64LE (bytes : ByteArray) (offset : Nat) : UInt64 :=
-  let b0 := if offset + 0 < bytes.size then bytes[offset + 0]!.toUInt64 else 0
-  let b1 := if offset + 1 < bytes.size then bytes[offset + 1]!.toUInt64 else 0
-  let b2 := if offset + 2 < bytes.size then bytes[offset + 2]!.toUInt64 else 0
-  let b3 := if offset + 3 < bytes.size then bytes[offset + 3]!.toUInt64 else 0
-  let b4 := if offset + 4 < bytes.size then bytes[offset + 4]!.toUInt64 else 0
-  let b5 := if offset + 5 < bytes.size then bytes[offset + 5]!.toUInt64 else 0
-  let b6 := if offset + 6 < bytes.size then bytes[offset + 6]!.toUInt64 else 0
-  let b7 := if offset + 7 < bytes.size then bytes[offset + 7]!.toUInt64 else 0
-  b0 ||| (b1 <<< 8) ||| (b2 <<< 16) ||| (b3 <<< 24) |||
-  (b4 <<< 32) ||| (b5 <<< 40) ||| (b6 <<< 48) ||| (b7 <<< 56)
+private def bytesToUInt64LE (b : ByteArray) (offset : Nat) : UInt64 :=
+  let b₀ := if h₀ : offset + 0 < b.size then b[offset + 0].toUInt64 else 0
+  let b₁ := if h₁ : offset + 1 < b.size then b[offset + 1].toUInt64 else 0
+  let b₂ := if h₂ : offset + 2 < b.size then b[offset + 2].toUInt64 else 0
+  let b₃ := if h₃ : offset + 3 < b.size then b[offset + 3].toUInt64 else 0
+  let b₄ := if h₄ : offset + 4 < b.size then b[offset + 4].toUInt64 else 0
+  let b₅ := if h₅ : offset + 5 < b.size then b[offset + 5].toUInt64 else 0
+  let b₆ := if h₆ : offset + 6 < b.size then b[offset + 6].toUInt64 else 0
+  let b₇ := if h₇ : offset + 7 < b.size then b[offset + 7].toUInt64 else 0
+  b₀ ||| (b₁ <<<  8) ||| (b₂ <<< 16) ||| (b₃ <<< 24)
+     ||| (b₄ <<< 32) ||| (b₅ <<< 40) ||| (b₆ <<< 48) ||| (b₇ <<< 56)
 
 -- Convert UInt64 to 8 bytes (little-endian)
 private def uint64ToBytes (x : UInt64) : Array UInt8 :=
@@ -85,15 +87,15 @@ private def g (v : Array UInt64) (a b c d : Nat) (x y : UInt64) : Array UInt64 :
 private def compress (h : Array UInt64) (m : Array UInt64) (t : UInt64) (f : Bool) : Array UInt64 :=
   -- Initialize working variables
   let v := Array.replicate 16 0
-  let v := (List.range 8).foldl (fun v i => v.set! i h[i]!) v
-  let v := (List.range 8).foldl (fun v i => v.set! (i + 8) iv[i]!) v
+  let v := (List.range 8).foldl (λ v i => v.set! i h[i]!) v
+  let v := (List.range 8).foldl (λ v i => v.set! (i + 8) iv[i]!) v
 
   -- Mix the counter and flag
   let v := v.set! 12 (v[12]! ^^^ t)
   let v := if f then v.set! 14 (~~~v[14]!) else v
 
   -- 12 rounds of mixing
-  let v := (List.range 12).foldl (fun v round =>
+  let v := (List.range 12).foldl (λ v round =>
     let s := sigma[round]!
     let v := g v 0 4  8 12 m[s[0]!]! m[s[1]!]!
     let v := g v 1 5  9 13 m[s[2]!]! m[s[3]!]!
@@ -107,32 +109,31 @@ private def compress (h : Array UInt64) (m : Array UInt64) (t : UInt64) (f : Boo
   ) v
 
   -- XOR the two halves
-  (List.range 8).foldl (fun h' i =>
+  (List.range 8).foldl (λ h' i =>
     h'.set! i (h'[i]! ^^^ v[i]! ^^^ v[i + 8]!)
   ) h
 
 -- Parse message block into 16 UInt64 values
 private def parseBlock (data : ByteArray) (offset : Nat) : Array UInt64 :=
-  Array.range 16 |>.map fun i => bytesToUInt64LE data (offset + i * 8)
+  (λ i => bytesToUInt64LE data (offset + i * 8)) <$> Array.range 16
 
 /-! ### Main Hash Function -/
 
 -- Blake2b hash with configurable output length
-def blake2b (input : List UInt8) (outputLen : Nat) : List UInt8 :=
-  if outputLen == 0 || outputLen > 64 then []
+def blake2b (inputBytes : ByteArray) (outputLen : Nat) : ByteArray :=
+  if outputLen == 0 || outputLen > 64 then .empty
   else
-    let inputBytes := ByteArray.mk input.toArray
     let inputLen := inputBytes.size
 
     -- Initialize state with IV XOR parameter block
     -- Parameter block: digest_length || key_length || fanout || depth || ...
     let h := iv.map id  -- Copy IV
-    let h := h.set! 0 (h[0]! ^^^ 0x01010000 ^^^ outputLen.toUInt64)
+    let h := h.set 0 (h[0] ^^^ 0x01010000 ^^^ outputLen.toUInt64)
 
     -- Process full blocks
     let blockSize := 128  -- Blake2b block size in bytes
     let numFullBlocks := (inputLen - 1) / blockSize
-    let h := (List.range numFullBlocks).foldl (fun h blockIdx =>
+    let h := (List.range numFullBlocks).foldl (λ h blockIdx =>
       let offset := blockIdx * blockSize
       let m := parseBlock inputBytes offset
       let t := ((blockIdx + 1) * blockSize).toUInt64
@@ -143,11 +144,11 @@ def blake2b (input : List UInt8) (outputLen : Nat) : List UInt8 :=
     let finalBlockStart := numFullBlocks * blockSize
     let finalBlockLen := inputLen - finalBlockStart
     let finalBlock := ByteArray.emptyWithCapacity 128
-    let finalBlock := (List.range finalBlockLen).foldl (fun arr i =>
+    let finalBlock := (List.range finalBlockLen).foldl (λ arr i =>
       arr.push inputBytes[finalBlockStart + i]!
     ) finalBlock
     -- Pad with zeros
-    let finalBlock := (List.range (blockSize - finalBlockLen)).foldl (fun arr _ =>
+    let finalBlock := (List.range (blockSize - finalBlockLen)).foldl (λ arr _ =>
       arr.push 0
     ) finalBlock
 
@@ -157,39 +158,35 @@ def blake2b (input : List UInt8) (outputLen : Nat) : List UInt8 :=
 
     -- Extract output bytes
     let output := ByteArray.emptyWithCapacity outputLen
-    let output := (List.range (outputLen / 8)).foldl (fun arr i =>
-      uint64ToBytes h[i]! |>.foldl (fun a b => a.push b) arr
+    let output := (List.range (outputLen / 8)).foldl (λ arr i =>
+      uint64ToBytes h[i]! |>.foldl (·.push) arr
     ) output
     -- Handle remaining bytes if output length is not multiple of 8
     let remainingBytes := outputLen % 8
     let output := if remainingBytes > 0 then
       let lastWord := uint64ToBytes h[outputLen / 8]!
-      (List.range remainingBytes).foldl (fun arr i =>
+      (List.range remainingBytes).foldl (λ arr i =>
         arr.push lastWord[i]!
       ) output
     else
       output
 
-    output.toList
+    output
 
 -- Blake2b-256: 256-bit (32-byte) output
-def blake2b_256 (input : List UInt8) : List UInt8 :=
+def blake2b_256 (input : ByteArray) : ByteArray :=
   blake2b input 32
 
 -- Blake2b-224: 224-bit (28-byte) output
-def blake2b_224 (input : List UInt8) : List UInt8 :=
+def blake2b_224 (input : ByteArray) : ByteArray :=
   blake2b input 28
 
 -- String versions
 def blake2b_256_hash (input : String) : String :=
-  let inputBytes := input.toUTF8.toList
-  let hashBytes := blake2b_256 inputBytes
-  Cryptograph.String.uint8ListToHex hashBytes
+  byteArrayToHex (blake2b_256 input.toUTF8)
 
 def blake2b_224_hash (input : String) : String :=
-  let inputBytes := input.toUTF8.toList
-  let hashBytes := blake2b_224 inputBytes
-  Cryptograph.String.uint8ListToHex hashBytes
+  byteArrayToHex (blake2b_224 input.toUTF8)
 
 end Internal
 

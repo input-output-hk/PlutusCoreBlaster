@@ -185,6 +185,15 @@ def equalsByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 == b2
 def lessThanByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 < b2
 def lessThanEqualsByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 <= b2
 
+/-- Converts a UPLC `ByteString` (which wraps a `String` of codepoint-as-byte
+    chars) to its `ByteArray` representation. -/
+@[inline] def byteStringToByteArray (bs : ByteString) : ByteArray :=
+  (Char.toUInt8 <$> bs.data.data).toByteArray
+
+/-- Wrap a `ByteArray` into the UPLC `ByteString` domain value. -/
+@[inline] def byteArrayToByteString (b : ByteArray) : ByteString :=
+  ⟨String.mk (Char.ofUInt8 <$> b.toList)⟩
+
 end PlutusCore.ByteStringInternal
 
 export PlutusCore.ByteStringInternal
@@ -203,6 +212,8 @@ export PlutusCore.ByteStringInternal
     sliceByteString
     ByteString.cons
     ByteString.stringToByteString
+    byteStringToByteArray
+    byteArrayToByteString
     -- theorems
     EqByteString_equiv_EqArray
     BEqByteString_false_imp_not_eq

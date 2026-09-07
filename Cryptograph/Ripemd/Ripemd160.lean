@@ -8,6 +8,7 @@ namespace Cryptograph.Ripemd.Ripemd160
 namespace Internal
 
 open Cryptograph.Integer
+open Cryptograph.String
 
 -- Initial hash values
 private def h0 : UInt32 := 0x67452301
@@ -185,9 +186,8 @@ private def parseBlock (data : ByteArray) (offset : Nat) : Array UInt32 :=
 /-! ### Main Hash Function -/
 
 -- RIPEMD-160 hash function
-def ripemd160 (input : List UInt8) : List UInt8 :=
-  let inputBytes := ByteArray.mk input.toArray
-  let padded := padMessage inputBytes
+def ripemd160 (input : ByteArray) : ByteArray :=
+  let padded := padMessage input
 
   -- Initialize hash state
   let h := #[h0, h1, h2, h3, h4]
@@ -201,17 +201,13 @@ def ripemd160 (input : List UInt8) : List UInt8 :=
   ) h
 
   -- Convert hash state to bytes (little-endian)
-  let output := h.foldl (fun arr word =>
+  h.foldl (fun arr word =>
     uint32ToBytes word |>.foldl (fun a b => a.push b) arr
   ) ByteArray.empty
 
-  output.toList
-
 -- String version
 def ripemd160_hash (input : String) : String :=
-  let inputBytes := input.toUTF8.toList
-  let hashBytes := ripemd160 inputBytes
-  Cryptograph.String.uint8ListToHex hashBytes
+  byteArrayToHex (ripemd160 input.toUTF8)
 
 end Internal
 
