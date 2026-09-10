@@ -70,12 +70,7 @@ def test11 := doubleCborEncodedScriptFromHexM "494801000022212001011"
 /-- info: Program.Program (Version.Version 1 0 0)
   (Term.Lam "dbi_0" (Term.Lam "dbi_1" (Term.Lam "dbi_2" (Term.Lam "dbi_3" (Term.Var 0)).Delay))) -/
 #guard_msgs in
-#eval flatEncodedScriptFromBytestring! "\x01\x00\x00\x22\x21\x20\x01\x01"
-
-/-- info: Program.Program (Version.Version 1 0 0)
-  (Term.Lam "dbi_0" (Term.Lam "dbi_1" (Term.Lam "dbi_2" (Term.Lam "dbi_3" (Term.Var 0)).Delay))) -/
-#guard_msgs in
-#eval flatEncodedScriptFromBytestringM "\x01\x00\x00\x22\x21\x20\x01\x01"
+#eval flatEncodedScriptFromByteArray! (ByteArray.mk #[0x01, 0x00, 0x00, 0x22, 0x21, 0x20, 0x01, 0x01])
 
 /-- info: Successfully decoded flat 'PlutusCore/UPLC/ScriptEncoding/TestsFlat/testUplc.flat' -/
 #guard_msgs in

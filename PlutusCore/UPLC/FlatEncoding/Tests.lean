@@ -5,17 +5,45 @@ namespace PlutusCore.UPLC.FlatEncoding
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.FlatEncoding.Internal
 
-example : decodeFixedNat 8 [true, true, true, true, false, false, false, false] = .some ([], 0xF0)      := by rfl
-example : decodeFixedNat 7 [true, true, true, true, false, false, false, false] = .some ([false], 0x78) := by rfl
+/-- Test helper: pack a `List Bool` (MSB-first within each byte) into a `ByteArray`.
+    Trailing bits beyond a multiple of 8 are zero-padded on the low end of the last byte. -/
+private def bitsToByteArray (bs : List Bool) : ByteArray :=
+  let n         := bs.length
+  let byteCount := (n + 7) / 8
+  let padded    := bs ++ List.replicate (byteCount * 8 - n) false
+  let bytes     := (List.range byteCount).map (fun i =>
+    ((padded.drop (i * 8)).take 8).foldl
+      (fun (acc : UInt8) b => (acc <<< 1) ||| (if b then 1 else 0)) 0)
+  ⟨bytes.toArray⟩
 
-example : decodeList (decodeFixedNat 2) [true, false, true, true, true, false, false] = .some ([], [1, 2]) := by native_decide
+/-- Test helper: build a `DecodeState` at position 0 from a `List Bool`. -/
+private def stateOfBits (bs : List Bool) : DecodeState :=
+  { input := bitsToByteArray bs, bytePos := 0, bitPos := 0 }
 
-example : decodeNat [false, false, true, false, true, false, true, false] = .some ([], 42) := by native_decide
-example : decodeNat ([true]  ++ [true , true , true , true , true , true , true ]
-                  ++ [false] ++ [false, false, false, false, false, false, true ]) = .some ([], 255) := by native_decide
-example : decodeNat ([true]  ++ [false, false, false, false, false, false, false]
-                  ++ [true]  ++ [false, false, false, false, false, false, false]
-                  ++ [false] ++ [false, false, false, false, false, false, true ]) = .some ([], 16384) := by native_decide
+example :
+    decodeFixedNat 8 (stateOfBits [true, true, true, true, false, false, false, false])
+    = .some ({ input := bitsToByteArray [true, true, true, true, false, false, false, false], bytePos := 1, bitPos := 0 }, 0xF0) := by native_decide
+
+example :
+    decodeFixedNat 7 (stateOfBits [true, true, true, true, false, false, false, false])
+    = .some ({ input := bitsToByteArray [true, true, true, true, false, false, false, false], bytePos := 0, bitPos := 7 }, 0x78) := by native_decide
+
+example :
+    (decodeList (decodeFixedNat 2) (stateOfBits [true, false, true, true, true, false, false])).map Prod.snd
+    = .some [1, 2] := by native_decide
+
+example :
+    (decodeNat (stateOfBits [false, false, true, false, true, false, true, false])).map Prod.snd
+    = .some 42 := by native_decide
+example :
+    (decodeNat (stateOfBits ([true]  ++ [true , true , true , true , true , true , true ]
+                          ++ [false] ++ [false, false, false, false, false, false, true ]))).map Prod.snd
+    = .some 255 := by native_decide
+example :
+    (decodeNat (stateOfBits ([true]  ++ [false, false, false, false, false, false, false]
+                          ++ [true]  ++ [false, false, false, false, false, false, false]
+                          ++ [false] ++ [false, false, false, false, false, false, true ]))).map Prod.snd
+    = .some 16384 := by native_decide
 
 -- Spec C.5. Example
 
