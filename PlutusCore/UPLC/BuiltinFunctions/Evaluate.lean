@@ -80,7 +80,7 @@ def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : Bu
   | .NullList                        => nullList Vs
   -- Data
   | .ChooseData                      => chooseData Vs
-  | .ConstrData                      => constrData Vs
+  | .ConstrData                      => constrData semanticsVariant Vs
   | .MapData                         => mapData Vs
   | .ListData                        => listData Vs
   | .IData                           => iData Vs
