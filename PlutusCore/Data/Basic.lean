@@ -1,3 +1,4 @@
+
 import Lean
 import Lean.Expr
 
@@ -603,8 +604,6 @@ def mkNilData (_u : Unit) : List Data := []
 
 /-- Return `[]` --/
 def mkNilPairData (_u : Unit) : List (Data × Data) := []
-
--- TODO: serialiseData : Data → ByteString
 
 end PlutusCore.DataInternal
 

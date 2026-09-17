@@ -665,9 +665,10 @@ def decodeCtag (s : List Char) : Option (List Char × Integer) :=
           let (s''', im, iv) ← decodeHead s''
           if im = 0 then .some (s''', Int.ofNat iv) else .none
         else .none
-  | .some (s', 6, i) => if  121 ≤ i ∧ i ≤  127 then .some (s',  i -  121     )
-                        else if 1280 ≤ i ∧ i ≤ 1400 then .some (s', (i - 1280) + 7)
-                        else .none
+  | .some (s', 6, i) =>
+      if 121 ≤ i ∧ i ≤ 127 then .some (s', i - 121)
+      else if 1280 ≤ i ∧ i ≤ 1400 then .some (s', (i - 1280) + 7)
+      else .none
   | _ => .none
 
 /- Tries to decode a value from `s` using `f`. If fails it tries `g` with the same input. Fails if both fails. -/
