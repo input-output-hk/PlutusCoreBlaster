@@ -72,36 +72,43 @@ instance : ToExpr Data where
   toTypeExpr := .const ``Data []
   toExpr     := dataToExpr
 
+/-! `decide` reduces `DecidableEq Data` only while this block compiles structurally, and the
+explicit `termination_by structural` clauses make a non-structural member fail to compile. -/
 mutual
   def eqData : Data → Data → Bool
-    | .Constr i args, .Constr i' args' => eqDataConstr i args i' args'
+    | .Constr i args, .Constr i' args' => (i == i') && eqDataList args args'
     | .Map m, .Map m' => eqDataMap m m'
     | .List l, .List l' => eqDataList l l'
     | .I i, .I i' => i == i'
     | .B b, .B b' => b == b'
     | _ , _ => false
+  termination_by structural x => x
 
   def eqDataList : List Data → List Data → Bool
     | [] , [] => true
     | x :: xs, y :: ys => eqData x y && eqDataList xs ys
     | _ , _ => false
+  termination_by structural x => x
 
   def eqDataMap : List (Data × Data) → List (Data × Data) → Bool
     | [] , [] => true
     | (x, y) :: xs, (x', y') :: ys => eqData x x' && eqData y y' && eqDataMap xs ys
     | _ , _ => false
-
-  def eqDataConstr : Integer → List Data → Integer → List Data → Bool
-    | i , args , i' , args' => (i == i') && eqDataList args args'
+  termination_by structural x => x
 end
+
+def eqDataConstr : Integer → List Data → Integer → List Data → Bool
+  | i , args , i' , args' => (i == i') && eqDataList args args'
 
 /-- BEq instance for Data -/
 instance BEqData : BEq Data where
   beq := eqData
 
+/-! `decide` reduces `DecidableLT Data` only while this block compiles structurally, and the
+explicit `termination_by structural` clauses make a non-structural member fail to compile. -/
 mutual
   def ltData : Data → Data → Bool
-    | .Constr i args, .Constr i' args' => ltDataConstr i args i' args'
+    | .Constr i args, .Constr i' args' => i < i' && ltDataList args args'
     | .Map m, .Map m' => ltDataMap m m'
     | .List l, .List l' => ltDataList l l'
     | .I i, .I i' => i < i'
@@ -114,6 +121,7 @@ mutual
     | _, .List .. => false
     | .I _, _ => true
     | _, .I _ => false
+  termination_by structural x => x
 
   def ltDataList : List Data → List Data → Bool
     | [] , [] => false
@@ -121,6 +129,7 @@ mutual
     | _, [] => false
     | x :: xs, y :: ys =>
          ltData x y || ( x == y && ltDataList xs ys)
+  termination_by structural x => x
 
   def ltDataMap : List (Data × Data) → List (Data × Data) → Bool
     | [] , [] => false
@@ -128,10 +137,11 @@ mutual
     | _, [] => false
     | (x, y) :: xs, (x', y') :: ys =>
         ltData x x' || (x == x' && (ltData y y' || (y == y' && ltDataMap xs ys)))
-
-  def ltDataConstr : Integer → List Data → Integer → List Data → Bool
-    | i , args , i' , args' => i < i' && ltDataList args args'
+  termination_by structural x => x
 end
+
+def ltDataConstr : Integer → List Data → Integer → List Data → Bool
+  | i , args , i' , args' => i < i' && ltDataList args args'
 
 def Data.compareData (d1 : Data) (d2: Data) : Ordering :=
   if ltData d1 d2 then .lt
@@ -156,7 +166,7 @@ instance OrdData : Ord Data where
 
 theorem ltData_true_imp_lt (x y : Data) : ltData x y -> x < y := by
   match x, y with
-  | .Constr i xs, .Constr j ys => simp [ltData, ltDataConstr, LT.lt]
+  | .Constr i xs, .Constr j ys => simp [ltData, LT.lt]
   | .Map xm, .Map ym => simp [ltData, LT.lt]
   | .List xs, .List ys => simp [ltData, LT.lt]
   | .I i, .I j => simp [ltData, LT.lt]
@@ -184,7 +194,7 @@ theorem ltData_true_imp_lt (x y : Data) : ltData x y -> x < y := by
 
 theorem ltData_false_imp_not_lt (x y : Data) : ltData x y = false -> ¬ x < y := by
   match x, y with
-  | .Constr i xs, .Constr j ys => simp [ltData, ltDataConstr, LT.lt]
+  | .Constr i xs, .Constr j ys => simp [ltData, LT.lt]
   | .Map xm, .Map ym => simp [ltData, LT.lt]
   | .List xs, .List ys => simp [ltData, LT.lt]
   | .I i, .I j => simp [ltData, LT.lt]
@@ -227,7 +237,7 @@ mutual
   theorem eqData_true_imp_eq (x y : Data) : eqData x y → x = y := by
     match x, y with
     | .Constr i xs, .Constr j ys =>
-         simp [eqData, eqDataConstr]
+         simp [eqData]
          intro h1 h2
          apply And.intro
          . assumption
@@ -298,7 +308,7 @@ mutual
   theorem eqData_false_imp_not_eq (x y : Data) : eqData x y = false → x ≠ y := by
     match x, y with
     | .Constr i xs, .Constr j ys =>
-         simp [eqData, eqDataConstr]
+         simp [eqData]
          intro h1 h2
          have h3 : eqDataList xs ys = false := h1 h2
          apply eqDataList_false_imp_not_eq _ _ h3
@@ -378,7 +388,7 @@ mutual
   theorem eqData_reflexive (x : Data) : eqData x x = true := by
     match x with
     | .Constr i xs =>
-        simp [eqData, eqDataConstr]
+        simp [eqData]
         apply eqDataList_reflexive xs
     | .List xs =>
         simp [eqData]
@@ -416,7 +426,7 @@ instance LawfulBEqData : LawfulBEq Data where
 mutual
 @[simp] theorem ltData_irrefl (x : Data) : ¬ ltData x x := by
     match x with
-    | .Constr i xs => simp [ltData, ltDataConstr]
+    | .Constr i xs => simp [ltData]
     | .List xs =>
          simp only [ltData]
          apply ltDataList_irrefl
