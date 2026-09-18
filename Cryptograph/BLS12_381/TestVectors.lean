@@ -109,9 +109,16 @@ example : (expandMessageXmd (String.toByteList "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 def testDst₂ := String.toByteList "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_"
 
-/-- Justifies the 381-bit width used by the hex printers below: since every `Fq1`
-    representative is reduced (`Fq1.ofNat_lt`), `BitVec.ofNat 381` loses no information. -/
 theorem fieldPrime_le_pow_2_381 : fieldPrime ≤ 2 ^ 381 := by decide +native
+
+/-- The 381-bit width used by the hex printers below loses no information: every `Fq1`
+    representative is reduced mod `fieldPrime` (`Fq1.ofNat_lt`), and `fieldPrime` fits in
+    381 bits.  This is the invariant the `Fin fieldPrime` bound on `Fq1.t` used to carry in
+    the type. -/
+theorem toNat_ofNat_381 (n : Nat) :
+    (BitVec.ofNat 381 (Fq1.ofNat n).t).toNat = (Fq1.ofNat n).t := by
+  rw [BitVec.toNat_ofNat]
+  exact Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le (Fq1.ofNat_lt n) fieldPrime_le_pow_2_381)
 
 def Fq1.pointToHexString : Point Fq1 → String
   | .affine x y =>

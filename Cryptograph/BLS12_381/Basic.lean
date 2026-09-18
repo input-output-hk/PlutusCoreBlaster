@@ -852,7 +852,6 @@ export Internal
     Point
     Residues
     -- constants
-    fieldPrime
     groupOrder
     g1
     g2

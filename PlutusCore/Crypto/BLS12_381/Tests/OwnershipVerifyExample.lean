@@ -24,8 +24,9 @@ import PlutusCore.Crypto.BLS12_381.Axioms
                 `gtPow_inj_mod` (⟨gtGen⟩ of order exactly r), and `e_add_left` /
                 `e_nondegen` -- from which `gtPow_add` and `groupOrder_prime`
                 (no zero divisors mod r) are *derived*, not assumed. No
-                serialization axiom is used, and nothing depends on
-                `g*_order`, hence not on `decide +native`.
+                serialization axiom is used, and no declaration of `Axioms.lean`
+                carries a `decide +native`, so `Lean.ofReduceBool` appears in no
+                footprint here.
     * HASH   -- blake2b_256 / expand_message_xmd as opaque functions; exactly one
                 fact is used (`pubScalar_collision_dichotomy`), and the two theorems
                 that consume it carry the collision case in their conclusions rather

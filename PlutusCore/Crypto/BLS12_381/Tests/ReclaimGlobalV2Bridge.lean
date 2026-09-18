@@ -5,71 +5,59 @@ import PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Properties
   # The artifact-level ownership properties
 
   `OwnershipVerifyExample.lean` proves six theorems about a model of the
-  destination-reclaim verifier. Four of them — `groth16Holds_pairing`,
-  `pairing_groth16Holds`, `pokHolds_pairing` and `acceptedPubUnique` — never mention a
-  program: they are statements about `bls12_381_finalVerify`, `e` and `gtPow` for
-  arbitrary parsed values, so they already apply verbatim to whatever this artifact
-  parses and there is nothing to restate.
+  destination-reclaim verifier.  Four of them -- `groth16Holds_pairing`,
+  `pairing_groth16Holds`, `pokHolds_pairing` and `acceptedPubUnique` -- never mention a
+  program, being statements about `bls12_381_finalVerify`, `e` and `gtPow` for arbitrary
+  parsed values, so they already apply verbatim to whatever this artifact parses.
 
   The other two, `destinationReclaimSound` and `destinationBinding`, are the security
   properties, and they are the ones for which "in terms of the actual program" means
   something: replace the hypothesis `verifyDestination vk pr pkh dest` with
-  `reclaimAccepts m ctx`. This module does that, at exactly the original generality, and
-  in exchange it takes on **one** assumption — stated below and nowhere else.
+  `reclaimAccepts m ctx`.  This module does that, at exactly the original generality, and
+  in exchange takes on **one** assumption -- stated below and nowhere else.
 
-  ## Why this is a separate module
-
-  `Blaster.findLocalAxioms` harvests every Prop-typed axiom declared in the *same* module
-  as a `blaster` call and prepends it to the goal. The bridge is Prop-typed, so declaring
-  it beside the proved properties would push it into all twelve of their SMT queries.
-  Keeping it here also draws the line where it belongs: `ReclaimGlobalV2Properties`
-  contains only what is proved about the artifact, and this file contains the one thing
-  that is assumed.
+  It is a separate module because a Prop-typed axiom declared beside a `blaster` call is
+  harvested into every query in that module.  The bridge is Prop-typed, so declaring it in
+  `ReclaimGlobalV2Properties` would push it into all twelve of the proved properties'
+  queries.  It also draws the line where it belongs: that module contains what is proved
+  about the artifact, this one the single thing that is assumed.
 
   ## What is still owed
 
-  For a single reclaim slot, acceptance must force each of the following. Discharging the
-  bridge means proving all of them and composing; the state of each today:
+  For a single reclaim slot, acceptance must force each of the following.  Discharging the
+  bridge means proving all of them and composing.
 
   | # | obligation | status |
   |--:|------------|--------|
-  | 1 | script purpose is rewarding | **proved** — `success_requires_rewarding_purpose` |
-  | 2 | a parameter reference input exists and is selected in range | **proved** — `success_requires_reference_input`, `success_requires_params_idx_in_range` |
-  | 3 | the parameter NFT is the baked policy/token, quantity one | **proved** — `success_requires_baked_policy`, `success_requires_baked_token_name`, `success_requires_single_params_nft` |
-  | 4 | the parameter datum has the shape the decoder walks | **proved** — `success_requires_params_datum_shape` |
-  | 5 | the nine verifying-key slices decode to curve points | **proved** — `vkG1_*_ok`, `vkG2_*_ok` |
-  | 6 | the claimed digest equals `blake2b_256(dom ‖ pkh ‖ destAddr)` | reachable — `appendByteString` and the opaque hash both translate |
-  | 7 | the destination output covers the reclaimed input's value | plausibly reachable — a `Data`-map walk, same class as obligations 2-4 |
+  | 1 | script purpose is rewarding | **proved** -- `success_requires_rewarding_purpose` |
+  | 2 | a parameter reference input exists and is selected in range | **proved** |
+  | 3 | the parameter NFT is the baked policy/token, quantity one | **proved** |
+  | 4 | the parameter datum has the shape the decoder walks | **proved** |
+  | 5 | the nine verifying-key slices decode to curve points | **proved** -- `vk*_ok` |
+  | 6 | the claimed digest equals `blake2b_256(dom ‖ pkh ‖ destAddr)` | reachable |
+  | 7 | the destination output covers the reclaimed input's value | plausibly reachable |
   | 8 | the 336-byte proof splits into A, B, C, commitment, PoK | **blocked** |
   | 9 | both `finalVerify` calls returned `true` on those values | blocked behind 8 |
 
   Obligation 8 is the whole of the gap, and it is blocked structurally rather than by
-  effort: `sliceByteString` is implemented as `bs.data.toList.drop s |>.take k`, so a
-  symbolic proof goes through `List Char`, and `Char → UInt32 → BitVec → Fin` is the same
-  untranslatable-parameter wall that `Fq1` used to hit — this time in Lean core rather
-  than in this repository. Measured: `lengthOfByteString (sliceByteString 0 4 b) ≤ 4` for
-  symbolic `b` fails with `Inductive datatype with instance parameters not supported:
-  BitVec`.
-
-  Removing the assumption therefore needs two changes, neither of them in this file:
-  reimplement `sliceByteString` / `indexByteString` over `String.extract` / `String.get`
-  instead of `List Char` (preserving the Plutus clamping semantics and the conformance
-  suite), and map `String.extract` to SMT-LIB `str.substr` in Blaster's opaque-function
-  table — the same shape of change as Lean-blaster#193 and #175, and Z3's string theory
-  already reasons about `str.substr` over concatenations.
+  effort: `sliceByteString` goes through `List Char`, and `Char → UInt32 → BitVec → Fin`
+  is the same untranslatable-parameter wall `Fq1` used to hit -- this time in Lean core
+  rather than in this repository.  Measured:
+  `lengthOfByteString (sliceByteString 0 4 b) ≤ 4` for symbolic `b` fails with
+  `Inductive datatype with instance parameters not supported: BitVec`.
 
   ## Honesty about the assumption
 
   `DenotesReclaim` is opaque and the bridge is an implication, so the pair is trivially
-  consistent — read `DenotesReclaim` as identically false and the axiom says nothing.
+  consistent -- read `DenotesReclaim` as identically false and the axiom says nothing.
   Consistency is therefore *not* evidence that the bridge is true, exactly as with
-  `PubScalarCollision` in the model file. What the table above buys is narrower and real:
-  five of the nine obligations are discharged, one is measured as the sole blocker, and
-  the assumption is stated once, in one place, with a named discharge route.
+  `PubScalarCollision` in the model file.  What the table buys is narrower and real: five
+  of the nine obligations are discharged, one is measured as the sole blocker, and the
+  assumption is stated once, in one place.
 
   Those five are proved as *facts about the artifact*, not as inputs to the two theorems
-  below — nothing can compose them into the bridge until rows 8 and 9 exist. The axiom
-  footprints printed at the end of this file show it: `artifactReclaimSound` carries
+  below -- nothing can compose them into the bridge until rows 8 and 9 exist.  The pinned
+  axiom footprints at the end of this file are what show it: `artifactReclaimSound` carries
   exactly the axioms of `destinationReclaimSound` plus the bridge, with no trace of them.
 -/
 
@@ -160,5 +148,71 @@ theorem artifactDestinationBinding
         exact destinationBinding vk pr pkh dest pkh' dest' hvk hwf
           (artifactImplementsVerifyDestination m  ctx  pkh  dest  vk pr hden  hvk hwf hacc)
           (artifactImplementsVerifyDestination m' ctx' pkh' dest' vk pr hden' hvk hwf hacc')
+
+/-! The footprints.  Neither names any of the eight gates or the nine `vk*_ok` facts: the
+    obligations discharged in `ReclaimGlobalV2Properties.lean` are not inputs to these two
+    theorems, and cannot be until rows 8 and 9 of the table exist. -/
+
+/--
+info: 'PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Bridge.artifactReclaimSound' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.IsHonestSetupCore,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.MasterXprv,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.Path,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.ProofWellFormedBytes,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.PubScalarCollision,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.byteStringToIntegerBE,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.byteStringToIntegerLE,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.deriveCredential,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.destinationDigest,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.expandMsgXmd48,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.groth16KnowledgeSoundness,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.pubScalar_collision_dichotomy,
+ PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Bridge.artifactImplementsVerifyDestination]
+-/
+#guard_msgs in
+#print axioms artifactReclaimSound
+
+/--
+info: 'PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Bridge.artifactDestinationBinding' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.InG1_def,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.InG2_def,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.MlOk,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.e,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.e_dlog,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.e_nondegen,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.finalVerify_ok,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.finalVerify_sound,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g1_dlog,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g1_dlog_scalarMul,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g1_scalarMul_add_scalar,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g1_scalarMul_mod,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g1_scalarMul_mul,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g1_scalarMul_one,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g1_scalarMul_zero,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g2_dlog,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g2_dlog_scalarMul,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g2_scalarMul_mod,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g2_scalarMul_one,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.g2_scalarMul_zero,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.mulMlResult_ok_inv,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.pi,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.pi_millerLoop,
+ PlutusCore.Crypto.BLS12_381.Axioms.Internal.pi_mulMlResult,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.IsHonestSetupCore,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.ProofWellFormedBytes,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.PubScalarCollision,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.byteStringToIntegerBE,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.byteStringToIntegerLE,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.destinationDigest,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.expandMsgXmd48,
+ PlutusCore.Crypto.BLS12_381.Tests.OwnershipVerifyExample.pubScalar_collision_dichotomy,
+ PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Bridge.artifactImplementsVerifyDestination]
+-/
+#guard_msgs in
+#print axioms artifactDestinationBinding
 
 end PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Bridge

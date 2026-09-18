@@ -6,185 +6,102 @@ import PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2
 /-!
   # Properties of the compiled `reclaim-global-v2` artifact
 
-  `OwnershipVerifyExample.lean` proves `destinationReclaimSound`, `destinationBinding`
-  and `acceptedPubUnique` about a *hand-written model* of the destination-reclaim
-  verifier. This module proves properties of the **compiled artifact** instead, using
-  `#import_uplc` / `#prep_uplc` / `blaster`, and records exactly where that becomes
-  impossible and why.
+  `OwnershipVerifyExample.lean` proves `destinationReclaimSound`, `destinationBinding` and
+  `acceptedPubUnique` about a *hand-written model* of the destination-reclaim verifier.
+  This module proves properties of the **compiled artifact** instead, using
+  `#import_uplc` / `#prep_uplc` / `blaster`, and records where that becomes impossible.
 
   ## What is proved here
 
-  Eight gates, one per row of the table under **Measured structure** below. Each comes as
-  a pair: a `*_gate` theorem universally quantified over the value that gate inspects,
-  and a `success_requires_*` corollary that drops the fuel by way of `atAnyFuel`. The
-  symbolic holes span `Integer`, `ByteString`, `Data` and `List Data`, so together they
-  say the parameter-NFT authentication holds against *any* attempted substitution: no
-  other policy id and no other token name is accepted, the quantity must be exactly one,
-  and the parameters must arrive as a well-shaped inline datum.
+  Eight gates on the parameter-NFT authentication and the transaction shape, each as a
+  pair: a `*_gate` theorem quantified over the value that gate inspects, and a
+  `success_requires_*` corollary that drops the fuel by way of `atAnyFuel`.  The symbolic
+  holes span `Integer`, `ByteString`, `Data` and `List Data`, so together they say the
+  authentication holds against any attempted substitution: no other policy id and no other
+  token name is accepted, the quantity must be exactly one, and the parameters must arrive
+  as a well-shaped inline datum.
 
   Three supporting results:
 
-  * `good_params_not_yet_errored` — the non-vacuity anchor. On a well-formed parameter
+  * `good_params_not_yet_errored` -- the non-vacuity anchor.  On a well-formed parameter
     section the artifact has *not* errored by `probeFuel`, so every gate premise above is
     satisfiable rather than empty.
-  * `base_script_hash_unchecked`, `params_datum_tag_unchecked` — two things the artifact
+  * `base_script_hash_unchecked`, `params_datum_tag_unchecked` -- two things the artifact
     does *not* check, each found by the corresponding gate coming back falsifiable.
     Neither is exploitable on chain; see **LEDGER**.
-  * `prepared_never_halts` — no `isSuccessful`-shaped theorem about this artifact can be
+  * `prepared_never_halts` -- no `isSuccessful`-shaped theorem about this artifact can be
     non-vacuous, which is why everything here is phrased via `erroredWithin`.
 
-  All of the above are proved by `blaster`. The nine `vk*_ok` decoding facts that the
-  three supporting results lean on are not, and cannot be — see **SMT**.
-
   For the two *model* security properties restated over this artifact, see
-  `ReclaimGlobalV2Bridge.lean`; it depends on this module and on one named assumption.
+  `ReclaimGlobalV2Bridge.lean`, which depends on this module and on one named assumption.
 
-  ## Correspondence with `OwnershipVerifyExample.lean`
+  ## Where this meets the model
 
-  Mostly empty, on purpose. `OwnershipVerifyExample` takes a parsed `vk`, a parsed `pr`,
-  a `pkh` and a `dest` as *given* and reasons about `verifyDestination vk pr pkh dest`.
-  This module reasons about everything that happens *before* those four values exist:
-  which script is running, how the transaction is shaped, where the parameters come from.
-  The two meet at exactly one seam, the parsed verifying key.
+  The two files barely overlap, on purpose: `OwnershipVerifyExample` takes a parsed `vk`,
+  `pr`, `pkh` and `dest` as given, while this module reasons about everything that happens
+  before those four values exist.  They meet at one seam, the parsed verifying key -- the
+  nine `vk*_ok` facts below are the nine `uncompress` calls that `vkInSubgroup` assumes,
+  on this artifact's own baked bytes, and composing them with `g*_uncompress_subgroup` *is*
+  `vkInSubgroup` for this key.  The model's own results have no counterpart here, because
+  nothing here reaches either pairing check (**REACH**).
 
-  **The two real correspondences.**
+  Note that the parameter NFT does **not** authenticate the verifying key, so no gate here
+  discharges any part of `IsHonestSetup`.  The key is a baked script parameter, hash-pinned
+  at export time and never re-hashed on chain; see **IDENTITY**.
 
-  | `OwnershipVerifyExample` | here |
-  |---|---|
-  | the nine conjuncts of `vkInSubgroup`, of which it says "on chain this is not an assumption but a consequence: each point is produced by `uncompress`" | `vkG1_*_ok` / `vkG2_*_ok` — those nine `uncompress` calls, on this artifact's own baked bytes, do succeed. Slice-to-field map tabulated and verified below. Compose with `g*_uncompress_subgroup` and this *is* `vkInSubgroup` for this key. |
-  | the premise it never states — that the code under discussion is the reclaim script at all, invoked as a withdrawal | `success_requires_rewarding_purpose` |
+  ## Fuel
 
-  **Model results with no counterpart here: all six.**
-  `groth16Holds_pairing`, `pairing_groth16Holds` and `pokHolds_pairing` are about
-  `bls12_381_finalVerify` applied to Miller loops, and `destinationReclaimSound` and
-  `destinationBinding` rest on those plus `groth16KnowledgeSoundness`. Nothing here
-  reaches either pairing check (**REACH**), so those five have no analogue in this file.
-  `acceptedPubUnique` is a different case: pure curve algebra about `e`, `g*_dlog` and
-  `gtPow`, not a statement about a program, so it could have no counterpart here even if
-  the whole validator were reachable.
+  The whole validator traverses in about 1700 CEK steps, and the step at which each gate
+  first reaches `State.Error` was measured by bisection: the last bad path errors at 1383
+  and the good path survives to 1674.  Any fuel strictly between the two makes every gate
+  simultaneously non-vacuous, which is what `probeFuel` below is.
 
-  Unmatched on the assumption side too. `ProofWellFormedBytes` (the 336-byte width and
-  canonical-Y checks), the on-chain recomputation of `pubScalar` from `(pkh, dest)` and
-  `eCmtScalar`'s `expand_message_xmd` all sit behind `parseVerifyingKeyBatch`; and
-  `IsHonestSetupCore`, `vk.gamma ≠ 0`, `vk.ic1 ≠ 0`, `groth16KnowledgeSoundness` and
-  `pubScalar_collision_dichotomy` are cryptographic or trust-in-setup assumptions, which
-  no property of a program can discharge.
-
-  **Results here with no counterpart in the model: nearly all of them.** The model has no
-  notion of a transaction, so the parameter-NFT authentication, the reference-index and
-  destination-index bounds, and the two permissiveness findings are all invisible to it.
-  `prepared_never_halts` and `good_params_not_yet_errored` are methodological and have no
-  model analogue either — as is the `erroredWithin` machinery they rest on, which is
-  generic to the CEK machine and lives in `PlutusCore/UPLC/CekMachine/Lemmas.lean`.
-
-  **One thing this map does not claim.** The parameter NFT does **not** authenticate the
-  verifying key, so no gate here discharges any part of `IsHonestSetup`.
-  `decodeValidatedParams` returns the *base script hash* — which inputs count as reclaim
-  inputs. The verifying key is a baked script parameter, hash-pinned at export time and
-  never re-hashed on chain; that those baked bytes are the honest CRS is exactly the
-  **IDENTITY** assumption, and it stays one.
-
-  ## Measured structure of the artifact
-
-  Step counts at which the artifact first reaches `State.Error`, measured by bisection
-  on the concrete CEK machine (all contexts as built below):
-
-  | context                                       | first error step |
-  |-----------------------------------------------|-----------------:|
-  | wrong script purpose (tag 0, 1, 5)            |              450 |
-  | destination-output start index past outputs   |              798 |
-  | no reference inputs at all                    |              863 |
-  | parameter reference index out of range        |              984 |
-  | wrong parameter policy id                     |             1256 |
-  | parameter NFT quantity ≠ 1                    |             1334 |
-  | wrong parameter token name                    |             1373 |
-  | parameter datum missing / a hash              |        1382/1383 |
-  | **all parameter gates pass**                  |         **1674** |
-
-  Three things follow.
-
-  First, the whole validator traverses in ~1700 CEK steps, not the ~2,000,000 a naive
-  bound suggests: `uncompress`, `millerLoop` and `finalVerify` are single builtin
-  applications, so the BLS field arithmetic costs wall-clock rather than steps.
-
-  Second, any fuel strictly between 1383 and 1674 makes every gate simultaneously
-  non-vacuous — the good path has not errored yet, every bad one has. That is
-  `probeFuel = 1390`, used by every gate. (`#prep_uplc` deliberately uses 1700 instead;
-  see the comment at its call site.)
-
-  Third, execution order is not source order. The destination-output start index is
-  checked at step 798, *before* the parameter gates, even though `dropAtData` follows
-  `parseVerifyingKeyBatch` in the Haskell `let` block. So "before the verifying key is
-  parsed" describes none of these gates correctly: on the source reading `dropAtData`
-  comes after it, and on the execution reading seven of the eight fire after the first
-  `uncompress` at step 489 — only the purpose gate, at 450, precedes it.
+  Execution order is not source order, so do not read the gates as "before the verifying
+  key is parsed": seven of the eight fire after the first `uncompress`, at step 489, and
+  only the script-purpose gate precedes it.
 
   ## Assumption ledger
 
   Extends the CURVE / HASH / SNARK classes of `OwnershipVerifyExample.lean`.
 
-  * **BLS-UNINTERPRETED.** Since `Fq1` became `Nat`-backed the BLS *types* translate to
-    SMT (see `Tests/BlasterSmoke.lean`), but the *operations* stay uninterpreted
-    `declare-fun`s: Z3 gets congruence and a codomain constraint, never a group law.
-    Nothing here says anything about the curve.
-  * **REACH.** `bls12_381_G1_uncompress` is Lean `opaque`, so the Blaster optimizer cannot
-    reduce it even on the artifact's own concrete verifying key. Past step 489 the residual
-    therefore carries an unreduced `Except String BLS12_381_G1_Element`, and anything
-    downstream sits behind an `is-Except.ok` test on an *uninterpreted* function.
+  * **BLS-UNINTERPRETED.** The BLS *types* translate to SMT, but the *operations* stay
+    uninterpreted `declare-fun`s: Z3 gets congruence and a codomain constraint, never a
+    group law.  Nothing here says anything about the curve.
+  * **REACH.** `bls12_381_G1_uncompress` is Lean `opaque`, so the optimizer cannot reduce
+    it even on the artifact's own concrete key, and past step 489 the residual carries an
+    unreduced `Except String BLS12_381_G1_Element`.  What decides whether a goal is
+    provable is therefore not whether the builtin is reached but whether the goal
+    *depends* on its result.  The eight gates do not -- each reaches its verdict whichever
+    way the decode goes -- so they need no premise; the three statements that the machine
+    has *not* errored do depend on it, and take `VkDecodes` as a premise.
 
-    What decides whether a goal is provable is therefore not whether the builtin is
-    reached, but whether the goal *depends* on its result. The eight gates do not: each
-    reaches its verdict for a reason that holds whichever way the decode goes, so the
-    optimizer folds both branches and they need no premise. The three statements that the
-    machine has *not* errored do depend on it, and take `VkDecodes` as a premise.
-
-    Nothing here reaches the Groth16 or proof-of-knowledge equations at all. What blocks
-    that is the 336-byte proof: `sliceByteString` is `bs.data.toList.drop s |>.take k`, so
-    a symbolic proof goes through `List Char`, and `Char → UInt32 → BitVec → Fin` is
-    untranslatable. See `ReclaimGlobalV2Bridge.lean` for the full obligation table.
-  * **BLASTER.** Two Blaster defects had to be fixed upstream before any of this
-    translated, both found here and neither BLS-specific. Both are now fixed, so the
-    `lakefile` pin is what this module's translatability rests on:
-      1. `generateUndeclaredFun` looked the codomain well-formedness predicate up under
-         the *unreduced* return type, while the predicate is registered under the reduced
-         one, so any `opaque` whose signature named an `abbrev` aborted with
-         `createPredQualifierAppAux: predicate declaration expected` — which is every one
-         of the BLS builtins. Fixed by Lean-blaster#193 (`removeTypeAbbrev` hoisted over
-         the whole of `generateUndeclaredFun`); repro in that repo's
-         `Tests/FixedIssues/Issue36.lean`.
-      2. `strLitSmt` emitted string literals unescaped, so a `ByteString` holding bytes
-         outside printable ASCII produced a query Z3 rejects with `unexpected character`.
-         Fixed by Lean-blaster#175; repro in `Tests/FixedIssues/Issue35.lean`.
-    Note that a `#blaster` smoke test whose match branches agree is collapsed to `True`
-    by the optimizer and never reaches translation, which is how `Tests/BlasterSmoke.lean`
-    certified both capabilities for months without having either.
+    Nothing here reaches the Groth16 or proof-of-knowledge equations at all.  What blocks
+    that is the 336-byte proof: `sliceByteString` goes through `List Char`, and
+    `Char → UInt32 → BitVec → Fin` is untranslatable.  See `ReclaimGlobalV2Bridge.lean`.
   * **FUEL.** `runSteps` maps exhaustion to `State.Error`, so it cannot distinguish
-    rejection from running out of steps. Every property below is phrased with
+    rejection from running out of steps.  Every property below is phrased with
     `erroredWithin`, which returns `false` on exhaustion, and is lifted to all fuels by
-    `not_erroredWithinProgram_of_isSuccessful`. Those two — both in
-    `PlutusCore/UPLC/CekMachine/Lemmas.lean` — are the only reason these statements are
-    not bounded-model artifacts.
+    `not_erroredWithinProgram_of_isSuccessful`.  Those two, both in
+    `PlutusCore/UPLC/CekMachine/Lemmas.lean`, are the only reason these statements are not
+    bounded-model artifacts.
   * **LEDGER.** A raw `Data` context is not a ledger-valid context: nothing here enforces
     ordered value maps, canonical hash widths, resolved inputs matching out-refs, or
-    redeemer/datum consistency, so contexts unreachable on chain are admitted. This cuts
-    both ways. It only strengthens the gates, which say a *larger* set of contexts is
-    rejected than the ledger could ever present. But it is exactly why
-    `base_script_hash_unchecked` and `params_datum_tag_unchecked` are permissiveness
-    observations rather than vulnerabilities: the shapes they exhibit are ones the ledger
-    would never build. And each gate varies one field of a single fixed skeleton, so none
-    of them quantifies over context *shape*.
+    redeemer/datum consistency, so contexts unreachable on chain are admitted.  That only
+    strengthens the gates, which say a *larger* set of contexts is rejected than the ledger
+    could present -- but it is exactly why `base_script_hash_unchecked` and
+    `params_datum_tag_unchecked` are permissiveness observations rather than
+    vulnerabilities.  Each gate varies one field of a single fixed skeleton, so none of
+    them quantifies over context *shape*.
   * **IDENTITY.** Nothing binds the executing artifact to the deployed script hash
     `a4da74e7cb6ea4f4e60456a0a6eabf0ccf83464ebe55664390ef39f8`; that the imported bytes
-    are the deployed ones is an external assumption, checked only by `#guard_msgs` on
-    the import and by the byte-offset provenance recorded in the loader.
-  * **SMT.** `blaster` closes a valid goal with no proof term, so those theorems depend
-    on `Blaster.Tactic.blasterProven`; their trust base is Blaster's optimizer, its
-    Lean→SMT translation and Z3.
-    The `erroredWithin` lemmas in `PlutusCore/UPLC/CekMachine/Lemmas.lean` are by contrast
-    fully kernel-checked, as are the three specialisations of them here. The one remaining
-    `native_decide` use is `vk*_ok`, the nine decoding facts, which additionally trust the
-    Lean compiler and the `Cryptograph` BLS implementation; every statement about the
-    *artifact* now rests on Blaster and Z3 alone.
+    are the deployed ones is an external assumption, checked only by `#guard_msgs` on the
+    import and by the byte-offset provenance recorded in the loader.
+  * **SMT.** `blaster` closes a valid goal with no proof term, so those theorems depend on
+    `Blaster.Tactic.blasterProven`; their trust base is Blaster's optimizer, its Lean→SMT
+    translation and Z3.  The `erroredWithin` lemmas are by contrast fully kernel-checked,
+    as are the three specialisations of them here.  The one remaining `native_decide` use
+    is `vk*_ok`, the nine decoding facts, which additionally trust the Lean compiler and
+    the `Cryptograph` BLS implementation.
 -/
 
 namespace PlutusCore.Crypto.BLS12_381.Tests.ReclaimGlobalV2Properties
@@ -675,10 +592,10 @@ theorem params_datum_tag_unchecked :
 /-- A context the artifact errors on within `probeFuel` steps is never accepted, at any
     fuel.
 
-    Nothing in this module uses it: every property here is an implication, so it goes
-    through `atAnyFuel` instead. This is the form to reach for when starting from a
-    *concrete* rejection — a specific context shown to error — which is how the gates
-    above were stated before they were generalised. -/
+    The dual of `atAnyFuel`, and the form to reach for when starting from a *concrete*
+    rejection rather than an implication: a specific context shown to error.  Every gate
+    above is an implication and so goes through `atAnyFuel`; this is the other direction of
+    the pair in `PlutusCore/UPLC/CekMachine/Lemmas.lean`, exercised here. -/
 theorem never_accepted (m : Nat) (ctx : Data) :
   reclaimErroredWithin probeFuel ctx = true
   -----------------------------------------

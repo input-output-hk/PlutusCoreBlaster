@@ -16,3 +16,14 @@ build.log
 # Plutus repo symlink
 
 .plutus-conformance
+
+# Sibling-repo symlinks, as .plutus-conformance above
+
+.cardano-ledger-api
+.lean-blaster
+.proof-tool
+
+# Local tool config
+
+/.mcp.json
+/.claude/settings.local.json
