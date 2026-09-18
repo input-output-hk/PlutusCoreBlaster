@@ -16,3 +16,6 @@ build.log
 # Plutus repo symlink
 
 .plutus-conformance
+
+# lake manifest
+lake-manifest.json
