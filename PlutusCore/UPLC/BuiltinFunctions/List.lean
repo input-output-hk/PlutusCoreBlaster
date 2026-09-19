@@ -22,6 +22,34 @@ open PlutusCore.UPLC.BuiltinFunctions.Utils
 
 -- NOTE: Args are deliberately reversed on the Cek machine stack for performance
 
+/-- Whether two constants have the same outer shape (constructor, and
+    recursively the shape of their elements for `Pair`/`ConstList`), ignoring
+    the actual values. Used by `mkCons` to reject consing a wrongly-typed
+    element onto a `ConstList`, matching Haskell's builtin type check.
+
+    An empty existing list has no element to compare against, so it's
+    accepted regardless of `x`'s shape: `Const.ConstList` doesn't retain the
+    list's declared element type once it's empty (that's only known during
+    decoding), so this check can't be made complete for that case without a
+    representation change. -/
+private def sameShape : Const → Const → Bool
+  | .Integer _, .Integer _                             => true
+  | .ByteString _, .ByteString _                        => true
+  | .String _, .String _                                => true
+  | .Unit, .Unit                                        => true
+  | .Bool _, .Bool _                                    => true
+  | .Data _, .Data _                                    => true
+  | .PairData _, .PairData _                            => true
+  | .ConstDataList _, .ConstDataList _                  => true
+  | .ConstPairDataList _, .ConstPairDataList _          => true
+  | .Bls12_381_G1_element _, .Bls12_381_G1_element _    => true
+  | .Bls12_381_G2_element _, .Bls12_381_G2_element _    => true
+  | .Bls12_381_MlResult _, .Bls12_381_MlResult _        => true
+  | .Pair (a1, b1), .Pair (a2, b2)                      => sameShape a1 a2 && sameShape b1 b2
+  | .ConstList (x :: _), .ConstList (y :: _)            => sameShape x y
+  | .ConstList _, .ConstList _                          => true
+  | _, _ => false
+
 -- Define chooseList
 def chooseList (Vs : List CekValue) : Option CekValue :=
   match Vs with
@@ -34,7 +62,9 @@ def chooseList (Vs : List CekValue) : Option CekValue :=
 def mkCons (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [.VCon (.ConstList xs), .VCon x] =>
-      some (.VCon (.ConstList (PLC.mkCons x xs)))
+      match xs.head? with
+      | some h => if sameShape x h then some (.VCon (.ConstList (PLC.mkCons x xs))) else none
+      | none => some (.VCon (.ConstList (PLC.mkCons x xs)))
 
   | [.VCon (.ConstDataList xs), .VCon (.Data x)] =>
       -- case for ConstDataList
