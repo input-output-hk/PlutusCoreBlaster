@@ -12,6 +12,7 @@ import PlutusCore.Cbor.Tests
 import PlutusCore.UPLC.CekMachine.Tests
 import PlutusCore.UPLC.FlatEncoding.Tests
 import PlutusCore.UPLC.ScriptEncoding.Tests
+import PlutusCore.UPLC.Shape.Tests
 import PlutusCore.UPLC.TextEncoding.Tests
 
 -- The conformance test suite (Tests.Conformance) is intentionally NOT imported
