@@ -1,5 +1,19 @@
 name: ci-conformance
 
+# Builds and checks the conformance test suite (Tests/Conformance), regenerated from the
+# conformance tests of IntersectMBO/plutus.
+#
+# Trigger with a PR comment, from a maintainer, of the form
+#   /run-conformance [<plutus-ref>]
+# e.g. `/run-conformance` or `/run-conformance 1.64.0.0`; or run the workflow manually.
+# A comment-triggered run reports a `conformance` check on the PR head.
+#
+# The PR head can change between the comment and the checkout: GitHub does not report when a
+# commit was pushed, and commit dates are set by their author. So the job that runs the PR's
+# code (`conformance`) gets a read-only token and keeps no credentials, and only the jobs that
+# never run it (`authorize`, `report`) can write to the PR. The check is reported on the commit
+# that was tested, and names it.
+
 permissions:
   contents: read
 
@@ -13,8 +27,11 @@ on:
   issue_comment:
     types: [created]
 
+# Every PR comment starts this workflow, only for its jobs to be skipped unless the comment is a
+# /run-conformance request. Those other comments get a group of their own, so that they cannot
+# cancel a run in progress; a newer /run-conformance request does cancel the older one.
 concurrency:
-  group: ci-conformance-${{ github.event.issue.number || github.ref }}
+  group: ci-conformance-${{ github.event.issue.number || github.ref }}-${{ (github.event_name == 'issue_comment' && !startsWith(github.event.comment.body, '/run-conformance')) && github.run_id || 'run' }}
   cancel-in-progress: true
 
 env:
@@ -23,7 +40,8 @@ env:
   GLIBC_Z3: "2.39"
 
 jobs:
-  conformance:
+  # Checks the trigger and prepares the run. Never runs the PR's code.
+  authorize:
     # Run on:
     #   - any workflow_dispatch invocation, OR
     #   - a PR comment whose body starts with the trigger phrase, authored by
@@ -41,6 +59,11 @@ jobs:
       contents: read
       pull-requests: write
       checks: write
+    outputs:
+      repo: ${{ steps.pr.outputs.repo }}
+      sha: ${{ steps.pr.outputs.sha }}
+      plutus_ref: ${{ steps.plutus.outputs.ref }}
+      check_id: ${{ steps.check.outputs.id }}
 
     steps:
       - name: Acknowledge comment trigger
@@ -56,71 +79,62 @@ jobs:
             "/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
             -f content='eyes' || true
 
-      - name: Resolve PR head ref
+      - name: Resolve plutus ref
+        id: plutus
+        env:
+          # Passed via env vars: untrusted input is never interpolated into the script.
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          DISPATCH_REF: ${{ github.event.inputs.plutus_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+            # The first whitespace-separated token after the trigger phrase, on the first line
+            # of the comment.
+            first_line=$(printf '%s\n' "$COMMENT_BODY" | head -n1 | tr -d '\r')
+            ref=$(printf '%s\n' "$first_line" | sed -E 's|^/run-conformance[[:space:]]*||' | awk '{print $1}')
+          else
+            ref=$DISPATCH_REF
+          fi
+          ref=${ref:-master}
+          # Whitelist refs to git-safe characters (alnum, dot, dash, underscore, slash).
+          # Tags like v1.2.3 and 40-char SHAs both match.
+          if ! [[ "$ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Refusing unsafe plutus ref: $ref"
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Resolved IntersectMBO/plutus ref: $ref"
+
+      - name: Resolve PR head
         if: github.event_name == 'issue_comment'
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
-          COMMENT_TIME: ${{ github.event.comment.created_at }}
           REPO_OWNER: ${{ github.event.repository.owner.login }}
           REPO_NAME: ${{ github.event.repository.name }}
           PR_NUMBER: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
-
-          # Fetch head SHA, head repo, and the head commit's pushedDate via GraphQL.
-          # `pushedDate` is a server-set timestamp, unlike author.date / committer.date
-          # which a malicious PR author can backdate. We use it to close the TOCTOU
-          # window between the maintainer's `/run-conformance` comment and the
-          # workflow's checkout: if the head was pushed AFTER the comment, refuse.
+          # The commit the conformance job checks out, by SHA. It is the PR head now, which may be
+          # newer than the commit reviewed when the comment was posted (see the note at the top).
           query='query($owner: String!, $repo: String!, $num: Int!) {
             repository(owner: $owner, name: $repo) {
               pullRequest(number: $num) {
                 headRefOid
                 headRepository { nameWithOwner }
-                commits(last: 1) {
-                  nodes {
-                    commit {
-                      pushedDate
-                      committedDate
-                    }
-                  }
-                }
               }
             }
           }'
-
-          result=$(gh api graphql \
-            -f query="$query" \
-            -F owner="$REPO_OWNER" \
-            -F repo="$REPO_NAME" \
-            -F num="$PR_NUMBER")
-
+          result=$(gh api graphql -f query="$query" -F owner="$REPO_OWNER" -F repo="$REPO_NAME" -F num="$PR_NUMBER")
           head_sha=$(echo "$result" | jq -r '.data.repository.pullRequest.headRefOid')
           head_repo=$(echo "$result" | jq -r '.data.repository.pullRequest.headRepository.nameWithOwner')
-          pushed_date=$(echo "$result" | jq -r '.data.repository.pullRequest.commits.nodes[0].commit.pushedDate')
-          committed_date=$(echo "$result" | jq -r '.data.repository.pullRequest.commits.nodes[0].commit.committedDate')
-
-          # pushedDate can be null for some commits (e.g. very old commits). Fall
-          # back to committedDate with a warning — the attacker-controllable
-          # fallback is acceptable for that edge case but worth flagging.
-          effective_date="$pushed_date"
-          if [[ "$effective_date" == "null" ]]; then
-            echo "::warning::pushedDate is null for $head_sha; falling back to committedDate ($committed_date), which is user-settable."
-            effective_date="$committed_date"
-          fi
-
-          if [[ "$effective_date" > "$COMMENT_TIME" ]]; then
-            echo "::error::PR head $head_sha was pushed at $effective_date, after the" \
-                 "maintainer's /run-conformance comment at $COMMENT_TIME. Refusing" \
-                 "to run on un-reviewed code; a maintainer must comment again to re-authorize."
-            exit 1
-          fi
-
-          echo "Authorized PR head: $head_sha (pushed $effective_date, comment $COMMENT_TIME)"
+          echo "PR head: $head_repo@$head_sha"
           echo "sha=$head_sha" >> "$GITHUB_OUTPUT"
           echo "repo=$head_repo" >> "$GITHUB_OUTPUT"
 
+      # The last step, so that once the check run exists, this job succeeds and `report`
+      # completes the check run.
       - name: Create check run on PR head
         if: github.event_name == 'issue_comment'
         id: check
@@ -131,11 +145,9 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          # Post a Check Run tied to the PR head SHA so the conformance job
-          # appears in the PR's "Checks" panel. issue_comment-triggered runs
-          # otherwise attach to the default branch and stay invisible there.
-          # Best-effort: a failure here leaves steps.check.outputs.id empty, so
-          # the Finalize step below will skip and conformance still runs.
+          # A Check Run on the PR head SHA makes the conformance run appear in the PR's "Checks"
+          # panel; issue_comment-triggered runs otherwise attach to the default branch.
+          # Best-effort: without it the report job skips finalizing it and conformance still runs.
           id=$(gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${{ github.repository }}/check-runs" \
@@ -146,35 +158,14 @@ jobs:
             --jq '.id')
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve plutus ref
-        id: plutus
-        env:
-          # Pass the comment body via env var (never interpolate untrusted input
-          # directly into the shell command).
-          COMMENT_BODY: ${{ github.event.comment.body }}
-          DEFAULT_REF: ${{ github.event.inputs.plutus_ref || 'master' }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
-            # Take the first whitespace-separated token after the trigger phrase
-            # on the first line of the comment. Empty -> 'master'.
-            first_line=$(printf '%s\n' "$COMMENT_BODY" | head -n1)
-            ref=$(echo "$first_line" | sed -E 's|^/run-conformance[[:space:]]*||' | awk '{print $1}')
-            if [[ -z "$ref" ]]; then
-              ref=master
-            fi
-            # Whitelist refs to git-safe characters (alnum, dot, dash, underscore,
-            # slash). Tags like v1.2.3 and 40-char SHAs both match.
-            if ! [[ "$ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-              echo "Refusing unsafe plutus ref: $ref" >&2
-              exit 1
-            fi
-          else
-            ref=$DEFAULT_REF
-          fi
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
-          echo "Resolved IntersectMBO/plutus ref: $ref"
+  # Builds and runs the PR's code, so it gets a read-only token and keeps no credentials.
+  conformance:
+    needs: authorize
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
+    steps:
       - name: Setup Lean
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
@@ -203,16 +194,18 @@ jobs:
       - name: Checkout PlutusCoreBlaster
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
-          repository: ${{ steps.pr.outputs.repo || github.repository }}
-          ref: ${{ steps.pr.outputs.sha || github.ref }}
+          repository: ${{ needs.authorize.outputs.repo || github.repository }}
+          ref: ${{ needs.authorize.outputs.sha || github.ref }}
           path: PlutusCoreBlaster
+          persist-credentials: false
 
       - name: Checkout IntersectMBO/plutus
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           repository: IntersectMBO/plutus
-          ref: ${{ steps.plutus.outputs.ref }}
+          ref: ${{ needs.authorize.outputs.plutus_ref }}
           path: plutus
+          persist-credentials: false
 
       - name: Symlink .plutus-conformance
         run: |
@@ -223,6 +216,9 @@ jobs:
         working-directory: PlutusCoreBlaster
         run: make build_plutus_core
 
+      # The plutus checkout is only read as data: the generator refuses test names that are not
+      # plain identifiers (`isSafeName` in scripts/GenConformanceTests.lean), and the programs
+      # run in the CEK machine.
       - name: Generate conformance test suite
         working-directory: PlutusCoreBlaster
         run: make gen_conformance_tests excludeNotImplemented=1
@@ -238,18 +234,33 @@ jobs:
           name: conformance-build
           path: PlutusCoreBlaster/build.log
 
+  # Completes the check run. Never runs the PR's code.
+  report:
+    needs: [authorize, conformance]
+    if: always() && needs.authorize.outputs.check_id != ''
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+
+    steps:
       - name: Finalize check run
-        if: always() && github.event_name == 'issue_comment' && steps.check.outputs.id != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          CHECK_ID: ${{ steps.check.outputs.id }}
-          # job.status is one of: success, failure, cancelled — all valid
-          # conclusion values for the Checks API.
-          CONCLUSION: ${{ job.status }}
+          CHECK_ID: ${{ needs.authorize.outputs.check_id }}
+          HEAD_REPO: ${{ needs.authorize.outputs.repo }}
+          HEAD_SHA: ${{ needs.authorize.outputs.sha }}
+          PLUTUS_REF: ${{ needs.authorize.outputs.plutus_ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # The conformance job's result: success, failure, cancelled or skipped, all valid
+          # conclusions for the Checks API.
+          CONCLUSION: ${{ needs.conformance.result }}
         run: |
-          gh api --method PATCH \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${{ github.repository }}/check-runs/$CHECK_ID" \
-            -f status='completed' \
-            -f conclusion="$CONCLUSION"
+          set -euo pipefail
+          summary="Tested commit \`$HEAD_SHA\` (${HEAD_REPO}), the PR head when the run started, against the conformance tests of IntersectMBO/plutus \`$PLUTUS_REF\`: [run ${GITHUB_RUN_ID}]($RUN_URL)."
+          jq -n --arg c "$CONCLUSION" --arg t "Conformance tests: $CONCLUSION" --arg s "$summary" \
+            '{status: "completed", conclusion: $c, output: {title: $t, summary: $s}}' |
+            gh api --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/check-runs/$CHECK_ID" \
+              --input -
