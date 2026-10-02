@@ -28,7 +28,7 @@ usage:
 
 .PHONY: build_plutus_core
 build_plutus_core:
-	lake build PlutusCore; lake build Lemmas
+	lake build PlutusCore Lemmas
 
 .PHONY: clean_plutus_core
 clean_plutus_core:

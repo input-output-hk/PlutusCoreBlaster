@@ -19,3 +19,7 @@ build.log
 
 # lake manifest
 lake-manifest.json
+
+# CI evidence and Python test caches
+.ci-results/
+**/__pycache__/

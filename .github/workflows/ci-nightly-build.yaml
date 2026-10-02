@@ -1,0 +1,83 @@
+name: Nightly Lean 4 Build Test
+
+on:
+  schedule:
+    - cron: '20 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: nightly-lean-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test-nightly-lean:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Setup nightly Lean and Z3 master
+        env:
+          LEAN_TOOLCHAIN: leanprover/lean4:nightly
+        run: bash scripts/ci/setup-tools.sh
+      - name: Resolve dependencies for nightly Lean
+        run: lake update
+      - name: Build and validate library
+        run: make check_plutus_core
+      - name: Build and validate tests
+        run: LEAN_NUM_THREADS=5 ./scripts/check_lean_project_compilation.sh Tests Tests Tests/Conformance
+      - name: Record tested environment
+        if: always()
+        run: python3 scripts/ci/record_environment.py
+      - name: Upload nightly evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: nightly-lean-${{ github.run_attempt }}
+          path: .ci-results/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  # Executes no repository code and consumes only GitHub's job conclusion.
+  report:
+    needs: test-nightly-lean
+    if: always() && needs.test-nightly-lean.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Report failure once and close on recovery
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          BUILD_RESULT: ${{ needs.test-nightly-lean.result }}
+        with:
+          script: |
+            const marker = '<!-- blaster-nightly-lean -->';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const args = {owner: context.repo.owner, repo: context.repo.repo};
+            const open = await github.paginate(github.rest.issues.listForRepo, {...args, state: 'open', per_page: 100});
+            const tracked = open.filter(i => !i.pull_request && i.user?.type === 'Bot' && i.body?.includes(marker));
+            if (process.env.BUILD_RESULT === 'failure') {
+              if (tracked.length === 0) {
+                await github.rest.issues.create({...args,
+                  title: 'Nightly Lean compatibility check failed',
+                  body: `${marker}\nThe nightly Lean build or setup failed. [Inspect the run and its build evidence](${run}).\n\nThe artifact records the tested Lean, Z3, source and dependency revisions. Classify this as a toolchain, dependency, test or infrastructure failure before proposing a fix. A successful run closes this bot-created issue automatically.`
+                });
+              }
+            } else if (process.env.BUILD_RESULT === 'success') {
+              for (const issue of tracked) {
+                await github.rest.issues.createComment({...args, issue_number: issue.number,
+                  body: `Nightly Lean is passing again: [validated run](${run}).`});
+                await github.rest.issues.update({...args, issue_number: issue.number, state: 'closed', state_reason: 'completed'});
+              }
+            }
