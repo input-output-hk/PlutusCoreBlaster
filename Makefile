@@ -25,6 +25,13 @@ usage:
 	@echo "                      lean file under Tests/Conformance/ is considered"
 	@echo "                      during compilation. Requires .plutus-conformance"
 	@echo "                      symlink and a previously generated test suite."
+# Benchmarks
+	@echo " - build_benchmark: Build the #prep_uplc benchmark harness and driver."
+	@echo " - bench_prep_uplc: Benchmark #prep_uplc on every script of the repository,"
+	@echo "                    the conformance suite included (see Benchmark/README.md)."
+	@echo "                    JOBS=N runs N cases at a time (default 1);"
+	@echo "                    BENCH_ARGS passes more options, e.g. BENCH_ARGS=\"--suite repo\"."
+	@echo " - bench_prep_uplc_compare: Compare two benchmark runs: BASE=<run-dir> NEW=<run-dir>."
 
 .PHONY: build_plutus_core
 build_plutus_core:
@@ -79,6 +86,22 @@ build_conformance:
 .PHONY: check_conformance
 check_conformance: clean_tests
 	./scripts/check_lean_project_compilation.sh Tests.Conformance Tests/Conformance
+
+# Benchmarks
+JOBS ?= 1
+BENCH_ARGS ?=
+
+.PHONY: build_benchmark
+build_benchmark:
+	lake build Benchmark bench_prep_uplc
+
+.PHONY: bench_prep_uplc
+bench_prep_uplc:
+	lake exe bench_prep_uplc run -j $(JOBS) $(BENCH_ARGS)
+
+.PHONY: bench_prep_uplc_compare
+bench_prep_uplc_compare:
+	lake exe bench_prep_uplc compare $(BASE) $(NEW)
 
 # Aggregate commands
 # To maintain when you add new components
