@@ -4,6 +4,7 @@ import Lean.Expr
 
 import PlutusCore.ByteString
 import PlutusCore.Integer
+import PlutusCore.Lemmas
 import PlutusCore.ToExpr
 
 namespace PlutusCore.Data
@@ -295,86 +296,6 @@ mutual
 end
 
 mutual
-  theorem eqData_false_imp_not_eq (x y : Data) : eqData x y = false → x ≠ y := by
-    match x, y with
-    | .Constr i xs, .Constr j ys =>
-         simp [eqData, eqDataConstr]
-         intro h1 h2
-         have h3 : eqDataList xs ys = false := h1 h2
-         apply eqDataList_false_imp_not_eq _ _ h3
-    | .List xs, .List ys =>
-         simp [eqData]
-         apply eqDataList_false_imp_not_eq xs ys
-    | .Map xm, .Map ym =>
-         simp [eqData]
-         apply eqDataMap_false_imp_not_eq xm ym
-    | .I i, .I j => simp [eqData]
-    | .B bs1, .B bs2 => simp [eqData]
-    | .Constr _ _, .List _
-    | .Constr _ _, .Map _
-    | .Constr _ _, .I _
-    | .Constr _ _, .B _
-    | .List _, .Constr _ _
-    | .List _, .Map _
-    | .List _, .I _
-    | .List _, .B _
-    | .Map _, .Constr _ _
-    | .Map _, .List _
-    | .Map _, .I _
-    | .Map _, .B _
-    | .I _, .Constr _ _
-    | .I _, .List _
-    | .I _, .Map _
-    | .I _, .B _
-    | .B _, .Constr _ _
-    | .B _, .List _
-    | .B _, .Map _
-    | .B _, .I _ => simp [eqData]
-
-  theorem eqDataList_false_imp_not_eq (xs ys : List Data) : eqDataList xs ys = false → xs ≠ ys := by
-    match xs, ys with
-    | [], []
-    | [], _ :: _
-    | _ :: _,  [] => simp [eqDataList]
-    | hd1 :: tl1, hd2 :: tl2 =>
-       simp only [eqDataList]
-       rw [Bool.and_eq_false_iff]
-       intro h1
-       simp; intro h2
-       apply Or.elim h1 <;> intro h3
-       . have h4 : hd1 ≠ hd2 := eqData_false_imp_not_eq _ _ h3
-         contradiction
-       . apply eqDataList_false_imp_not_eq tl1 tl2 h3
-
-  theorem eqDataMap_false_imp_not_eq (xs ys : List (Data × Data)) : eqDataMap xs ys = false → xs ≠ ys := by
-    match xs, ys with
-    | [], []
-    | [], _ :: _
-    | _ :: _,  [] => simp [eqDataMap]
-    | (x, y) :: tl1, (x', y') :: tl2 =>
-        simp only [eqDataMap]
-        rw [Bool.and_eq_false_iff]
-        intro h1
-        simp; intro h2 h3
-        apply Or.elim h1 <;> intro h4
-        . rw [Bool.and_eq_false_iff] at h4
-          apply Or.elim h4 <;> intro h5
-          . have h6 : x ≠ x' := eqData_false_imp_not_eq _ _ h5
-            contradiction
-          . have h6 : y ≠ y' := eqData_false_imp_not_eq _ _ h5
-            contradiction
-        . apply eqDataMap_false_imp_not_eq tl1 tl2 h4
-end
-
-def Data.decEq (x y : Data) : Decidable (Eq x y) :=
-  match h:(eqData x y) with
-  | true => isTrue (eqData_true_imp_eq _ _ h)
-  | false => isFalse (eqData_false_imp_not_eq _ _ h)
-
-instance : DecidableEq Data := Data.decEq
-
-/-! LawfulBEq instance for Data -/
-mutual
   theorem eqData_reflexive (x : Data) : eqData x x = true := by
     match x with
     | .Constr i xs =>
@@ -408,6 +329,24 @@ mutual
         . apply eqDataMap_reflexive
 end
 
+theorem eqData_false_imp_not_eq (x y : Data) : eqData x y = false → x ≠ y :=
+  fun h => eq_false_imp_ne eqData_reflexive h
+
+theorem eqDataList_false_imp_not_eq (xs ys : List Data) : eqDataList xs ys = false → xs ≠ ys :=
+  fun h => eq_false_imp_ne eqDataList_reflexive h
+
+theorem eqDataMap_false_imp_not_eq (xs ys : List (Data × Data)) :
+    eqDataMap xs ys = false → xs ≠ ys :=
+  fun h => eq_false_imp_ne eqDataMap_reflexive h
+
+def Data.decEq (x y : Data) : Decidable (Eq x y) :=
+  match h:(eqData x y) with
+  | true => isTrue (eqData_true_imp_eq _ _ h)
+  | false => isFalse (eqData_false_imp_not_eq _ _ h)
+
+instance : DecidableEq Data := Data.decEq
+
+/-! LawfulBEq instance for Data -/
 instance LawfulBEqData : LawfulBEq Data where
   eq_of_beq := by simp [BEq.beq]; apply eqData_true_imp_eq
   rfl := by simp [BEq.beq]; apply eqData_reflexive
