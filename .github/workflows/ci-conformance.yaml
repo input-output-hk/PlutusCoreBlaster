@@ -27,11 +27,18 @@ on:
   issue_comment:
     types: [created]
 
-# Every PR comment starts this workflow, only for its jobs to be skipped unless the comment is a
-# /run-conformance request. Those other comments get a group of their own, so that they cannot
-# cancel a run in progress; a newer /run-conformance request does cancel the older one.
+# Only authorized requests share a concurrency group. Other comments get their own group,
+# so an unauthorized /run-conformance comment cannot cancel a run in progress.
 concurrency:
-  group: ci-conformance-${{ github.event.issue.number || github.ref }}-${{ (github.event_name == 'issue_comment' && !startsWith(github.event.comment.body, '/run-conformance')) && github.run_id || 'run' }}
+  group: >-
+    ci-conformance-${{ github.event.issue.number || github.ref }}-${{
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        startsWith(github.event.comment.body, '/run-conformance') &&
+        (github.event.comment.author_association == 'OWNER' ||
+         github.event.comment.author_association == 'MEMBER' ||
+         github.event.comment.author_association == 'COLLABORATOR'))) && 'run' || github.run_id }}
   cancel-in-progress: true
 
 env:
