@@ -50,7 +50,7 @@ mutual
     | .Var i        , .Var j         => i == j
     | .Const c1     , .Const c2      => c1 == c2
     | .Builtin b1   , .Builtin b2    => b1 == b2
-    | .Lam _ b1     , .Lam _ b2      => termBeq b1 b2
+    | .Lam b1       , .Lam b2        => termBeq b1 b2
     | .Apply f1 a1  , .Apply f2 a2   => termBeq f1 f2 && termBeq a1 a2
     | .Delay t1     , .Delay t2      => termBeq t1 t2
     | .Force t1     , .Force t2      => termBeq t1 t2

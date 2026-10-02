@@ -61,7 +61,7 @@ mutual
   -- Convert a CekValue back to a Term for substitution.
   private def cekValueToTerm : Nat → CekValue → Term
     | p + 1, .VCon c            => .Const c
-    | p + 1, .VLam x body env   => .Lam x (closeTermWithEnv env 1 p body)
+    | p + 1, .VLam body env     => .Lam (closeTermWithEnv env 1 p body)
     | p + 1, .VDelay body env   => .Delay (closeTermWithEnv env 0 p body)
     | p + 1, .VConstr n args    => .Constr n (args.map (cekValueToTerm p))
     | p + 1, .VBuiltin f args _ => args.foldr (fun v acc => .Apply acc (cekValueToTerm p v)) (.Builtin f)
@@ -76,7 +76,7 @@ mutual
         else match env[i - depth]? with
              | some v => cekValueToTerm p v
              | none   => .Var i
-    | p + 1, .Lam x body  => .Lam x (closeTermWithEnv env (depth + 1) p body)
+    | p + 1, .Lam body    => .Lam (closeTermWithEnv env (depth + 1) p body)
     | p + 1, .Apply f a   => .Apply (closeTermWithEnv env depth p f) (closeTermWithEnv env depth p a)
     | p + 1, .Delay t     => .Delay (closeTermWithEnv env depth p t)
     | p + 1, .Force t     => .Force (closeTermWithEnv env depth p t)
@@ -88,7 +88,7 @@ mutual
     | _    , .VCon c1,              .VCon c2              => c1 == c2
     | p + 1, .VConstr n1 args1,     .VConstr n2 args2     => n1 == n2 && cekValueListBeq p args1 args2
     | p + 1, .VBuiltin f1 args1 _,  .VBuiltin f2 args2 _  => f1 == f2 && cekValueListBeq p args1 args2
-    | p + 1, .VLam _ t1 env1,       .VLam _ t2 env2       =>
+    | p + 1, .VLam t1 env1,         .VLam t2 env2         =>
         closeTermWithEnv env1 1 p t1 == closeTermWithEnv env2 1 p t2
     | p + 1, .VDelay t1 env1,       .VDelay t2 env2       =>
         closeTermWithEnv env1 0 p t1 == closeTermWithEnv env2 0 p t2

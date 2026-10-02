@@ -9,7 +9,7 @@ open PlutusCore.UPLC.Builtins
 inductive CekValue
 | VCon     : Const → CekValue
 | VDelay   : Term → List CekValue → CekValue
-| VLam     : String → Term → List CekValue → CekValue
+| VLam     : Term → List CekValue → CekValue
 | VConstr  : Nat → List CekValue → CekValue
 | VBuiltin : BuiltinFun → List CekValue → ExpectedBuiltinArgs → CekValue
 deriving Repr
