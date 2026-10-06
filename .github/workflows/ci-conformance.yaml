@@ -43,8 +43,6 @@ concurrency:
 
 env:
   LEAN_VERSION: "4.24.0"
-  Z3_VERSION: "4.15.2"
-  GLIBC_Z3: "2.39"
 
 jobs:
   # Checks the trigger and prepares the run. Never runs the PR's code.
@@ -184,20 +182,6 @@ jobs:
           elan toolchain install ${{ env.LEAN_VERSION }}
           elan default ${{ env.LEAN_VERSION }}
 
-      - name: Install Z3
-        run: |
-          cd /home/runner/
-          wget -q https://github.com/Z3Prover/z3/releases/download/z3-${{ env.Z3_VERSION }}/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
-          unzip -q z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
-          echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
-
-      - name: Tools version
-        run: |
-          elan --version
-          lake --version
-          lean --version
-          z3 --version
-
       - name: Checkout PlutusCoreBlaster
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
@@ -205,6 +189,23 @@ jobs:
           ref: ${{ needs.authorize.outputs.sha || github.ref }}
           path: PlutusCoreBlaster
           persist-credentials: false
+
+      - name: Checkout coordinated Blaster
+        uses: actions/checkout@v6
+        with:
+          repository: input-output-hk/Lean-blaster
+          ref: 7a2f4f0547cce56ec3db3f4f39a8b3bb541c85b9
+          path: Lean-blaster
+      - uses: actions/cache@v4
+        id: solver
+        with:
+          path: ${{ runner.temp }}/assurance-z3
+          key: assurance-z3-${{ runner.os }}-${{ hashFiles('Lean-blaster/scripts/build-assurance-z3.sh') }}
+      - name: Build compatible solver
+        if: steps.solver.outputs.cache-hit != 'true'
+        run: bash Lean-blaster/scripts/build-assurance-z3.sh "$RUNNER_TEMP/assurance-z3"
+      - name: Select solver
+        run: echo "$RUNNER_TEMP/assurance-z3/bin" >> "$GITHUB_PATH"
 
       - name: Checkout IntersectMBO/plutus
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2

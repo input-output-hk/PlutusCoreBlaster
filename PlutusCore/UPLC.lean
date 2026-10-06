@@ -1,5 +1,6 @@
 
 import PlutusCore.UPLC.Basic
+import PlutusCore.UPLC.BlueprintEncoding
 import PlutusCore.UPLC.BuiltinFunctions
 import PlutusCore.UPLC.Builtins
 import PlutusCore.UPLC.CekMachine

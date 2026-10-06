@@ -106,6 +106,14 @@ theorem runSteps_halt_iff_stepN (sv : BuiltinSemanticsVariant) (s : State) (V : 
   | Eval st rho t => simp [runSteps]
   | Return st v => simp [runSteps]
 
+/-- Keeping an unfinished state changes neither successful results nor their fuel bound. -/
+theorem runStepsPreservingState_halt_iff_runSteps
+    (sv : BuiltinSemanticsVariant) (s : State) (V : CekValue) (n : Nat) :
+    runStepsPreservingState sv s n = State.Halt V ↔ runSteps sv s n = State.Halt V := by
+  induction n generalizing s with
+  | zero => cases s <;> simp [runStepsPreservingState, runSteps]
+  | succ n ih => cases s <;> simp_all [runStepsPreservingState, runSteps]
+
 /-- A program's result does not depend on how much fuel it was given, past enough. -/
 theorem cekExecuteProgramWithSemanticVariant_halt_stable
     (sv : BuiltinSemanticsVariant) (p : Program) (params : List Term) (V : CekValue) (n k : Nat)
@@ -114,7 +122,9 @@ theorem cekExecuteProgramWithSemanticVariant_halt_stable
   cases p with
   | Program ver body =>
       simp only [cekExecuteProgramWithSemanticVariant] at h ⊢
-      exact runSteps_halt_stable sv _ V n k h
+      apply (runStepsPreservingState_halt_iff_runSteps sv _ V (n + k)).mpr
+      exact runSteps_halt_stable sv _ V n k
+        ((runStepsPreservingState_halt_iff_runSteps sv _ V n).mp h)
 
 /-- The same, at the default semantics variant. -/
 theorem cekExecuteProgram_halt_stable

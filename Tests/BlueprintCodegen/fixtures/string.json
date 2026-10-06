@@ -1,0 +1,23 @@
+{
+  "preamble": { "title": "string_fixture", "version": "1.0.0", "plutusVersion": "v3" },
+  "validators": [
+    {
+      "title": "strv.strv.spend",
+      "datum": { "title": "datum", "schema": { "$ref": "#/definitions/StrDatum" } }
+    }
+  ],
+  "definitions": {
+    "StrDatum": {
+      "title": "StrDatum",
+      "anyOf": [
+        {
+          "title": "StrDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [ { "title": "label", "$ref": "#/definitions/Str" } ]
+        }
+      ]
+    },
+    "Str": { "dataType": "#string" }
+  }
+}

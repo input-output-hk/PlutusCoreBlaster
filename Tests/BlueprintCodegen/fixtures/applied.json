@@ -1,0 +1,144 @@
+{
+  "preamble": {
+    "title": "applied/test",
+    "description": "Fixture for the applied-validator wrapper (CIP-57 `arguments` + `budget`).",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "applied.data",
+      "redeemer": {
+        "title": "_r",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "arguments": [
+        {
+          "encoding": "asData",
+          "schema": {}
+        }
+      ],
+      "budget": {
+        "steps": 2500
+      },
+      "compiledCode": "58d001010029800aba2aba1aab9eaab9dab9a48888966002646465300130053754003300700398038012444b30013370e9000001c4c98dd7180518049baa0048acc004cdc3a400400713233226300b001300b300c0013009375400915980099b874801000e264c601460126ea80122b30013370e9003001c4c8cc898dd698058009805980600098049baa0048acc004cdc3a40100071326300a3009375400913233226375a60160026016601800260126ea8011007200e401c80390070c018c01c004c018004c00cdd5003452689b2b20021",
+      "hash": "f2388d136606a27c4a531d0040c3e12e07eb95cd5011793c160707dc"
+    },
+    {
+      "title": "applied.typed",
+      "redeemer": {
+        "title": "_r",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "arguments": [
+        {
+          "encoding": "asData",
+          "schema": {
+            "$ref": "#/definitions/Params"
+          }
+        },
+        {
+          "encoding": "asData",
+          "schema": {
+            "$ref": "#/definitions/BuiltinData"
+          }
+        }
+      ],
+      "budget": {
+        "steps": 1234
+      },
+      "compiledCode": "58d001010029800aba2aba1aab9eaab9dab9a48888966002646465300130053754003300700398038012444b30013370e9000001c4c98dd7180518049baa0048acc004cdc3a400400713233226300b001300b300c0013009375400915980099b874801000e264c601460126ea80122b30013370e9003001c4c8cc898dd698058009805980600098049baa0048acc004cdc3a40100071326300a3009375400913233226375a60160026016601800260126ea8011007200e401c80390070c018c01c004c018004c00cdd5003452689b2b20021",
+      "hash": "f2388d136606a27c4a531d0040c3e12e07eb95cd5011793c160707dc"
+    },
+    {
+      "title": "applied.scott",
+      "redeemer": {
+        "title": "_r",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "arguments": [
+        {
+          "encoding": "asScott",
+          "schema": {
+            "$ref": "#/definitions/Params"
+          }
+        }
+      ],
+      "budget": {
+        "steps": 2500
+      },
+      "compiledCode": "58d001010029800aba2aba1aab9eaab9dab9a48888966002646465300130053754003300700398038012444b30013370e9000001c4c98dd7180518049baa0048acc004cdc3a400400713233226300b001300b300c0013009375400915980099b874801000e264c601460126ea80122b30013370e9003001c4c8cc898dd698058009805980600098049baa0048acc004cdc3a40100071326300a3009375400913233226375a60160026016601800260126ea8011007200e401c80390070c018c01c004c018004c00cdd5003452689b2b20021",
+      "hash": "f2388d136606a27c4a531d0040c3e12e07eb95cd5011793c160707dc"
+    },
+    {
+      "title": "applied.exunits",
+      "redeemer": {
+        "title": "_r",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "arguments": [
+        {
+          "encoding": "asData",
+          "schema": {}
+        }
+      ],
+      "budget": {
+        "exCPU": 10000000000,
+        "exMem": 14000000
+      },
+      "compiledCode": "58d001010029800aba2aba1aab9eaab9dab9a48888966002646465300130053754003300700398038012444b30013370e9000001c4c98dd7180518049baa0048acc004cdc3a400400713233226300b001300b300c0013009375400915980099b874801000e264c601460126ea80122b30013370e9003001c4c8cc898dd698058009805980600098049baa0048acc004cdc3a40100071326300a3009375400913233226375a60160026016601800260126ea8011007200e401c80390070c018c01c004c018004c00cdd5003452689b2b20021",
+      "hash": "f2388d136606a27c4a531d0040c3e12e07eb95cd5011793c160707dc"
+    },
+    {
+      "title": "applied.nobudget",
+      "redeemer": {
+        "title": "_r",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "arguments": [
+        {
+          "encoding": "asData",
+          "schema": {}
+        }
+      ],
+      "compiledCode": "58d001010029800aba2aba1aab9eaab9dab9a48888966002646465300130053754003300700398038012444b30013370e9000001c4c98dd7180518049baa0048acc004cdc3a400400713233226300b001300b300c0013009375400915980099b874801000e264c601460126ea80122b30013370e9003001c4c8cc898dd698058009805980600098049baa0048acc004cdc3a40100071326300a3009375400913233226375a60160026016601800260126ea8011007200e401c80390070c018c01c004c018004c00cdd5003452689b2b20021",
+      "hash": "f2388d136606a27c4a531d0040c3e12e07eb95cd5011793c160707dc"
+    },
+    {
+      "title": "applied.plain",
+      "compiledCode": "58d001010029800aba2aba1aab9eaab9dab9a48888966002646465300130053754003300700398038012444b30013370e9000001c4c98dd7180518049baa0048acc004cdc3a400400713233226300b001300b300c0013009375400915980099b874801000e264c601460126ea80122b30013370e9003001c4c8cc898dd698058009805980600098049baa0048acc004cdc3a40100071326300a3009375400913233226375a60160026016601800260126ea8011007200e401c80390070c018c01c004c018004c00cdd5003452689b2b20021",
+      "hash": "f2388d136606a27c4a531d0040c3e12e07eb95cd5011793c160707dc"
+    }
+  ],
+  "definitions": {
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "BuiltinData": {},
+    "Integer": {
+      "dataType": "integer"
+    },
+    "Params": {
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "limit",
+          "$ref": "#/definitions/Integer"
+        }
+      ]
+    }
+  }
+}

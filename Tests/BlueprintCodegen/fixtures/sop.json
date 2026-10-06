@@ -1,0 +1,19 @@
+{
+  "preamble": { "title": "sop_fixture", "version": "1.0.0", "plutusVersion": "v3" },
+  "validators": [
+    {
+      "title": "sopv.sopv.spend",
+      "datum": { "title": "datum", "schema": { "$ref": "#/definitions/Credential" } }
+    }
+  ],
+  "definitions": {
+    "Credential": {
+      "title": "Credential",
+      "anyOf": [
+        { "title": "VerificationKey", "dataType": "constructor", "index": 0, "fields": [ { "$ref": "#/definitions/I" } ] },
+        { "title": "Script", "dataType": "constructor", "index": 1, "fields": [ { "$ref": "#/definitions/I" } ] }
+      ]
+    },
+    "I": { "dataType": "integer" }
+  }
+}

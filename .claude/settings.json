@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(deep-research)",
+      "Skill(deep-research:*)",
+      "Workflow(deep-research)",
+      "Bash(xargs grep -l \"def\\\\|theorem\\\\|lemma\")",
+      "WebSearch",
+      "Bash(gh api *)",
+      "WebFetch(domain:objects.githubusercontent.com)",
+      "WebFetch(domain:plutus.cardano.intersectmbo.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:cips.cardano.org)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}

@@ -133,7 +133,8 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
   | .AtomicType .TypeBool           => Prod.map id .Bool                         <$> decodeBool s
   | .AtomicType .TypeData           => do
       let (s', t) ← decodeBytestring s
-      let (_ , d) ← decodeData t
+      let (remaining, d) ← decodeData t
+      guard remaining.isEmpty
       .some (s', .Data d)
   | .TypeOperator (.TypeList t)     =>
        match t with

@@ -59,12 +59,12 @@ example (s : State) :
   runSteps_add testSemanticsVariant s 2 3
 
 -- The stability theorem is about programs that really do halt, and fuel really does
--- matter for them: one step short of enough is an `Error`.
+-- matter for them: one step short of enough is an unfinished `Return`.
 def testProgram : PlutusCore.UPLC.Term.Program :=
   PlutusCore.UPLC.Term.Program.Program (PlutusCore.UPLC.Term.Version.Version 1 1 0) testTerm
 
 example : cekExecuteProgramWithSemanticVariant testSemanticsVariant testProgram [] 1
-    = State.Error := rfl
+    = State.Return [] testResult := rfl
 example : cekExecuteProgramWithSemanticVariant testSemanticsVariant testProgram [] 2
     = State.Halt testResult := rfl
 example : cekExecuteProgramWithSemanticVariant testSemanticsVariant testProgram [] (2 + 7)

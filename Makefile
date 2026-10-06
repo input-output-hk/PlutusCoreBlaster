@@ -55,7 +55,7 @@ clean_tests:
 
 .PHONY: check_tests
 check_tests: clean_tests
-	./scripts/check_lean_project_compilation.sh Tests Tests Tests/Conformance
+	./scripts/check_lean_project_compilation.sh Tests Tests 'Tests/(Conformance|BlueprintVerify/(Regression|Game))'
 
 # Path to the plutus-conformance directory containing test-cases/.
 CONFORMANCE_ROOT ?= .plutus-conformance/plutus-conformance

@@ -1,0 +1,26 @@
+{
+  "preamble": { "title": "keyword_fixture", "version": "1.0.0", "plutusVersion": "v3" },
+  "validators": [
+    {
+      "title": "kwv.kwv.spend",
+      "datum": { "title": "datum", "schema": { "$ref": "#/definitions/KwDatum" } }
+    }
+  ],
+  "definitions": {
+    "KwDatum": {
+      "title": "KwDatum",
+      "anyOf": [
+        {
+          "title": "KwDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            { "title": "end", "$ref": "#/definitions/I" },
+            { "title": "type", "$ref": "#/definitions/I" }
+          ]
+        }
+      ]
+    },
+    "I": { "dataType": "integer" }
+  }
+}
