@@ -24,6 +24,12 @@ inductive AtomicType
   | TypeBls12_381_MlResult
 deriving BEq
 
+instance : LawfulBEq AtomicType where
+  eq_of_beq {a b} h := by cases a <;> cases b <;> first | rfl | contradiction
+  rfl {a} := by cases a <;> rfl
+
+instance : DecidableEq AtomicType := instDecidableEqOfLawfulBEq
+
 mutual
   inductive BuiltinType
     | AtomicType : AtomicType → BuiltinType
@@ -170,10 +176,18 @@ inductive BuiltinFun
   | DropList
 deriving Repr, BEq
 
+deriving instance DecidableEq for BuiltinFun
+
+instance : LawfulBEq BuiltinFun where
+  eq_of_beq {a b} h := by
+    simp only [BEq.beq, instBEqBuiltinFun.beq, decide_eq_true_eq] at h
+    rw [← BuiltinFun.ofNat_ctorIdx a, ← BuiltinFun.ofNat_ctorIdx b, h]
+  rfl {a} := by simp [BEq.beq, instBEqBuiltinFun.beq]
+
 /-- Terms use de Bruijn indices: `Var i` refers to the binder `i` levels out
     (0 = innermost enclosing `Lam`). An index that reaches past the enclosing
     binders denotes a free variable, which the CEK machine rejects at
-    evaluation time. The named lambda binder is ignored. -/
+    evaluation time. -/
 inductive Term
   | Var : Nat → Term
   | Const : Const → Term

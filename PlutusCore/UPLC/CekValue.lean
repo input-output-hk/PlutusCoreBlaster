@@ -15,8 +15,7 @@ inductive CekValue
 deriving Repr
 
 /-- Positional environment for de Bruijn terms: the head is the value of
-    index 0 (the innermost binder), so `ρ[i]?` is de Bruijn lookup.
-    The `String` on `VLam` is display-only metadata, as on `Term.Lam`. -/
+    index 0 (the innermost binder), so `ρ[i]?` is de Bruijn lookup. -/
 abbrev Environment := List CekValue
 
 end PlutusCore.UPLC.CekValue

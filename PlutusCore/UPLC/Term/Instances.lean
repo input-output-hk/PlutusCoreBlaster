@@ -4,9 +4,6 @@ import PlutusCore.Crypto.BLS12_381.G2
 
 namespace PlutusCore.UPLC.Term
 
-open PlutusCore.Crypto.BLS12_381.G1 (bls12_381_G1_equal)
-open PlutusCore.Crypto.BLS12_381.G2 (bls12_381_G2_equal)
-
 mutual
   private def listBeq : List Const → List Const → Bool
     | h1 :: t1, h2 :: t2 =>
@@ -16,7 +13,6 @@ mutual
     | []      , []       => true
     | _       , _        => false
 
-  -- BEq for Const (manual, partial due to recursive ConstList and Pair constructors)
   private def constBeq : Const → Const → Bool
     | .Integer a             , .Integer b              => a == b
     | .ByteString a          , .ByteString b           => a == b
@@ -29,8 +25,8 @@ mutual
     | .Pair (a1, a2)         , .Pair (b1, b2)          => constBeq a1 b1 && constBeq a2 b2
     | .PairData a            , .PairData b             => a == b
     | .Data a                , .Data b                 => a == b
-    | .Bls12_381_G1_element a, .Bls12_381_G1_element b => bls12_381_G1_equal a b
-    | .Bls12_381_G2_element a, .Bls12_381_G2_element b => bls12_381_G2_equal a b
+    | .Bls12_381_G1_element a, .Bls12_381_G1_element b => decide (a = b)
+    | .Bls12_381_G2_element a, .Bls12_381_G2_element b => decide (a = b)
     | .Bls12_381_MlResult   a, .Bls12_381_MlResult   b => a == b
     | _                      , _                       => false
 end
@@ -43,9 +39,7 @@ mutual
     | []      , []       => true
     | _       , _        => false
 
-  -- BEq for Term. With de Bruijn indices this structural equality
-  -- coincides with alpha-equivalence; binder names are display-only
-  -- metadata and are not compared.
+  -- With de Bruijn indices this structural equality coincides with alpha-equivalence.
   private def termBeq : Term → Term → Bool
     | .Var i        , .Var j         => i == j
     | .Const c1     , .Const c2      => c1 == c2
@@ -61,6 +55,77 @@ mutual
 end
 
 instance : BEq Term := ⟨termBeq⟩
+
+mutual
+  theorem constBeq_true_imp_eq : ∀ a b : Const, constBeq a b = true → a = b := by
+    intro a b h
+    cases a <;> cases b <;> simp_all [constBeq]
+    case ConstList.ConstList => exact listBeq_true_imp_eq _ _ h
+    case Pair.Pair => exact Prod.ext (constBeq_true_imp_eq _ _ h.1) (constBeq_true_imp_eq _ _ h.2)
+
+  theorem listBeq_true_imp_eq : ∀ a b : List Const, listBeq a b = true → a = b := by
+    intro a b h
+    cases a <;> cases b <;> simp_all [listBeq]
+    case cons.cons => exact ⟨constBeq_true_imp_eq _ _ h.1, listBeq_true_imp_eq _ _ h.2⟩
+end
+
+mutual
+  theorem constBeq_refl : ∀ a : Const, constBeq a a = true := by
+    intro a
+    cases a <;> simp [constBeq]
+    case ConstList => exact listBeq_refl _
+    case Pair => exact ⟨constBeq_refl _, constBeq_refl _⟩
+
+  theorem listBeq_refl : ∀ a : List Const, listBeq a a = true := by
+    intro a
+    cases a <;> simp [listBeq]
+    case cons => exact ⟨constBeq_refl _, listBeq_refl _⟩
+end
+
+instance : LawfulBEq Const where
+  eq_of_beq {a b} := constBeq_true_imp_eq a b
+  rfl {a} := constBeq_refl a
+
+instance : DecidableEq Const := instDecidableEqOfLawfulBEq
+
+mutual
+  theorem termBeq_true_imp_eq : ∀ a b : Term, termBeq a b = true → a = b := by
+    intro a b h
+    cases a <;> cases b <;> simp_all [termBeq]
+    case Lam.Lam | Delay.Delay | Force.Force => exact termBeq_true_imp_eq _ _ h
+    case Apply.Apply => exact ⟨termBeq_true_imp_eq _ _ h.1, termBeq_true_imp_eq _ _ h.2⟩
+    case Constr.Constr => exact termListBeq_true_imp_eq _ _ h.2
+    case Case.Case => exact ⟨termBeq_true_imp_eq _ _ h.1, termListBeq_true_imp_eq _ _ h.2⟩
+
+  theorem termListBeq_true_imp_eq : ∀ a b : List Term, termListBeq a b = true → a = b := by
+    intro a b h
+    cases a <;> cases b <;> simp_all [termListBeq]
+    case cons.cons => exact ⟨termBeq_true_imp_eq _ _ h.1, termListBeq_true_imp_eq _ _ h.2⟩
+end
+
+mutual
+  theorem termBeq_refl : ∀ a : Term, termBeq a a = true := by
+    intro a
+    cases a <;> simp [termBeq]
+    case Lam | Delay | Force => exact termBeq_refl _
+    case Apply => exact ⟨termBeq_refl _, termBeq_refl _⟩
+    case Constr => exact termListBeq_refl _
+    case Case => exact ⟨termBeq_refl _, termListBeq_refl _⟩
+
+  theorem termListBeq_refl : ∀ a : List Term, termListBeq a a = true := by
+    intro a
+    cases a <;> simp [termListBeq]
+    case cons => exact ⟨termBeq_refl _, termListBeq_refl _⟩
+end
+
+instance : LawfulBEq Term where
+  eq_of_beq {a b} := termBeq_true_imp_eq a b
+  rfl {a} := termBeq_refl a
+
+instance : DecidableEq Term := instDecidableEqOfLawfulBEq
+
+deriving instance DecidableEq for Version
+deriving instance DecidableEq for Program
 
 instance : Repr AtomicType where
   reprPrec t _ :=
