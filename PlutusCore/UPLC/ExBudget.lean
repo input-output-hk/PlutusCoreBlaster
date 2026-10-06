@@ -9,6 +9,10 @@ structure ExCPU where
   unExCPU : Nat
 deriving Repr, Inhabited, DecidableEq, BEq
 
+instance : LawfulBEq ExCPU where
+  eq_of_beq {a b} h := by cases a; cases b; simp_all [BEq.beq, instBEqExCPU.beq]
+  rfl {a} := by cases a; simp [BEq.beq, instBEqExCPU.beq]
+
 namespace ExCPU
   def add (a b : ExCPU) : ExCPU :=
     ⟨a.unExCPU + b.unExCPU⟩
@@ -31,6 +35,10 @@ structure ExMemory where
   unExMemory : Nat
 deriving Repr, Inhabited, DecidableEq, BEq
 
+instance : LawfulBEq ExMemory where
+  eq_of_beq {a b} h := by cases a; cases b; simp_all [BEq.beq, instBEqExMemory.beq]
+  rfl {a} := by cases a; simp [BEq.beq, instBEqExMemory.beq]
+
 namespace ExMemory
   def add (a b : ExMemory) : ExMemory :=
     ⟨a.unExMemory + b.unExMemory⟩
@@ -52,6 +60,16 @@ structure ExBudget where
   exBudgetCPU : ExCPU
   exBudgetMemory : ExMemory
 deriving Repr, Inhabited, DecidableEq, BEq
+
+instance : LawfulBEq ExBudget where
+  eq_of_beq {a b} h := by
+    cases a; cases b
+    change instBEqExBudget.beq _ _ = true at h
+    simp_all [instBEqExBudget.beq]
+  rfl {a} := by
+    cases a
+    change instBEqExBudget.beq _ _ = true
+    simp [instBEqExBudget.beq]
 
 namespace ExBudget
 
