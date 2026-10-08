@@ -51,6 +51,9 @@ abbrev Value := List (ByteString × Tokens)
 
 namespace Internal
 
+/-! Implementation helpers are named in this namespace so optional proof
+modules can state their invariants without importing proofs into the evaluator. -/
+
 -- ---------------------------------------------------------------------------
 -- Constants and validity
 -- ---------------------------------------------------------------------------
@@ -142,7 +145,7 @@ def maxInnerSize : Value → Nat
   | []             => 0
   | (_, ts) :: rest => max ts.length (maxInnerSize rest)
 
-private def tokensAnyNeg : Tokens → Bool
+def tokensAnyNeg : Tokens → Bool
   | []            => false
   | (_, q) :: rest => (q < 0) || tokensAnyNeg rest
 
@@ -174,11 +177,11 @@ def toAssocList (v : Value) : List (ByteString × List (ByteString × Integer)) 
 -- ---------------------------------------------------------------------------
 
 /-- Insert `tok ↦ q` into `inner` if non-zero, otherwise erase `tok`. -/
-@[inline] private def insertOrErase (inner : Tokens) (tok : ByteString) (q : Integer) : Tokens :=
+@[inline] def insertOrErase (inner : Tokens) (tok : ByteString) (q : Integer) : Tokens :=
   if q == 0 then AList.erase tok inner else AList.insert tok q inner
 
 /-- Replace `cur`'s inner map with `inner`, or erase `cur` if `inner` is empty. -/
-@[inline] private def setOrPrune (outer : Value) (cur : ByteString) (inner : Tokens) : Value :=
+@[inline] def setOrPrune (outer : Value) (cur : ByteString) (inner : Tokens) : Value :=
   match inner with
   | [] => AList.erase cur outer
   | _  => AList.insert cur inner outer
@@ -253,7 +256,7 @@ def lookupCoin (cur tok : ByteString) (v : Value) : Integer :=
   | none       => 0
   | some inner => AList.getD tok inner 0
 
-private def unionInner (innerA : Tokens) : Tokens → Except String Tokens
+def unionInner (innerA : Tokens) : Tokens → Except String Tokens
   | []             => pure innerA
   | (tok, q) :: rest => do
       let summed := AList.getD tok innerA 0 + q
@@ -261,7 +264,7 @@ private def unionInner (innerA : Tokens) : Tokens → Except String Tokens
         throw "unionValue: quantity is out of the signed 128-bit integer bounds"
       unionInner (insertOrErase innerA tok summed) rest
 
-private def unionOuter (acc : Value) : Value → Except String Value
+def unionOuter (acc : Value) : Value → Except String Value
   | []                  => pure acc
   | (cur, innerB) :: rest => do
       let innerA := AList.getD cur acc []
@@ -274,7 +277,7 @@ def unionValue (a b : Value) : Except String Value :=
   else if isEmpty b then pure a
   else unionOuter a b
 
-private def innerContained (innerA : Tokens) : Tokens → Bool
+def innerContained (innerA : Tokens) : Tokens → Bool
   | []             => true
   | (tok, q) :: rest =>
       (match AList.get? tok innerA with
@@ -282,7 +285,7 @@ private def innerContained (innerA : Tokens) : Tokens → Bool
        | some q' => q ≤ q')
       && innerContained innerA rest
 
-private def outerContained (a : Value) : Value → Bool
+def outerContained (a : Value) : Value → Bool
   | []                  => true
   | (cur, innerB) :: rest =>
       (match AList.get? cur a with
@@ -327,11 +330,11 @@ def scaleValue (c : Integer) (v : Value) : Except String Value :=
   if c == 0 then pure []
   else scaleOuter c v
 
-private def tokensToData : Tokens → List (Data × Data)
+def tokensToData : Tokens → List (Data × Data)
   | []             => []
   | (tok, q) :: rest => (Data.B tok, Data.I q) :: tokensToData rest
 
-private def valueToDataEntries : Value → List (Data × Data)
+def valueToDataEntries : Value → List (Data × Data)
   | []               => []
   | (cur, inner) :: rest => (Data.B cur, Data.Map (tokensToData inner)) :: valueToDataEntries rest
 
@@ -369,7 +372,7 @@ private def checkAscending (prev : Option ByteString) (k : ByteString) : Except 
 -- enforcing strict-ascending tokens, non-zero quantities, and the key/range
 -- invariants (mirrors Haskell `buildValueWith`'s inner loop). The output list
 -- is built in the (verified strictly-ascending) input order.
-private def unValueDataInner : Option ByteString → List (Data × Data) → Except String Tokens
+def unValueDataInner : Option ByteString → List (Data × Data) → Except String Tokens
   | _   , []             => .ok []
   | prev, (tD, qD) :: rest => do
       let tok ← parseKey tD
@@ -385,7 +388,7 @@ private def parseInner (d : Data) : Except String Tokens :=
   | .Map ts => unValueDataInner none ts
   | _       => .error "unValueData: inner tokens not a Map"
 
-private def unValueDataOuter : Option ByteString → List (Data × Data) → Except String Value
+def unValueDataOuter : Option ByteString → List (Data × Data) → Except String Value
   | _   , []             => .ok []
   | prev, (cD, tsD) :: rest => do
       let cur ← parseKey cD

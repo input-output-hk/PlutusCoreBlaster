@@ -118,6 +118,9 @@ instance : Std.Irrefl ( . < . : UInt8 → UInt8 → Prop) where
        unfold LT.lt LTByteString
        apply List.lt_irrefl
 
+instance : Std.Irrefl (. < . : ByteString → ByteString → Prop) where
+  irrefl := ByteString.lt_irrefl
+
 @[simp] def ByteString.length (bs : ByteString) : Nat := bs.data.length
 
 def ByteString.cons (u :  UInt8) (bs : ByteString) : ByteString :=

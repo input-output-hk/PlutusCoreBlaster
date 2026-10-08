@@ -70,3 +70,11 @@ jobs:
         with:
           name: tests-build
           path: build.log
+
+      - name: Build optional library facts
+        working-directory: proofs
+        run: lake build
+
+      - name: Test optional library facts
+        working-directory: proofs
+        run: lake test
