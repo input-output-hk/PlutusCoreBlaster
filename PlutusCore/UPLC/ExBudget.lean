@@ -94,5 +94,60 @@ namespace ExBudget
   def spend (budget : ExBudget) (cost : ExBudget) : ExBudget :=
     budget - cost
 
+  -- Componentwise order
+  instance : LE ExBudget :=
+    ⟨fun a b => a.exBudgetCPU.unExCPU ≤ b.exBudgetCPU.unExCPU ∧
+                a.exBudgetMemory.unExMemory ≤ b.exBudgetMemory.unExMemory⟩
+
+  /-! ### Arithmetic, componentwise -/
+
+  @[simp] theorem add_cpu (a b : ExBudget) :
+      (a + b).exBudgetCPU.unExCPU = a.exBudgetCPU.unExCPU + b.exBudgetCPU.unExCPU := rfl
+
+  @[simp] theorem add_mem (a b : ExBudget) :
+      (a + b).exBudgetMemory.unExMemory = a.exBudgetMemory.unExMemory + b.exBudgetMemory.unExMemory := rfl
+
+  @[simp] theorem sub_cpu (a b : ExBudget) :
+      (a - b).exBudgetCPU.unExCPU = a.exBudgetCPU.unExCPU - b.exBudgetCPU.unExCPU := rfl
+
+  @[simp] theorem sub_mem (a b : ExBudget) :
+      (a - b).exBudgetMemory.unExMemory = a.exBudgetMemory.unExMemory - b.exBudgetMemory.unExMemory := rfl
+
+  @[simp] theorem zero_cpu : ExBudget.zero.exBudgetCPU.unExCPU = 0 := rfl
+
+  @[simp] theorem zero_mem : ExBudget.zero.exBudgetMemory.unExMemory = 0 := rfl
+
+  theorem le_def (a b : ExBudget) :
+      a ≤ b ↔ a.exBudgetCPU.unExCPU ≤ b.exBudgetCPU.unExCPU ∧
+              a.exBudgetMemory.unExMemory ≤ b.exBudgetMemory.unExMemory := Iff.rfl
+
+  @[simp] theorem canAfford_eq_true_iff (b c : ExBudget) :
+      b.canAfford c = true ↔ c.exBudgetCPU.unExCPU ≤ b.exBudgetCPU.unExCPU ∧
+                             c.exBudgetMemory.unExMemory ≤ b.exBudgetMemory.unExMemory := by
+    simp [canAfford]
+
+  theorem ext {a b : ExBudget}
+      (hcpu : a.exBudgetCPU.unExCPU = b.exBudgetCPU.unExCPU)
+      (hmem : a.exBudgetMemory.unExMemory = b.exBudgetMemory.unExMemory) : a = b := by
+    cases a with | mk c m => cases b with | mk c' m' =>
+    cases c; cases m; cases c'; cases m'
+    simp_all
+
+  theorem add_assoc (a b c : ExBudget) : a + b + c = a + (b + c) := by
+    apply ext <;> simp only [add_cpu, add_mem] <;> omega
+
+  @[simp] theorem zero_add (a : ExBudget) : ExBudget.zero + a = a := by
+    apply ext <;> simp
+
+  @[simp] theorem add_zero (a : ExBudget) : a + ExBudget.zero = a := by
+    apply ext <;> simp
+
+  theorem le_add_right (a b : ExBudget) : a ≤ a + b := by
+    simp only [le_def, add_cpu, add_mem]; omega
+
+  theorem canAfford_mono {a b c : ExBudget} (hab : a ≤ b) (h : a.canAfford c = true) :
+      b.canAfford c = true := by
+    simp only [canAfford_eq_true_iff, le_def] at *; omega
+
   end ExBudget
 end PlutusCore.UPLC.ExBudget

@@ -3,7 +3,7 @@ open Lake DSL
 
 package «PlutusCore» where
   -- add package configuration options here
-  require Blaster from git "https://github.com/input-output-hk/Lean-blaster" @ "beta-lambda-cache-optimization"
+  require Blaster from git "https://github.com/input-output-hk/Lean-blaster" @ "match-reduction-proof-fields"
 
 @[default_target]
 lean_lib «PlutusCore» where

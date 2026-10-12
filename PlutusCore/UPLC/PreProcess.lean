@@ -22,17 +22,24 @@ open Term
      #prep_uplc <new-identifier> <plutus-script-instance> (input-conversion-function)? UNIT
 
     E.g. `#prep_uplc compiledProcessSCOrder processSCOrder orderInputToParams 500`
+
+ `#prep_uplc_with_cost` takes the same arguments. Its `prop` and `exec` are the state reached and
+  the execution cost (`cekExecuteScriptWithCost`), under the semantics and cost model of the
+  script's ledger language, so that a proof can bound the cost of a script in terms of its inputs.
+  Costing makes the optimization slower, which is why it is a separate command.
 -/
 
 syntax uplcMaxSteps := num
 syntax (name := preprocess) "#prep_uplc" ident ident (ident)? uplcMaxSteps : command
+syntax (name := preprocessWithCost) "#prep_uplc_with_cost" ident ident (ident)? uplcMaxSteps : command
 
 def parseMaxSteps : TSyntax `uplcMaxSteps → TermElabM Nat
   | `(uplcMaxSteps | $n:num) => return n.getNat
   | _ => throwUnsupportedSyntax
 
-@[command_elab preprocess]
-def preprocessImp : CommandElab := fun stx => do
+/-- `#prep_uplc`, running the script with `cekExecuteProgram`, or with `cekExecuteScriptWithCost`
+    when `withCost`. -/
+def preprocessCommon (withCost : Bool) : CommandElab := fun stx => do
   let (propDecl, execDecl, structDef, structDescr, structInst) ←
       withoutModifyingEnv $ runTermElabM fun _ => do
         let plutusScript ← validUplcProg stx[2]
@@ -143,13 +150,20 @@ def preprocessImp : CommandElab := fun stx => do
       let unit ← parseMaxSteps ⟨stx[4]⟩
       -- validate that Type(f) := α₁ → .. → αₙ → List Term` ∧
       --  ∀ i ∈ [1..inputs.size], Type(inputs[i]!) = αᵢ
-      let cekExec := Lean.mkConst ``cekExecuteProgram
+      let (cekExec, script) :=
+        if withCost then (Lean.mkConst ``cekExecuteScriptWithCost, plutusScript)
+        else (Lean.mkConst ``cekExecuteProgram, mkProj ``PlutusScript 1 plutusScript)
       let termType := Lean.mkConst ``UPLC.Term.Term
-      let uplcProg := mkProj ``PlutusScript 1 plutusScript
       match (← validConversionFun stx[3]) with
-      | none => return mkApp3 cekExec uplcProg (mkApp (Lean.mkConst ``List.nil [levelZero]) termType) (mkNatLit unit)
+      | none => return mkApp3 cekExec script (mkApp (Lean.mkConst ``List.nil [levelZero]) termType) (mkNatLit unit)
       | some f =>
            Meta.lambdaTelescope (← Meta.etaExpand f) fun xs _ =>
-             mkLambdaFVars xs (mkApp3 cekExec uplcProg (mkAppN f xs) (mkNatLit unit))
+             mkLambdaFVars xs (mkApp3 cekExec script (mkAppN f xs) (mkNatLit unit))
+
+@[command_elab preprocess]
+def preprocessImp : CommandElab := preprocessCommon false
+
+@[command_elab preprocessWithCost]
+def preprocessWithCostImp : CommandElab := preprocessCommon true
 
 end PlutusCore.UPLC.PreProcess
