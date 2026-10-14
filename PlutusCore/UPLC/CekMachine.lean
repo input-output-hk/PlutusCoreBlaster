@@ -44,12 +44,9 @@ deriving Repr
 
 -- Result type for budget aware execution
 inductive EvaluationResult where
-    -- halted with this value, having consumed this budget
-    | Success : CekValue → ExBudget → EvaluationResult
-    -- ran out of budget; the budget left, truncated at zero
-    | BudgetExhausted : ExBudget → EvaluationResult
-    | EvaluationError : EvaluationResult
-    -- the step limit was reached within budget, having consumed this budget: inconclusive
+    | Success          : CekValue → ExBudget → EvaluationResult
+    | BudgetExhausted  : ExBudget → EvaluationResult
+    | EvaluationError  : EvaluationResult
     | StepLimitReached : ExBudget → EvaluationResult
 deriving Repr
 
@@ -262,28 +259,24 @@ def cekExecuteProgram : Program → List Term →  Nat → State := cekExecutePr
 /-! ## Execution cost
 
 Costing is opt-in: `runSteps` above does no bookkeeping, and `runStepsWithCost` runs the same
-steps while adding up what they cost.
-
-As in the Plutus reference, an `Eval` step costs its step cost and a `Return` step that saturates
-a builtin costs the builtin's cost, which depends on the size of its arguments. Other `Return`
-steps, and evaluating `error`, are free. The startup cost is charged once per program. -/
+steps while adding up what they cost.  -/
 
 -- Calculate the cost of a single CEK machine step based on the current state
 def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
   match Sigma with
-    | State.Eval _ _ (Term.Var _)           => costs.stepCostVar
-    | State.Eval _ _ (Term.Term.Const _)    => costs.stepCostConst
-    | State.Eval _ _ (Term.Lam _)           => costs.stepCostLam
-    | State.Eval _ _ (Term.Delay _)         => costs.stepCostDelay
-    | State.Eval _ _ (Term.Force _)         => costs.stepCostForce
-    | State.Eval _ _ (Term.Apply _ _)       => costs.stepCostApply
-    | State.Eval _ _ (Term.Builtin _)       => costs.stepCostBuiltin
-    | State.Eval _ _ (Term.Constr _ _)      => costs.stepCostConstr
-    | State.Eval _ _ (Term.Case _ _)        => costs.stepCostCase
-    | State.Eval _ _ Term.Error             => ExBudget.zero
-    | State.Return _ _                      => ExBudget.zero
-    | State.Error                           => ExBudget.zero
-    | State.Halt _                          => ExBudget.zero
+    | .Eval   _ _ (.Var _)      => costs.stepCostVar
+    | .Eval   _ _ (.Const _)    => costs.stepCostConst
+    | .Eval   _ _ (.Lam _)      => costs.stepCostLam
+    | .Eval   _ _ (.Delay _)    => costs.stepCostDelay
+    | .Eval   _ _ (.Force _)    => costs.stepCostForce
+    | .Eval   _ _ (.Apply _ _)  => costs.stepCostApply
+    | .Eval   _ _ (.Builtin _)  => costs.stepCostBuiltin
+    | .Eval   _ _ (.Constr _ _) => costs.stepCostConstr
+    | .Eval   _ _ (.Case _ _)   => costs.stepCostCase
+    | .Eval   _ _  .Error       => .zero
+    | .Return _ _               => .zero
+    | .Halt   _                 => .zero
+    | .Error                    => .zero
 
 /-- The builtin application that stepping from `Sigma` evaluates, if any: the builtin and its
     arguments, last-applied first, as `evalBuiltin` receives them (and as the cost-model formulas
@@ -310,7 +303,7 @@ def saturatedBuiltin? (Sigma : State) : Option (BuiltinFun × List CekValue) :=
 def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) : ExBudget :=
   match saturatedBuiltin? Sigma with
   | some (b, args) => builtinCostSelected semVar b args
-  | none => ExBudget.zero
+  | none           => .zero
 
 -- Map semantics variant to the corresponding CEK machine step costs.
 -- See: https://github.com/IntersectMBO/plutus/blob/master/plutus-ledger-api/src/PlutusLedgerApi/MachineParameters.hs
@@ -333,20 +326,14 @@ def builtinCallsCost (semanticsVariant : BuiltinSemanticsVariant) :
 
 /-- The steps of `runSteps`, adding the step costs to `stepCost` and recording the builtin calls
     in `calls`, most recent first. It stops at `Halt`, at `Error`, or when the steps run out, and
-    returns the state reached.
-
-    Builtin calls are recorded rather than costed here, for Blaster: a builtin's cost depends on
-    the size of its arguments, so it is symbolic when they are, and Blaster stops unrolling a call
-    one of whose `structure` arguments (like an `ExBudget`) has a symbolic field. Step costs are
-    constants, and a `List` constructor does not stop the unrolling. -/
+    returns the state reached. -/
 def runStepsCosting (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : Nat)
-    (stepCost : ExBudget) (calls : List (BuiltinFun × List CekValue)) :
-    State × ExBudget × List (BuiltinFun × List CekValue) :=
+    (stepCost : ExBudget) (calls : List (BuiltinFun × List CekValue)) : State × ExBudget × List (BuiltinFun × List CekValue) :=
   match n, Sigma with
   | _, State.Halt V => (State.Halt V, stepCost, calls)
-  | _, State.Error => (State.Error, stepCost, calls)
-  | 0, _ => (Sigma, stepCost, calls)
-  | Nat.succ n, _ =>
+  | _, State.Error  => (State.Error, stepCost, calls)
+  | 0, _            => (Sigma, stepCost, calls)
+  | .succ n, _ =>
       runStepsCosting semanticsVariant (step semanticsVariant Sigma) n
         (stepCost + calculateStepCostr (semVarToCosts semanticsVariant) Sigma)
         (match saturatedBuiltin? Sigma with
@@ -355,14 +342,12 @@ def runStepsCosting (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State)
 
 /-- `runSteps` with costs: the state reached in at most `n` steps (`Halt`, `Error`, or where the
     steps ran out, which `runSteps` turns into `Error`) and what the steps taken cost. -/
-def runStepsWithCost (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) :
-    State × ExBudget :=
+def runStepsWithCost (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) : State × ExBudget :=
   let r := runStepsCosting semanticsVariant Sigma n ExBudget.zero []
   (r.1, r.2.1 + builtinCallsCost semanticsVariant r.2.2)
 
 /-- The state a program reaches in at most `n` steps and what it cost, startup cost included. -/
-def cekExecuteProgramWithCost (semanticVariant : BuiltinSemanticsVariant) (p : Program)
-    (params : List Term) (n : Nat) : State × ExBudget :=
+def cekExecuteProgramWithCost (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State × ExBudget :=
   match p with
   | Program.Program _ body =>
       let r := runStepsWithCost semanticVariant (initialState (applyParams body params)) n
@@ -377,20 +362,17 @@ def cekExecuteProgramWithCost (semanticVariant : BuiltinSemanticsVariant) (p : P
     out of budget if it already cost too much, and inconclusive otherwise. -/
 def EvaluationResult.ofCostedRun (budget : ExBudget) : State × ExBudget → EvaluationResult
   | (Sigma, cost) =>
-      if budget.canAfford cost then
-        match Sigma with
-        | State.Halt V => EvaluationResult.Success V cost
-        | State.Error => EvaluationResult.EvaluationError
-        | _ => EvaluationResult.StepLimitReached cost
-      else EvaluationResult.BudgetExhausted (budget - cost)
+      if budget.canAfford cost
+        then
+          match Sigma with
+          | State.Halt V => EvaluationResult.Success V cost
+          | State.Error => EvaluationResult.EvaluationError
+          | _ => EvaluationResult.StepLimitReached cost
+        else
+          EvaluationResult.BudgetExhausted (budget - cost)
 
-def cekExecuteProgramWithBudget
-    (p : Program)
-    (plutusVer : PlutusVersion)
-    (protocolVer : ProtocolVersion)
-    (params : List Term)
-    (budget : ExBudget)
-    (maxSteps : Nat) : EvaluationResult :=
+def cekExecuteProgramWithBudget (p : Program) (plutusVer : PlutusVersion) (protocolVer : ProtocolVersion)
+    (params : List Term) (budget : ExBudget) (maxSteps : Nat) : EvaluationResult :=
   EvaluationResult.ofCostedRun budget
     (cekExecuteProgramWithCost (PlutusVersion.toSemanticsVariant plutusVer protocolVer)
       p params maxSteps)

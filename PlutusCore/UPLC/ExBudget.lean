@@ -96,8 +96,8 @@ namespace ExBudget
 
   -- Componentwise order
   instance : LE ExBudget :=
-    ⟨fun a b => a.exBudgetCPU.unExCPU ≤ b.exBudgetCPU.unExCPU ∧
-                a.exBudgetMemory.unExMemory ≤ b.exBudgetMemory.unExMemory⟩
+    ⟨λ a b => a.exBudgetCPU.unExCPU ≤ b.exBudgetCPU.unExCPU ∧
+              a.exBudgetMemory.unExMemory ≤ b.exBudgetMemory.unExMemory⟩
 
   /-! ### Arithmetic, componentwise -/
 

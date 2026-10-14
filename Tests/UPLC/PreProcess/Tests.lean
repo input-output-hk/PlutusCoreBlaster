@@ -30,8 +30,7 @@ example : preProcessTestNoInputs.exec
 
 /-! ## `#prep_uplc_with_cost`
 
-The constant costs the startup cost and one step under the PlutusV3 cost model: 16100 CPU and
-200 memory. -/
+The constant costs the startup cost and one step under the PlutusV3 cost model: 16100 CPU and 200 memory. -/
 
 #prep_uplc_with_cost preProcessTestCost preProcessTestScript 10
 

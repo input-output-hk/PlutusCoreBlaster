@@ -110,11 +110,7 @@ theorem cekExecuteProgramWithSemanticVariant_halt_stable
   | zero => rfl
   | succ n ih => simpa [stepN, stepAbs] using ih
 
-/-! ## Costs
-
-`runStepsWithCost` takes the steps `runSteps` takes, stopping where `stepN` does, and adds up what
-they cost. Costs add up along a run, so no part of a run costs more than all of it, which is what
-lets `EvaluationResult.ofCostedRun` judge a run by its total. -/
+/-! ## Costs  -/
 
 theorem builtinCallsCost_append (sv : BuiltinSemanticsVariant)
     (l₁ l₂ : List (BuiltinFun × List CekValue)) :

@@ -30,7 +30,7 @@ open Term
 -/
 
 syntax uplcMaxSteps := num
-syntax (name := preprocess) "#prep_uplc" ident ident (ident)? uplcMaxSteps : command
+syntax (name := preprocess)         "#prep_uplc"           ident ident (ident)? uplcMaxSteps : command
 syntax (name := preprocessWithCost) "#prep_uplc_with_cost" ident ident (ident)? uplcMaxSteps : command
 
 def parseMaxSteps : TSyntax `uplcMaxSteps → TermElabM Nat
