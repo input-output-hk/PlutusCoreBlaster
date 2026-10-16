@@ -22,6 +22,9 @@ records how it ends and how many machine steps it takes. The measured command ru
 inside the measured region instead of in background tasks, and with `maxHeartbeats` 0.
 Heartbeats are not reported: the Blaster optimizer resets the counter while it runs.
 
+With the option `bench.prepUplc.withCost`, the commands measure `#prep_uplc_with_cost` instead,
+and the native run is `cekExecuteScriptWithCost`, which also gives the cost of the run.
+
 Each measurement is appended as one JSON line to the file named by the environment variable
 `PREP_UPLC_BENCH_OUT` (when set), and summarized in an info message.
 -/
@@ -29,7 +32,9 @@ Each measurement is appended as one JSON line to the file named by the environme
 namespace Benchmark.PrepUplc
 
 open Lean Elab Command
-open PlutusCore.UPLC.CekMachine (step initialState applyParams)
+open PlutusCore.Default (BuiltinSemanticsVariant PlutusVersion)
+open PlutusCore.UPLC.CekMachine (step initialState applyParams cekExecuteScriptWithCost)
+open PlutusCore.UPLC.ExBudget (ExBudget ExCPU ExMemory)
 open PlutusCore.UPLC.PlutusScript (PlutusScript PlutusLanguage)
 open PlutusCore.UPLC.Term (Program)
 
@@ -37,6 +42,15 @@ register_option bench.prepUplc.runs : Nat := {
   defValue := 1
   descr    := "number of times `#bench_prep_uplc` runs `#prep_uplc`, each time on a fresh copy of the environment"
 }
+
+register_option bench.prepUplc.withCost : Bool := {
+  defValue := false
+  descr    := "whether `#bench_prep_uplc` measures `#prep_uplc_with_cost` instead of `#prep_uplc`, and runs `cekExecuteScriptWithCost` natively instead of `cekExecuteProgram`"
+}
+
+/-- The command a benchmark measures. -/
+def measuredCommand (withCost : Bool) : String :=
+  if withCost then "#prep_uplc_with_cost" else "#prep_uplc"
 
 /-- The `PlutusScript` given to `#prep_uplc` when the benchmark has to create one. -/
 def scriptName : Name := `bench_prep_uplc_script
@@ -165,22 +179,26 @@ def closedArgs? (conv? : Option Name) : CommandElabM (Option (List PlutusCore.UP
 @[noinline] def runNative (p : Program) (args : List PlutusCore.UPLC.Term.Term) (fuel : Nat) : IO PlutusCore.UPLC.CekMachine.State :=
   pure (PlutusCore.UPLC.CekMachine.cekExecuteProgram p args fuel)
 
-/-- One timed run of `cekExecuteProgram p args fuel`: its time in ns and the state it ends in. -/
-def timeNativeOnce (p : Program) (args : List PlutusCore.UPLC.Term.Term) (fuel : Nat) : IO (Nat × PlutusCore.UPLC.CekMachine.State) := do
+/-- `cekExecuteScriptWithCost ps args fuel`, never inlined, like `runNative`. -/
+@[noinline] def runNativeWithCost (ps : PlutusScript) (args : List PlutusCore.UPLC.Term.Term) (fuel : Nat) :
+    IO (PlutusCore.UPLC.CekMachine.State × ExBudget) :=
+  pure (cekExecuteScriptWithCost ps args fuel)
+
+/-- One timed run of `run` (`runNative` or `runNativeWithCost`): its time in ns and its result. -/
+def timeNativeOnce (run : IO α) : IO (Nat × α) := do
   let t₀    ← IO.monoNanosNow
-  let final ← runNative p args fuel
+  let final ← run
   return ((← IO.monoNanosNow) - t₀, final)
 
-/-- Best time of `cekExecuteProgram p args fuel` in ms, over repeated runs (at least one, then
-    more until 50 ms or 1000 runs have passed), the number of runs, and the state it ends in. -/
-def timeNative (p : Program) (args : List PlutusCore.UPLC.Term.Term) (fuel : Nat) : IO (Float × Nat × PlutusCore.UPLC.CekMachine.State) := do
-  let (t, final) ← timeNativeOnce p args fuel
+/-- Best time of `run` in ms, over repeated runs (at least one, then more until 50 ms or 1000
+    runs have passed), the number of runs, and its result. -/
+def timeNative (run : IO α) : IO (Float × Nat × α) := do
+  let (t, final) ← timeNativeOnce run
   more t t 1 final
  where
-  more (best total runs : Nat) (final : PlutusCore.UPLC.CekMachine.State) :
-      IO (Float × Nat × PlutusCore.UPLC.CekMachine.State) := do
+  more (best total runs : Nat) (final : α) : IO (Float × Nat × α) := do
     if runs < 1000 ∧ total < 50_000_000 then
-      let (t, final) ← timeNativeOnce p args fuel
+      let (t, final) ← timeNativeOnce run
       more (min best t) (total + t) (runs + 1) final
     else
       return (best.toFloat / 1e6, runs, final)
@@ -188,29 +206,52 @@ def timeNative (p : Program) (args : List PlutusCore.UPLC.Term.Term) (fuel : Nat
 
 /-- Iterates `step` the way `runSteps` does, to count the steps, which `cekExecuteProgram` does not
     report. -/
-def countSteps (σ : PlutusCore.UPLC.CekMachine.State) (n fuel : Nat) : Nat × String :=
+def countSteps (sv : BuiltinSemanticsVariant) (σ : PlutusCore.UPLC.CekMachine.State) (n fuel : Nat) : Nat × String :=
   match σ with
   | .Halt _ => (n, "halt")
   | .Error  => (n, "error")
-  | _       => if n < fuel then countSteps (step default σ) (n + 1) fuel else (n, "exhausted")
+  | _       => if n < fuel then countSteps sv (step sv σ) (n + 1) fuel else (n, "exhausted")
 termination_by fuel - n
 
 /-- How a closed script runs natively. -/
 structure NativeRun where
-  /-- How `cekExecuteProgram` ends: `halt`, `error`, or `exhausted` when its error is running
-      out of fuel. -/
+  /-- How the run (`cekExecuteProgram` or `cekExecuteScriptWithCost`) ends: `halt`, `error`, or
+      `exhausted` when it runs out of fuel. -/
   result : String
-  /-- The steps `countSteps` counts, when it ends the way `cekExecuteProgram` does. -/
+  /-- The steps `countSteps` counts, when it ends the way the run does. -/
   steps? : Option Nat
-  /-- Best time of `cekExecuteProgram`. -/
+  /-- Best time of the run. -/
   bestMs : Float
   runs   : Nat
+  /-- What the run cost, when it is `cekExecuteScriptWithCost`. -/
+  cost?  : Option ExBudget := none
 
-def nativeRun? (script : Name) (args : List PlutusCore.UPLC.Term.Term) (fuel : Nat) : CommandElabM (Option NativeRun) := do
-  let .ok ps                := evalScript (← getEnv) (← getOptions) script | return none
-  let (bestMs, runs, final) ← timeNative ps.script args fuel
-  let .Program _ body       := ps.script
-  let (steps, counted)      := countSteps (initialState (applyParams body args)) 0 fuel
+/-- Runs a closed script natively: with `cekExecuteProgram`, or with `cekExecuteScriptWithCost`
+    when `withCost`. -/
+def nativeRun? (withCost : Bool) (script : Name) (args : List PlutusCore.UPLC.Term.Term) (fuel : Nat) : CommandElabM (Option NativeRun) := do
+  let .ok ps          := evalScript (← getEnv) (← getOptions) script | return none
+  let .Program _ body := ps.script
+  let start           := initialState (applyParams body args)
+  if withCost then
+    let (bestMs, runs, (final, cost)) ← timeNative (runNativeWithCost ps args fuel)
+    -- The semantics variant `cekExecuteScriptWithCost` runs the script under.
+    let sv               := PlutusVersion.toSemanticsVariant ps.lang.toPlutusVersion .postConway
+    let (steps, counted) := countSteps sv start 0 fuel
+    let result           :=
+      match final with
+      | .Halt _ => "halt"
+      | .Error  => "error"
+      -- Out of fuel, `cekExecuteScriptWithCost` returns the state it reached.
+      | _       => "exhausted"
+    return some
+      { result
+      , steps? := if counted == result then some steps else none
+      , bestMs
+      , runs
+      , cost?  := some cost
+      }
+  let (bestMs, runs, final) ← timeNative (runNative ps.script args fuel)
+  let (steps, counted)      := countSteps default start 0 fuel
   let result                :=
     match final with
     | .Halt _ => "halt"
@@ -224,22 +265,72 @@ def nativeRun? (script : Name) (args : List PlutusCore.UPLC.Term.Term) (fuel : N
     , runs
     }
 
+/-- `n`, from a numeral `n`: a raw literal or `OfNat.ofNat _ n _`. -/
+def numeral? (e : Expr) : Option Nat :=
+  match e.rawNatLit? with
+  | some n => some n
+  | none   => do
+    let_expr OfNat.ofNat _ n _ := e | none
+    n.rawNatLit?
+
+/-- CPU and memory of an `ExBudget` term whose two amounts are numerals. -/
+def literalCost? (e : Expr) : Option (Nat × Nat) := do
+  let_expr ExBudget.mk cpu mem := e | none
+  return (← amount? ``ExCPU.mk cpu, ← amount? ``ExMemory.mk mem)
+where
+  amount? (mk : Name) (e : Expr) : Option Nat :=
+    if e.isAppOfArity mk 1 then numeral? e.appArg! else numeral? e
+
+/-- The branches of a term under the conditions Blaster splits it on (`Blaster.ite'` and
+    `Blaster.dite'`), or `none` past `limit` of them: the term is a DAG, its branches a tree. -/
+partial def branches? (e : Expr) (limit : Nat := 64) (acc : Array Expr := #[]) : Option (Array Expr) :=
+  if acc.size ≥ limit then none
+  else if e.isAppOfArity ``Blaster.ite' 4 then do
+    branches? (e.getArg! 3) limit (← branches? (e.getArg! 2) limit acc)
+  else if e.isAppOfArity ``Blaster.dite' 4 then do
+    branches? (body (e.getArg! 3)) limit (← branches? (body (e.getArg! 2)) limit acc)
+  else some (acc.push e)
+where
+  body : Expr → Expr
+    | .lam _ _ b _ => b
+    | t => t
+
+/-- The state and the literal cost in the term of `#prep_uplc_with_cost`, a pair. When the cost is
+    not a literal, Blaster may split the pair on conditions of the cost: then the state is the one
+    all the branches share, if they do. -/
+def costedParts? (e : Expr) : Option (Expr × Option (Nat × Nat)) := do
+  let pairs ← (← branches? e).mapM (λ b =>
+    if b.isAppOfArity ``Prod.mk 4 then some (b.getArg! 2, b.appArg!) else none)
+  match pairs with
+  | #[(state, cost)] => return (state, literalCost? cost)
+  | _ =>
+    let (state, _) ← pairs[0]?
+    guard (pairs.all (·.1 == state))
+    return (state, none)
+
 /-- The optimized term after `#prep_uplc` succeeded. -/
 structure PropInfo where
-  /-- Head of the term, under its binders. -/
-  head : String
+  /-- Head of the term, under its binders; for `#prep_uplc_with_cost`, head of its state
+      (`costedParts?`). -/
+  head  : String
   /-- Distinct objects in the term. -/
-  objs : Nat
+  objs  : Nat
   /-- `Expr.hash` of the term, in hex: any change of the term changes it (barring collisions). -/
-  hash : String
+  hash  : String
+  /-- For `#prep_uplc_with_cost`, the cost in the term, when it is a literal. -/
+  cost? : Option (Nat × Nat) := none
 
-def propInfo? : CommandElabM (Option PropInfo) := do
+/-- The optimized term: of `#prep_uplc`, or of `#prep_uplc_with_cost` when `withCost`. -/
+def propInfo? (withCost : Bool) : CommandElabM (Option PropInfo) := do
   let some (.defnInfo info) := (← getEnv).find? (resultName ++ `prop) | return none
-  let head := match stripLams info.value |>.getAppFn with
+  let body           := stripLams info.value
+  -- `#prep_uplc_with_cost` gives the pair of the state reached and its cost.
+  let (state, cost?) := if withCost then (costedParts? body).getD (body, none) else (body, none)
+  let head := match state.getAppFn with
     | .const n _ => (n.replacePrefix `PlutusCore.UPLC.CekMachine .anonymous).toString
     | e          => e.ctorName
   let digits := Nat.toDigits 16 info.value.hash.toNat
-  return some { head, objs := ← info.value.numObjs, hash := String.mk (List.replicate (8 - digits.length) '0' ++ digits) }
+  return some { head, objs := ← info.value.numObjs, hash := String.mk (List.replicate (8 - digits.length) '0' ++ digits), cost? }
 where
   stripLams : Expr → Expr
     | .lam _ _ b _ => stripLams b
@@ -259,6 +350,8 @@ structure Case where
   script?  : Option Name
   conv?    : Option Name
   maxSteps : Nat
+  /-- Whether the measured command is `#prep_uplc_with_cost` (`bench.prepUplc.withCost`). -/
+  withCost : Bool
 
 def emit (c : Case) (status : String) (error? : Option String) (runs : Array Run := #[])
     (native? : Option NativeRun := none) (prop? : Option PropInfo := none) :
@@ -269,6 +362,7 @@ def emit (c : Case) (status : String) (error? : Option String) (runs : Array Run
   let peakDelta?  := (runs.filterMap (·.peakDeltaKb?)).toList.max?
   let j := Json.mkObj
     [ ("id"            , toJson c.id)
+    , ("command"       , toJson (measuredCommand c.withCost))
     , ("status"        , toJson status)
     , ("error"         , toJson error?)
     , ("source"        , c.source)
@@ -286,9 +380,13 @@ def emit (c : Case) (status : String) (error? : Option String) (runs : Array Run
     , ("cek_steps"     , toJson (native?.bind (·.steps?)))
     , ("native_ms"     , toJson (native?.map (·.bestMs)))
     , ("native_runs"   , toJson (native?.map (·.runs)))
+    , ("cost_cpu"      , toJson (native?.bind (·.cost?) |>.map (·.exBudgetCPU.unExCPU)))
+    , ("cost_mem"      , toJson (native?.bind (·.cost?) |>.map (·.exBudgetMemory.unExMemory)))
     , ("prop_head"     , toJson (prop?.map (·.head)))
     , ("prop_objs"     , toJson (prop?.map (·.objs)))
     , ("prop_hash"     , toJson (prop?.map (·.hash)))
+    , ("prop_cost_cpu" , toJson (prop?.bind (·.cost?) |>.map (·.1)))
+    , ("prop_cost_mem" , toJson (prop?.bind (·.cost?) |>.map (·.2)))
     , ("lean_version"  , toJson Lean.versionString)
     ]
   if let some path ← IO.getEnv "PREP_UPLC_BENCH_OUT" then
@@ -304,44 +402,51 @@ def emit (c : Case) (status : String) (error? : Option String) (runs : Array Run
       let steps := match n.steps? with
         | some k => s!", {k} CEK steps"
         | none   => ""
-      s!", native {fmtDuration n.bestMs} ({n.result}{steps})"
+      let cost := match n.cost? with
+        | some b => s!", cost {b.exBudgetCPU.unExCPU} CPU {b.exBudgetMemory.unExMemory} memory"
+        | none   => ""
+      s!", native {fmtDuration n.bestMs} ({n.result}{steps}{cost})"
     | none => ""
   let prop := match prop? with
-    | some p => s!", prop {p.head} ({p.objs} objects, hash {p.hash})"
+    | some p =>
+      let cost := match p.cost? with
+        | some (cpu, mem) => s!", cost {cpu} CPU {mem} memory"
+        | none            => ""
+      s!", prop {p.head} ({p.objs} objects, hash {p.hash}{cost})"
     | none   => ""
   let error := match error? with
     | some e => s!": {e}"
     | none   => ""
-  logInfo m!"#prep_uplc benchmark '{c.id}': {status}{time}{mem}{native}{prop}{error}"
+  logInfo m!"{measuredCommand c.withCost} benchmark '{c.id}': {status}{time}{mem}{native}{prop}{error}"
 
-/-- Elaborates the `#prep_uplc` command `prepStx` `n` times, each time on a fresh copy of the
-    environment, stopping at the first error. Returns the runs, and that error or the optimized
-    term of the last run. -/
-def measureRuns (prepStx : Syntax) :
+/-- Elaborates the `#prep_uplc` (or `#prep_uplc_with_cost`, when `withCost`) command `prepStx`
+    `n` times, each time on a fresh copy of the environment, stopping at the first error. Returns
+    the runs, and that error or the optimized term of the last run. -/
+def measureRuns (withCost : Bool) (prepStx : Syntax) :
     (n : Nat) → (runs : Array Run := #[]) → CommandElabM (Array Run × Except String (Option PropInfo))
   | 0    , runs => return (runs, .ok none)
   | n + 1, runs => do
     let (run, errors, prop?) ← withoutModifyingEnv do
       let (run, errors) ← measure prepStx
-      return (run, errors, ← propInfo?)
+      return (run, errors, ← propInfo? withCost)
     let runs := runs.push run
     match ← firstError errors with
     | some e => return (runs, .error e)
-    | none   => if n == 0 then return (runs, .ok prop?) else measureRuns prepStx n runs
+    | none   => if n == 0 then return (runs, .ok prop?) else measureRuns withCost prepStx n runs
 
-/-- Measures `#prep_uplc` on `c.script?` (which must be set). -/
+/-- Measures `#prep_uplc`, or `#prep_uplc_with_cost`, on `c.script?` (which must be set). -/
 def benchCase (c : Case) : CommandElabM Unit := do
   let some script := c.script? | throwError "no script to benchmark"
   let native?     ←
     match ← closedArgs? c.conv? with
-    | some args => nativeRun? script args c.maxSteps
+    | some args => nativeRun? c.withCost script args c.maxSteps
     | none      => pure none
   let conv        :=
     match c.conv? with
     | some f => s!" {f}"
     | none   => ""
-  let prepStx ← parseCommand s!"#prep_uplc {resultName} {script}{conv} {c.maxSteps}"
-  match ← measureRuns prepStx (max 1 (bench.prepUplc.runs.get (← getOptions))) with
+  let prepStx ← parseCommand s!"{measuredCommand c.withCost} {resultName} {script}{conv} {c.maxSteps}"
+  match ← measureRuns c.withCost prepStx (max 1 (bench.prepUplc.runs.get (← getOptions))) with
   | (runs, .error e)  => emit c "prep_error" e runs native?
   | (runs, .ok prop?) => emit c "ok" none runs native? prop?
 
@@ -374,6 +479,7 @@ def elabBenchPrepUplc : CommandElab := (λ stx => withBenchOptions do
     , script? := script
     , conv?
     , maxSteps
+    , withCost := bench.prepUplc.withCost.get (← getOptions)
     }
  )
 
@@ -393,7 +499,7 @@ def elabBenchPrepUplcFile : CommandElab := (λ stx => withBenchOptions do
     , ("lang"  , toJson (toString lang))
     , ("format", toJson (toString format))
     ]
-  let c : Case := { id, source, script? := scriptName, conv?, maxSteps }
+  let c : Case := { id, source, script? := scriptName, conv?, maxSteps, withCost := bench.prepUplc.withCost.get (← getOptions) }
   -- Importing is not measured.
   let format? ← if format != `auto then pure (some format) else
     try

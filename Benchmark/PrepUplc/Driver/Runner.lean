@@ -135,6 +135,7 @@ def runCase (cfg : RunConfig) (setup : Json) (c : BenchCase) : IO Result := do
   IO.FS.removeFile setupFile
   let r : Result := {
     id := c.id, suite := c.suite.name, category := c.category, expected := c.expected,
+    expectedCpu := c.budget?.map (·.1), expectedMem := c.budget?.map (·.2),
     status := "no_result", processS := elapsedMs.toFloat / 1000, exitCode := some exit.code.toNat,
     maxRssObservedKb := if exit.maxRssKb > 0 then some exit.maxRssKb else none,
     caseFile := c.file.toString, log := logFile.toString }
@@ -168,6 +169,7 @@ def runCases (cfg : RunConfig) (cases : Array BenchCase) (setups : Std.HashMap (
   let run (c : BenchCase) : IO Result :=
     try runCase cfg setups[c.imports]! c catch e =>
       pure { id := c.id, suite := c.suite.name, category := c.category, expected := c.expected,
+             expectedCpu := c.budget?.map (·.1), expectedMem := c.budget?.map (·.2),
              status := "crash", error := some (toString e), caseFile := c.file.toString }
   let finished (r : Result) : IO Unit := queue.atomically do
     let (next, done) ← get
