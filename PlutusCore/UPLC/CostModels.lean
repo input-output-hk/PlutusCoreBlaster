@@ -133,15 +133,15 @@ def cekValueSize (v : CekValue) : Nat :=
     | _ => 1
 
 def argSize (args : List CekValue) (i : Nat) : Nat :=
-  if h : i < args.length then cekValueSize (args.get ⟨i, h⟩) else 1 -- 1?
+  match args[i]? with
+  | some v => cekValueSize v
+  | none   => 1 -- 1?
 
 /-- Length of the list constant at position i in the CEK args. -/
 def argListLen (args : List CekValue) (i : Nat) : Nat :=
-  if h : i < args.length then
-    match args.get ⟨i, h⟩ with
-    | .VCon (.ConstList cs) => cs.length
-    | _ => 0
-  else 0
+  match args[i]? with
+  | some (.VCon (.ConstList cs)) => cs.length
+  | _ => 0
 
 def maxArgSize (args : List CekValue) : Nat :=
   match args.map cekValueSize with

@@ -31,6 +31,8 @@ usage:
 	@echo "                    the conformance suite included (see Benchmark/README.md)."
 	@echo "                    JOBS=N runs N cases at a time (default 1);"
 	@echo "                    BENCH_ARGS passes more options, e.g. BENCH_ARGS=\"--suite repo\"."
+	@echo " - bench_prep_uplc_cost: The same benchmark on #prep_uplc_with_cost, also recording what"
+	@echo "                         each closed program costs (exunits). Takes JOBS and BENCH_ARGS too."
 	@echo " - bench_prep_uplc_compare: Compare two benchmark runs: BASE=<run-dir> NEW=<run-dir>."
 
 .PHONY: build_plutus_core
@@ -98,6 +100,10 @@ build_benchmark:
 .PHONY: bench_prep_uplc
 bench_prep_uplc:
 	lake exe bench_prep_uplc run -j $(JOBS) $(BENCH_ARGS)
+
+.PHONY: bench_prep_uplc_cost
+bench_prep_uplc_cost:
+	lake exe bench_prep_uplc run --with-cost -j $(JOBS) $(BENCH_ARGS)
 
 .PHONY: bench_prep_uplc_compare
 bench_prep_uplc_compare:
