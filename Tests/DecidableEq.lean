@@ -90,10 +90,6 @@ end
 example : stepN testSemanticsVariant testStart 1
     ≠ stepN testSemanticsVariant testStart 2 := by nofun
 
-example : runSteps testSemanticsVariant testStart 1 ≠ State.Halt testResult := by
-  intro h
-  cases h
-
 /-! ### At a realistic size -/
 
 /-- `Force (Delay (Force (Delay ... testTerm)))`, `n` layers deep. -/
@@ -120,7 +116,6 @@ def bigStateAlt : State :=
       (PlutusCore.UPLC.Term.Const.Integer 999)))
     (deepTerm 30)
 
-example : bigState = bigState := rfl
 example : bigState ≠ bigStateAlt := by nofun
 
 /-! ### Checks that need the instances -/

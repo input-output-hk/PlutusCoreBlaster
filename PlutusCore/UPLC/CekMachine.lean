@@ -217,7 +217,8 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
 
              | _ => State.Error
 
-  | _ => State.Error
+  | State.Halt V => State.Halt V
+  | State.Error => State.Error
 
   where
     folding (xs : List CekValue) (init : Stack) : Stack :=
