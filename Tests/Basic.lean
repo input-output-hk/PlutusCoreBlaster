@@ -13,6 +13,7 @@ import PlutusCore.UPLC.CekMachine.Tests
 import PlutusCore.UPLC.FlatEncoding.Tests
 import PlutusCore.UPLC.PreProcess.Tests
 import PlutusCore.UPLC.ScriptEncoding.Tests
+import PlutusCore.UPLC.Shape.Tests
 import PlutusCore.UPLC.TextEncoding.Tests
 import Tests.CekRuns
 import Tests.DataComparison
