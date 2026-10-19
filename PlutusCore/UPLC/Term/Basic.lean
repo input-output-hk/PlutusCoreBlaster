@@ -32,12 +32,13 @@ instance : DecidableEq AtomicType := instDecidableEqOfLawfulBEq
 
 mutual
   inductive BuiltinType
-    | AtomicType : AtomicType → BuiltinType
+    | AtomicType   : AtomicType → BuiltinType
     | TypeOperator : TypeOperator → BuiltinType
 
   inductive TypeOperator
-    | TypeList : BuiltinType → TypeOperator
-    | TypePair : BuiltinType → BuiltinType → TypeOperator
+    | TypeList  : BuiltinType → TypeOperator
+    | TypeArray : BuiltinType → TypeOperator
+    | TypePair  : BuiltinType → BuiltinType → TypeOperator
 end
 
 inductive Const
@@ -49,6 +50,7 @@ inductive Const
   | ConstList             : List Const → Const
   | ConstDataList         : List Data → Const          -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | ConstPairDataList     : List (Data × Data) → Const -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
+  | ConstArray            : List Const → Const         -- TODO: Replace list with array once Blaster adds support
   | Pair                  : Const × Const → Const
   | PairData              : Data × Data → Const        -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | Data                  : Data → Const
@@ -172,8 +174,10 @@ inductive BuiltinFun
   | Ripemd_160
 -- Batch 6
   | ExpModInteger
--- Batch 7
   | DropList
+  | LengthOfArray
+  | ListToArray
+  | IndexArray
 deriving Repr, BEq
 
 deriving instance DecidableEq for BuiltinFun

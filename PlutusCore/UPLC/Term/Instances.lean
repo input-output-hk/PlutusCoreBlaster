@@ -13,6 +13,9 @@ mutual
     | []      , []       => true
     | _       , _        => false
 
+  private def arrayBeq (a b : Array Const) : Bool := listBeq (Array.toList a) (Array.toList b)
+
+  -- BEq for Const (manual, partial due to recursive ConstList and Pair constructors)
   private def constBeq : Const → Const → Bool
     | .Integer a             , .Integer b              => a == b
     | .ByteString a          , .ByteString b           => a == b
@@ -21,6 +24,7 @@ mutual
     | .Bool a                , .Bool b                 => a == b
     | .ConstList a           , .ConstList b            => listBeq a b
     | .ConstDataList a       , .ConstDataList b        => a == b
+    | .ConstArray a          , .ConstArray b           => listBeq a b
     | .ConstPairDataList a   , .ConstPairDataList b    => a == b
     | .Pair (a1, a2)         , .Pair (b1, b2)          => constBeq a1 b1 && constBeq a2 b2
     | .PairData a            , .PairData b             => a == b
@@ -57,16 +61,22 @@ end
 instance : BEq Term := ⟨termBeq⟩
 
 mutual
-  theorem constBeq_true_imp_eq : ∀ a b : Const, constBeq a b = true → a = b := by
+  theorem constBeq_true_imp_eq : ∀ (a b : Const), constBeq a b = true → a = b := by
     intro a b h
     cases a <;> cases b <;> simp_all [constBeq]
     case ConstList.ConstList => exact listBeq_true_imp_eq _ _ h
     case Pair.Pair => exact Prod.ext (constBeq_true_imp_eq _ _ h.1) (constBeq_true_imp_eq _ _ h.2)
+    case ConstArray.ConstArray => exact listBeq_true_imp_eq _ _ h
 
-  theorem listBeq_true_imp_eq : ∀ a b : List Const, listBeq a b = true → a = b := by
+  theorem listBeq_true_imp_eq : ∀ (a b : List Const), listBeq a b = true → a = b := by
     intro a b h
     cases a <;> cases b <;> simp_all [listBeq]
     case cons.cons => exact ⟨constBeq_true_imp_eq _ _ h.1, listBeq_true_imp_eq _ _ h.2⟩
+
+  theorem arrayBeq_true_imp_eq : ∀ (a b : Array Const), arrayBeq a b = true → a = b := by
+    intro ⟨a⟩ ⟨b⟩ h
+    simp only [arrayBeq] at h
+    exact congrArg Array.mk (listBeq_true_imp_eq a b h)
 end
 
 mutual
@@ -75,11 +85,17 @@ mutual
     cases a <;> simp [constBeq]
     case ConstList => exact listBeq_refl _
     case Pair => exact ⟨constBeq_refl _, constBeq_refl _⟩
+    case ConstArray => exact listBeq_refl _
 
   theorem listBeq_refl : ∀ a : List Const, listBeq a a = true := by
     intro a
     cases a <;> simp [listBeq]
     case cons => exact ⟨constBeq_refl _, listBeq_refl _⟩
+
+  theorem arrayBeq_refl : ∀ a : Array Const, arrayBeq a a = true := by
+    intro ⟨a⟩
+    simp only [arrayBeq]
+    exact listBeq_refl a
 end
 
 instance : LawfulBEq Const where
