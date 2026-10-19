@@ -77,18 +77,18 @@ Heartbeats are not reported: the Blaster optimizer resets the counter while it r
 
 The `repo` scripts:
 
-- the script files of `PlutusCore/UPLC/ScriptEncoding/Tests{Text,Flat}`. `factorial.uplc`,
+- the script files of `Tests/UPLC/ScriptEncoding/Tests{Text,Flat}`. `factorial.uplc`,
   `fibonacci.uplc` and `dataMap.flat` are also conformance programs, and `dataMap.flat` is really
   single-CBOR hex;
-- the `Program`s `test1` and `test3`–`test10` of `PlutusCore/UPLC/ScriptEncoding/Tests.lean`.
+- the `Program`s `test1` and `test3`–`test10` of `Tests/UPLC/ScriptEncoding/Tests.lean`.
   test3–test9 are real validators; test7 is identical to test6; test1, test10 and
   `testUplc.flat` are the same toy program;
 - three validators copied into `PrepUplc/Scripts/` from the unnamed `example`s of
-  `PlutusCore/UPLC/ScriptEncoding/Tests.lean`, which a benchmark cannot refer to:
+  `Tests/UPLC/ScriptEncoding/Tests.lean`, which a benchmark cannot refer to:
 
   | file | origin | UPLC | size |
   | --- | --- | --- | --- |
-  | `aiken-validator-v1.cbor.hex` | line 89 (also `FlatEncoding/Tests.lean:103`) | 1.0.0 | 3.5 KB |
+  | `aiken-validator-v1.cbor.hex` | line 89 (also `Tests/UPLC/FlatEncoding/Tests.lean:103`) | 1.0.0 | 3.5 KB |
   | `nonce-list-v3.cbor.hex` | line 94 | 1.1.0 | 254 B |
   | `minting-policy-v3.cbor.hex` | line 99, trace messages renamed | 1.1.0 | 483 B |
 

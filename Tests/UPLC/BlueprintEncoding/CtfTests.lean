@@ -24,7 +24,7 @@ open PlutusCore.IsData (IsData)
 --   title: "hello_world.hello_world"
 --   sanitized: hello_world_hello_world
 -- ---------------------------------------------------------------------------
-#import_blueprints HelloWorld "PlutusCore/UPLC/BlueprintEncoding/Fixtures/ctf-hello-world.json"
+#import_blueprints HelloWorld "Tests/UPLC/BlueprintEncoding/Fixtures/ctf-hello-world.json"
 
 -- The namespace identifier is itself a BlueprintInfo value — evaluate it to
 -- get a human-readable summary without printing the raw script bodies.
@@ -69,7 +69,7 @@ open PlutusCore.IsData (IsData)
 --
 -- No parameters are declared, so no _paramCount definition is emitted.
 -- ---------------------------------------------------------------------------
-#import_blueprints TipjarV2 "PlutusCore/UPLC/BlueprintEncoding/Fixtures/ctf-tipjar-v2.json"
+#import_blueprints TipjarV2 "Tests/UPLC/BlueprintEncoding/Fixtures/ctf-tipjar-v2.json"
 
 /-- info: TipjarV2 : BlueprintInfo -/
 #guard_msgs in
@@ -118,7 +118,7 @@ open PlutusCore.IsData (IsData)
 --   "multisig.multisig"   → multisig_multisig   (no parameters)
 --   "treasury.treasury"   → treasury_treasury   (1 unapplied parameter: multisigHash)
 -- ---------------------------------------------------------------------------
-#import_blueprints MultisigTreasury "PlutusCore/UPLC/BlueprintEncoding/Fixtures/ctf-multisig-treasury.json"
+#import_blueprints MultisigTreasury "Tests/UPLC/BlueprintEncoding/Fixtures/ctf-multisig-treasury.json"
 
 /-- info: MultisigTreasury : BlueprintInfo -/
 #guard_msgs in

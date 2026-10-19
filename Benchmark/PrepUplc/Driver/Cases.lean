@@ -56,7 +56,7 @@ def generatedDir : FilePath := "Benchmark" / "PrepUplc" / "Generated"
 
 def harnessModule       : Name := `Benchmark.PrepUplc.Harness
 def inputsModule        : Name := `Benchmark.PrepUplc.Inputs
-def scriptEncodingTests : Name := `PlutusCore.UPLC.ScriptEncoding.Tests
+def scriptEncodingTests : Name := `Tests.UPLC.ScriptEncoding.Tests
 
 /-! ## Names -/
 
@@ -234,14 +234,14 @@ structure RepoScript where
 
 def repoScripts : Array RepoScript := #[
   { name := "files/factorial.uplc"
-    source := .file "PlutusCore/UPLC/ScriptEncoding/TestsText/factorial.uplc" "PlutusV2" "textual" },
+    source := .file "Tests/UPLC/ScriptEncoding/TestsText/factorial.uplc" "PlutusV2" "textual" },
   { name := "files/fibonacci.uplc"
-    source := .file "PlutusCore/UPLC/ScriptEncoding/TestsText/fibonacci.uplc" "PlutusV2" "textual" },
+    source := .file "Tests/UPLC/ScriptEncoding/TestsText/fibonacci.uplc" "PlutusV2" "textual" },
   { name := "files/testUplc.flat"
-    source := .file "PlutusCore/UPLC/ScriptEncoding/TestsFlat/testUplc.flat" "PlutusV2" "flat" },
+    source := .file "Tests/UPLC/ScriptEncoding/TestsFlat/testUplc.flat" "PlutusV2" "flat" },
   -- Despite its extension, a single-CBOR hex file.
   { name := "files/dataMap.flat"
-    source := .file "PlutusCore/UPLC/ScriptEncoding/TestsFlat/dataMap.flat" "PlutusV2" "single_cbor_hex" },
+    source := .file "Tests/UPLC/ScriptEncoding/TestsFlat/dataMap.flat" "PlutusV2" "single_cbor_hex" },
   { name := "scriptEncoding/test1", source := .const scriptEncodingTests `PlutusCore.UPLC.ScriptEncoding.test1 },
   { name := "scriptEncoding/test3", source := .const scriptEncodingTests `PlutusCore.UPLC.ScriptEncoding.test3
     symbolic? := some (.data 3) },
@@ -259,7 +259,7 @@ def repoScripts : Array RepoScript := #[
   { name := "scriptEncoding/test9", source := .const scriptEncodingTests `PlutusCore.UPLC.ScriptEncoding.test9
     symbolic? := some (.data 3) },
   { name := "scriptEncoding/test10", source := .const scriptEncodingTests `PlutusCore.UPLC.ScriptEncoding.test10 },
-  -- Copied from the unnamed `example`s of `PlutusCore/UPLC/ScriptEncoding/Tests.lean`.
+  -- Copied from the unnamed `example`s of `Tests/UPLC/ScriptEncoding/Tests.lean`.
   { name := "scripts/aiken-validator-v1"
     source := .file "Benchmark/PrepUplc/Scripts/aiken-validator-v1.cbor.hex" "PlutusV2" "single_cbor_hex"
     symbolic? := some (.data 3) },

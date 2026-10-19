@@ -16,7 +16,7 @@ open PlutusCore.IsData (IsData)
 --   · Acme.<sanitized_title>             : PlutusScript
 --   · Acme.<sanitized_title>_hash        : String
 --   · Acme.<sanitized_title>_paramCount  : Nat  (only when params > 0)
-#import_blueprints Acme "PlutusCore/UPLC/BlueprintEncoding/Fixtures/Acme.golden.json"
+#import_blueprints Acme "Tests/UPLC/BlueprintEncoding/Fixtures/Acme.golden.json"
 
 -- Both validators must be imported as PlutusScript values.
 
