@@ -112,11 +112,15 @@ theorem UInt8.lt_irrefl (x : UInt8) : ¬ x < x := by
 instance : Std.Irrefl ( . < . : UInt8 → UInt8 → Prop) where
   irrefl := UInt8.lt_irrefl
 
+/-! Std.Irrefl instance for ByteString -/
 @[simp] theorem ByteString.lt_irrefl (x : ByteString) : ¬ x < x := by
   match x with
   | ByteString.mk v =>
        unfold LT.lt LTByteString
        apply List.lt_irrefl
+
+instance : Std.Irrefl (. < . : ByteString → ByteString → Prop) where
+  irrefl := ByteString.lt_irrefl
 
 @[simp] def ByteString.length (bs : ByteString) : Nat := bs.data.length
 
@@ -152,9 +156,11 @@ def consByteStringV2 (n : Integer) (bs : ByteString) : Except String ByteString 
 
 /-- Given `s`, `k` and ByteString `[c₀, ..., cₙ]` return `[cₘₐₓ₍ₛ,₀₎, ..., cₘᵢₙ₍ₛ₊ₖ₋₁, ₙ₎]` -/
 def sliceByteString (s : Integer) (k : Integer) (bs : ByteString) : ByteString :=
-  -- Note that extract determine the number of elements by subtracting `s` and `k`.
-  -- Hence, there is no need for us to subtract by one.
-  let subString := bs.data.toList.extract (Max.max s (0 : Integer)).toNat (Min.min (s + k).toNat bs.data.length)
+  -- Haskell semantics: take (max 0 k) (drop (max 0 s) bs)
+  -- Negative offsets are clamped to 0; the end is start + count (not s + k).
+  let start := (Max.max s (0 : Integer)).toNat
+  let count := (Max.max k (0 : Integer)).toNat
+  let subString := (bs.data.toList.drop start).take count
   {data := String.mk subString }
 
 

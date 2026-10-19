@@ -16,6 +16,7 @@ import PlutusCore.List.Lemmas
 import PlutusCore.Pair.Lemmas
 import PlutusCore.String.Lemmas
 import PlutusCore.Trace.Lemmas
+import PlutusCore.UPLC.CekMachine.Lemmas
 import PlutusCore.UPLC.FlatEncoding.Lemmas
 import PlutusCore.UPLC.ScriptEncoding.Lemmas
 import PlutusCore.Unit.Lemmas

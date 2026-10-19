@@ -32,15 +32,14 @@ def b_ (i n : Nat) : Char := Char.ofNat ((n / (256 ^ i)) % 256)
 
 /-- ε_head: Encodes the major type (`m`) × Nat pair -/
 -- Spec B.4.
-def encodeHead (m n : Nat) : Option (List Char) :=
-  if m ≤ 7 then
-         if n ≤                   23 then .some [Char.ofNat (32 * m + n)]
-    else if n ≤                  255 then .some (Char.ofNat (32 * m + 24) :: e₁ n)
-    else if n ≤                65535 then .some (Char.ofNat (32 * m + 25) :: e₂ n)
-    else if n ≤           4294967295 then .some (Char.ofNat (32 * m + 26) :: e₄ n)
-    else if n ≤ 18446744073709551615 then .some (Char.ofNat (32 * m + 27) :: e₈ n)
-    else .none
-  else .none
+def encodeHead (m n : Nat) (_h1 : m ≤ 7) (_h2 : n ≤ 18446744073709551615) : List Char :=
+ if n ≤                   23 then [Char.ofNat (32 * m + n)]
+ else if n ≤                  255 then Char.ofNat (32 * m + 24) :: e₁ n
+ else if n ≤                65535 then Char.ofNat (32 * m + 25) :: e₂ n
+ else if n ≤           4294967295 then Char.ofNat (32 * m + 26) :: e₄ n
+ else
+   -- case when n ≤ 18446744073709551615
+   Char.ofNat (32 * m + 27) :: e₈ n
 
 /-- Helper theorem used in  the termination proof for `splitToChunks` -/
 theorem String.data_length_of_nonEmpty_pos (s : String) (h : s ≠ "") : 0 < List.length s.data := by
@@ -68,35 +67,60 @@ def splitToChunksLoop (acc : List String) (s : String) : List String :=
 -- Spec B.5. "Canonical 64-byte decomposition"
 def splitToChunks := splitToChunksLoop []
 
+/-- Helper for `split_to_chunks_elem_leq_64`: every chunk produced by the loop has
+    length at most 64, provided every string already accumulated does. -/
+theorem splitToChunksLoop_elem_leq_64 (acc : List String) (s : String)
+    (hacc : ∀ e ∈ acc, e.length ≤ 64) :
+    ∀ e ∈ splitToChunksLoop acc s, e.length ≤ 64 := by
+  fun_induction splitToChunksLoop acc s with
+  | case1 acc =>
+    simpa using hacc
+  | case2 acc s hs ih =>
+    apply ih
+    intro e he
+    rcases List.mem_cons.mp he with h | h
+    · subst h
+      simp [String.length]
+      omega
+    · exact hacc e h
+
+theorem split_to_chunks_elem_leq_64 (s : String) (e : String) (h : e ∈ splitToChunks s) : e.length ≤ 64 := by
+  exact splitToChunksLoop_elem_leq_64 [] s (by simp) e h
+
 /-- Some sequences are encoded without a specified length (indefinite length encoding). -/
 -- Spec B.4. Heads for indefinite-length items.
 def encodeIndef (m : Nat) : Char := Char.ofNat (32 * m + 31)
 
 /-- Encodes a string chunk -/
 -- Spec B.5. ε_B*
-def encodeBytestringChunk (s : String) : Option (List Char) := do
-  let length := List.length s.data
-  if length ≤ 256 ^ 8
-    then .some ((←encodeHead 2 length) ++ s.data)
-    else .none
+def encodeBytestringChunk (s : String) (h : s.length ≤ 64) : List Char :=
+  (encodeHead 2 s.length (by decide) (Nat.le_trans h (by decide))) ++ s.data
 
 /-- Encodes a bytestring.
     Note: it first splits the byte string to 64 byte chunks
           as detailed in the specification. -/
 -- Spec B.5. ε_B*
-def encodeBytestring (s : String) : Option String :=
-  match splitToChunks s with
-  | []      => .some ""
-  | h :: [] => String.mk <$> encodeBytestringChunk h
-  | chunks  => do .some ⟨encodeIndef 2 :: (List.concat (←List.flatMapM encodeBytestringChunk chunks) '\xFF')⟩
-
+def encodeBytestring (s : String) : String :=
+  match heq : splitToChunks s with
+  | []      => String.mk (encodeHead 2 0 (by decide) (by decide)) -- empty bytestring is a definite 0-length string (0x40)
+  | h :: [] => String.mk (encodeBytestringChunk h (split_to_chunks_elem_leq_64 s h (by simp [heq])))
+  | chunks  =>
+      String.mk (encodeIndef 2 :: List.concat
+        (encode_chunks chunks (heq ▸ split_to_chunks_elem_leq_64 s)) '\xFF')
+where
+  encode_chunks (xs : List String) (hxs : ∀ c ∈ xs, c.length ≤ 64) : List Char :=
+    match xs with
+    | [] => []
+    | c :: xs' =>
+       let cs := encodeBytestringChunk c (List.forall_mem_cons.mp hxs).1
+       cs ++ encode_chunks xs' (List.forall_mem_cons.mp hxs).2
 
 /-- Encodes a natural number as a list of characters in big-endian -/
 -- Spec B.6. itos
 def itos (n : Nat) : String :=
   if n == 0
     then ""
-    else itos (n / 256) ++ (n % 256 |> Char.ofNat |> String.singleton)
+    else itos (n / 256) ++ String.singleton (Char.ofNat (n % 256))
 
   decreasing_by
     apply Nat.div_lt_self
@@ -107,50 +131,68 @@ def itos (n : Nat) : String :=
 
 /-- Encodes an integer using zigzag encoding -/
 -- Spec B.6. ε_Z
-def encodeInt (n : Integer) : Option String :=
-       if (                    0 ≤ n) && (n ≤  18446744073709551615) then String.mk <$> encodeHead 0 (Int.toNat n)
-  else if ( 18446744073709551616 ≤ n)                                then do (String.mk (←encodeHead 6 2)) ++ (←encodeBytestring (n |> Int.toNat |> itos))
-  else if (-18446744073709551616 ≤ n) && (n ≤                    -1) then String.mk <$> encodeHead 1 ((-n - 1) |> Int.toNat)
-  else if                                (n ≤ -18446744073709551617) then do (String.mk (←encodeHead 6 3)) ++ (←encodeBytestring (-n - 1 |> Int.toNat |> itos))
-  else .none
+def encodeInt (n : Integer) : String :=
+  if h : 0 ≤ n ∧ n ≤ 18446744073709551615 then String.mk (encodeHead 0 (Int.toNat n) (by decide) (by simp [h]))
+  else if ( 18446744073709551616 ≤ n) then String.mk (encodeHead 6 2 (by decide) (by decide)) ++ (encodeBytestring (itos (Int.toNat n)))
+  else if h : -18446744073709551616 ≤ n ∧ n ≤ -1 then String.mk (encodeHead 1 (Int.toNat (-n - 1)) (by decide) (by simp only [Integer] at h; omega))
+  else -- case when n ≤ -18446744073709551617
+    (String.mk (encodeHead 6 3 (by decide) (by decide))) ++ (encodeBytestring (itos (Int.toNat (-n - 1))))
 
 /-- Encodes a ctag. -/
 -- Spec B.7. ε_ctag
-def encodeCtag (i : Integer) : Option String :=
-  String.mk <$>
-         if (0 ≤ i) && (i ≤   6) then encodeHead 6 ( 121 + i       |> Int.toNat)
-    else if (7 ≤ i) && (i ≤ 127) then encodeHead 6 (1280 + (i - 7) |> Int.toNat)
-    else do (←encodeHead 6 102) ++ (←encodeHead 4 2) ++ ((←encodeInt i).data)
+def encodeCtag (i : Integer) : String :=
+  if h : 0 ≤ i ∧ i ≤ 6 then String.mk (encodeHead 6 (Int.toNat (121 + i)) (by decide) (by simp only [Integer] at h; omega))
+  else if h : 7 ≤ i ∧ i ≤ 127 then String.mk (encodeHead 6 (Int.toNat (1280 + (i - 7))) (by decide) (by simp only [Integer] at h; omega))
+  else String.mk ((encodeHead 6 102 (by decide) (by decide)) ++ (encodeHead 4 2 (by decide) (by decide))) ++ (encodeInt i)
 
-/-- Encode data (builtinData). -/
 -- Spec B.7. Encoding and  decoding Data. ε_data
+
+mutual
+/-- Encode data (builtinData). -/
+def foldMap (xs : List (Data × Data)) (acc : String) : Option String :=
+  match xs with
+  | [] => some acc
+  | a :: as =>
+     match encodeData a.fst, encodeData a.snd with
+     | some s1, some s2 => foldMap as (acc ++ s1 ++ s2)
+     | _, _ => none
+
+def foldList (xs : List Data) (acc : String) : Option String :=
+  match xs with
+  | [] => some acc
+  | a :: as =>
+      match encodeData a with
+      | some s => foldList as (acc ++ s)
+      | _ => none
+
 def encodeData : Data → Option String
-  | .Constr idx fields => do
-      (←encodeCtag idx)
-      ++ (encodeIndef 4 |> String.singleton)
-      ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeData a))) "" fields)
-      ++ "\xFF"
-  | .Map mxs => do
-      ((←encodeHead 5 (List.length mxs)) |> String.mk)
-      ++ (←List.foldlM (λ s p => do .some (s ++ (←encodeData p.fst) ++ (←encodeData p.snd))) "" mxs)
-  | .List xs => do
-      (encodeIndef 4 |> String.singleton)
-      ++ (←List.foldlM (λ s a => do .some (s ++ (←encodeData a))) "" xs)
-      ++ "\xFF"
+  | .Constr idx fields =>
+       if fields.isEmpty then
+          -- empty field list is a DEFINITE empty array (0x80), matching the serialiseData builtin
+          encodeCtag idx ++ (String.mk (encodeHead 4 0 (by decide) (by decide)))
+       else
+         if let some s := foldList fields "" then
+            encodeCtag idx ++ (String.singleton (encodeIndef 4)) ++ s ++ "\xFF"
+         else none
+  | .Map mxs =>
+       let l := mxs.length
+       if h : l ≤ 18446744073709551615 then
+         if let some s := foldMap mxs "" then
+          String.mk (encodeHead 5 l (by decide) h) ++ s
+         else none
+       else none
+  | .List xs =>
+      if xs.isEmpty then
+        -- empty list is a DEFINITE empty array (0x80), matching the serialiseData builtin
+        String.mk (encodeHead 4 0 (by decide) (by decide))
+      else
+        if let some s := foldList xs "" then
+          (String.singleton (encodeIndef 4)) ++ s ++ "\xFF"
+        else none
   | .I i => encodeInt i
   | .B bs => encodeBytestring bs.data
 
-  decreasing_by
-    · have : sizeOf a     < sizeOf fields := by apply List.sizeOf_lt_of_mem; assumption
-      simp; omega
-    · have : sizeOf p.fst < sizeOf p      := by induction p; simp; omega
-      have : sizeOf p     < sizeOf mxs    := by apply List.sizeOf_lt_of_mem; assumption
-      simp; omega
-    · have : sizeOf p.snd < sizeOf p      := by induction p; simp; omega
-      have : sizeOf p     < sizeOf mxs    := by apply List.sizeOf_lt_of_mem; assumption
-      simp; omega
-    · have : sizeOf a     < sizeOf xs     := by apply List.sizeOf_lt_of_mem; assumption
-      simp; omega
+end
 
 -- ==============
 -- =  Decoding  =
@@ -556,7 +598,7 @@ def decodeInt (s : String) : Option (String × Integer) :=
   | .some (s', 0, n) => .some (⟨s'⟩,  (Int.ofNat n)    )
   | .some (s', 1, n) => .some (⟨s'⟩, -(Int.ofNat n) - 1)
   | .some (s', 6, 2) => (λ (s'', b) => (s'',              stoi b      )) <$> decodeBytestring ⟨s'⟩
-  | .some (s', 6, 3) => (λ (s'', b) => (s'', -(Int.ofNat (stoi b) - 1))) <$> decodeBytestring ⟨s'⟩
+  | .some (s', 6, 3) => (λ (s'', b) => (s'', -(Int.ofNat (stoi b)) - 1)) <$> decodeBytestring ⟨s'⟩
   | _                => .none
 
 /-- Helper theorem: decodeInt consumes at least one byte on success -/
@@ -613,13 +655,20 @@ theorem decodeInt_consumes (s : String) :
 def decodeCtag (s : List Char) : Option (List Char × Integer) :=
   match decodeHead s with
   | .some (s', 6, 102) => do
+      -- The definite 2-element wrapper (0x82) is accepted here. The indefinite form
+      -- (0x9f..0xff) that Data.hs also accepts is handled by decodeIndefConstr.
       let (s'', m, n) ← decodeHead s'
       if m = 4 ∧ n = 2
-        then Prod.map String.data id <$> decodeInt ⟨s''⟩
+        then do
+          -- Index is a direct Word64 (matches decodeWord64). A negative or bignum-encoded
+          -- index is write-only, so reject it on decode.
+          let (s''', im, iv) ← decodeHead s''
+          if im = 0 then .some (s''', Int.ofNat iv) else .none
         else .none
-  | .some (s', 6, i) =>      if  121 ≤ i ∧ i ≤  127 then .some (s',  i -  121     )
-                        else if 1280 ≤ i ∧ i ≤ 1400 then .some (s', (i - 1280) + 7)
-                        else .none
+  | .some (s', 6, i) =>
+      if 121 ≤ i ∧ i ≤ 127 then .some (s', i - 121)
+      else if 1280 ≤ i ∧ i ≤ 1400 then .some (s', (i - 1280) + 7)
+      else .none
   | _ => .none
 
 /- Tries to decode a value from `s` using `f`. If fails it tries `g` with the same input. Fails if both fails. -/
@@ -657,23 +706,23 @@ theorem decodeCtag_consumes (s : List Char) :
     simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
     obtain ⟨⟨s''', m, n⟩, hdh2, h_rest⟩ := h
     split at h_rest
-    · -- decodeInt succeeds (split confirms m = 4 and n = 2)
+    · -- index decode succeeds (split confirms m = 4 and n = 2), index is a direct Word64
       rename_i heq_mn
-      cases h_int : decodeInt ⟨s'''⟩ with
-      | none => simp [h_int] at h_rest
-      | some res =>
-        simp [h_int, Prod.map] at h_rest
-        obtain ⟨h_eq_s', h_eq_i⟩ := h_rest
+      simp only [Option.bind_eq_some_iff] at h_rest
+      obtain ⟨⟨s4, im, iv⟩, hdh3, h_rest2⟩ := h_rest
+      split at h_rest2
+      · rename_i him
+        simp at h_rest2
+        obtain ⟨h_eq_s', h_eq_i⟩ := h_rest2
         have h_head1 := decodeHead_consumes s k 6 102 hdh
-        -- Use heq_mn to show m = 4 and n = 2
         have ⟨hm, hn⟩ : m = 4 ∧ n = 2 := heq_mn
         subst hm hn
         have h_head2 := decodeHead_consumes k s''' 4 2 hdh2
-        have h_int_cons := decodeInt_consumes ⟨s'''⟩ res.1 res.2 h_int
-        simp at h_int_cons
+        subst him
+        have h_head3 := decodeHead_consumes s''' s4 0 iv hdh3
         rw [← h_eq_s']
-        simp
         omega
+      · simp at h_rest2
     · simp at h_rest
   · -- Case: decodeHead s = some (s'', 6, i_val) with i_val ≠ 102
     rename_i s'' i_val hne hdh
@@ -701,6 +750,7 @@ mutual
     match decodeAlternative decodeIndef decodeHead s with
     | .some (_ , .inl 2     ) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
     | .some (s', .inl 4     ) => Prod.map id          .List                <$> decodeListIndef s'
+    | .some (s', .inl 5     ) => Prod.map id          .Map                 <$> decodePairListIndef s'
     | .some (_ , .inr (0, _))
     | .some (_ , .inr (1, _))
     | .some (_ , .inr (6, 2))
@@ -740,6 +790,39 @@ mutual
             | none => none
         | none => none
 
+  -- Decode an indefinite-length list of Data pairs (an indefinite-length Map, 0xbf..0xff). Spec B.7
+  -- D_data decodes maps as definite-only, so this EXTENDS the decoder beyond the spec to the
+  -- indefinite form Data.hs also accepts (decodeMapLenOrIndef). Decode-only, the encoder still
+  -- emits only definite maps.
+  partial def decodePairListIndef : List Char → Option (List Char × List (Data × Data))
+    | '\xFF' :: s' => .some (s', [])
+    | s            => match decodeDataLoop s with
+        | some (s', k) => match decodeDataLoop s' with
+            | some (s'', v) => match decodePairListIndef s'' with
+                | some (s''', l) => some (s''', (k, v) :: l)
+                | none => none
+            | none => none
+        | none => none
+
+  -- Decode a constructor whose tag-102 wrapper uses the INDEFINITE 2-element array
+  -- (0x9f index args 0xff), the form Data.hs accepts via decodeListLenOrIndef. The canonical
+  -- encoder never emits it, so this is decode-only leniency toward the reference implementation.
+  partial def decodeIndefConstr (s : List Char) : Option (List Char × Data) :=
+    match decodeHead s with
+    | .some (s', 6, 102) => match decodeIndef s' with
+        | .some (s'', 4) => match decodeHead s'' with
+            | .some (s3, 0, iv) => match decodeAlternative decodeIndef decodeHead s3 with
+                | .some (s4, .inl 4     ) => match decodeListIndef s4 with
+                    | .some ('\xFF' :: s6, args) => .some (s6, .Constr (Int.ofNat iv) args)
+                    | _                          => .none
+                | .some (s4, .inr (4, n)) => match decodeList n s4 with
+                    | .some ('\xFF' :: s6, args) => .some (s6, .Constr (Int.ofNat iv) args)
+                    | _                          => .none
+                | _                       => .none
+            | _ => .none
+        | _ => .none
+    | _ => .none
+
   -- Decode a constructor (Constr tag + list of Data values)
   partial def decodeConstr (s : List Char) : Option (List Char × Data) :=
     match decodeCtag s with
@@ -749,11 +832,13 @@ mutual
             | .inr (4, n) => Prod.map id (.Constr i) <$> decodeList n s''
             | _           => .none
         | none => none
-    | none => none
+    | none => decodeIndefConstr s
 end
 
 /- Decodes a builtin data from input `s`. -/
--- Spec B.7. D_data
+-- Spec B.7. D_data, EXTENDED beyond the spec on two indefinite-length forms the spec rejects but
+-- Data.hs accepts: indefinite maps (decodePairListIndef) and the indefinite tag-102 constructor
+-- wrapper (decodeIndefConstr). Decode-only, the encoder is unchanged.
 def decodeData (s : String) : Option (String × Data) :=
   Prod.map String.mk id <$> decodeDataLoop s.data
 

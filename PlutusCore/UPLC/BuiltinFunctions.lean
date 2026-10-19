@@ -1,6 +1,8 @@
 
+import PlutusCore.UPLC.BuiltinFunctions.Bitwise
 import PlutusCore.UPLC.BuiltinFunctions.Bool
 import PlutusCore.UPLC.BuiltinFunctions.ByteString
+import PlutusCore.UPLC.BuiltinFunctions.Crypto
 import PlutusCore.UPLC.BuiltinFunctions.Data
 import PlutusCore.UPLC.BuiltinFunctions.Evaluate
 import PlutusCore.UPLC.BuiltinFunctions.Integer

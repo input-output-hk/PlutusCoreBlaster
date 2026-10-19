@@ -1,4 +1,4 @@
-/- Execution beudget for UPLC evaluation, tracking CPU and Memory resources
+/- Execution budget for UPLC evaluation, tracking CPU and Memory resources
 -/
 
 namespace PlutusCore.UPLC.ExBudget
@@ -8,6 +8,10 @@ namespace PlutusCore.UPLC.ExBudget
 structure ExCPU where
   unExCPU : Nat
 deriving Repr, Inhabited, DecidableEq, BEq
+
+instance : LawfulBEq ExCPU where
+  eq_of_beq {a b} h := by cases a; cases b; simp_all [BEq.beq, instBEqExCPU.beq]
+  rfl {a} := by cases a; simp [BEq.beq, instBEqExCPU.beq]
 
 namespace ExCPU
   def add (a b : ExCPU) : ExCPU :=
@@ -31,6 +35,10 @@ structure ExMemory where
   unExMemory : Nat
 deriving Repr, Inhabited, DecidableEq, BEq
 
+instance : LawfulBEq ExMemory where
+  eq_of_beq {a b} h := by cases a; cases b; simp_all [BEq.beq, instBEqExMemory.beq]
+  rfl {a} := by cases a; simp [BEq.beq, instBEqExMemory.beq]
+
 namespace ExMemory
   def add (a b : ExMemory) : ExMemory :=
     ⟨a.unExMemory + b.unExMemory⟩
@@ -53,6 +61,16 @@ structure ExBudget where
   exBudgetMemory : ExMemory
 deriving Repr, Inhabited, DecidableEq, BEq
 
+instance : LawfulBEq ExBudget where
+  eq_of_beq {a b} h := by
+    cases a; cases b
+    change instBEqExBudget.beq _ _ = true at h
+    simp_all [instBEqExBudget.beq]
+  rfl {a} := by
+    cases a
+    change instBEqExBudget.beq _ _ = true
+    simp [instBEqExBudget.beq]
+
 namespace ExBudget
 
   def add (a b : ExBudget) : ExBudget :=
@@ -66,7 +84,7 @@ namespace ExBudget
   instance : Add ExBudget := ⟨add⟩
   instance : Sub ExBudget := ⟨subtract⟩
 
-  -- Can we afort a given cost
+  -- Can we afford a given cost
   def canAfford (budget : ExBudget) (cost : ExBudget) : Bool :=
     budget.exBudgetCPU.unExCPU >= cost.exBudgetCPU.unExCPU &&
     budget.exBudgetMemory.unExMemory >= cost.exBudgetMemory.unExMemory

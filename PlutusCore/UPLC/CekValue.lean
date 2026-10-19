@@ -6,19 +6,16 @@ namespace PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.Builtins
 
-mutual
-  inductive CekValue
-  | VCon     : Const → CekValue
-  | VDelay   : Term → Environment → CekValue
-  | VLam     : String → Term → Environment → CekValue
-  | VConstr  : Nat → List CekValue → CekValue
-  | VBuiltin : BuiltinFun → List CekValue → ExpectedBuiltinArgs → CekValue
-  deriving Repr
+inductive CekValue
+| VCon     : Const → CekValue
+| VDelay   : Term → List CekValue → CekValue
+| VLam     : Term → List CekValue → CekValue
+| VConstr  : Nat → List CekValue → CekValue
+| VBuiltin : BuiltinFun → List CekValue → ExpectedBuiltinArgs → CekValue
+deriving Repr
 
-  inductive Environment
-  | NonEmptyEvironment : Environment → String → CekValue → Environment
-  | EmptyEnvironment   : Environment
-  deriving Repr
-end
+/-- Positional environment for de Bruijn terms: the head is the value of
+    index 0 (the innermost binder), so `ρ[i]?` is de Bruijn lookup. -/
+abbrev Environment := List CekValue
 
 end PlutusCore.UPLC.CekValue

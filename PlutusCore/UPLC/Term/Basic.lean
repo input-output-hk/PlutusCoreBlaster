@@ -1,7 +1,13 @@
+import PlutusCore.Crypto.BLS12_381.G1
+import PlutusCore.Crypto.BLS12_381.G2
+import PlutusCore.Crypto.BLS12_381.Pairing
 import PlutusCore.Data
 
 namespace PlutusCore.UPLC.Term
 
+open PlutusCore.Crypto.BLS12_381.G1 (BLS12_381_G1_Element)
+open PlutusCore.Crypto.BLS12_381.G2 (BLS12_381_G2_Element)
+open PlutusCore.Crypto.BLS12_381.Pairing (BLS12_381_MlResult)
 open PlutusCore.Data (Data)
 open PlutusCore.ByteString (ByteString)
 open PlutusCore.Integer (Integer)
@@ -13,7 +19,16 @@ inductive AtomicType
   | TypeBool
   | TypeUnit
   | TypeData
+  | TypeBls12_381_G1_element
+  | TypeBls12_381_G2_element
+  | TypeBls12_381_MlResult
 deriving BEq
+
+instance : LawfulBEq AtomicType where
+  eq_of_beq {a b} h := by cases a <;> cases b <;> first | rfl | contradiction
+  rfl {a} := by cases a <;> rfl
+
+instance : DecidableEq AtomicType := instDecidableEqOfLawfulBEq
 
 mutual
   inductive BuiltinType
@@ -37,9 +52,9 @@ inductive Const
   | Pair                  : Const × Const → Const
   | PairData              : Data × Data → Const        -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | Data                  : Data → Const
-  | Bls12_381_G1_element  : Const                       -- NOTE: missing value here (need to check in spec)
-  | Bls12_381_G2_element  : Const                       -- NOTE: missing value here (need to check in spec)
-  | Bls12_381_MlResult    : Const                       -- NOTE: missing value here (need to check in spec)
+  | Bls12_381_G1_element  : BLS12_381_G1_Element → Const
+  | Bls12_381_G2_element  : BLS12_381_G2_Element → Const
+  | Bls12_381_MlResult    : BLS12_381_MlResult   → Const
 deriving Repr
 
 
@@ -70,7 +85,7 @@ inductive BuiltinFun
   | Sha3_256
   | Blake2b_256
   | VerifyEd25519Signature
--- Strings
+-- String
   | AppendString
   | EqualsString
   | EncodeUtf8
@@ -81,10 +96,10 @@ inductive BuiltinFun
   | ChooseUnit
 -- Tracing
   | Trace
--- Pairs
+-- Pair
   | FstPair
   | SndPair
--- Lists
+-- List
   | ChooseList
   | MkCons
   | HeadList
@@ -128,6 +143,8 @@ inductive BuiltinFun
   | Bls12_381_G2_hashToGroup
   | Bls12_381_G2_compress
   | Bls12_381_G2_uncompress
+  | Bls12_381_G1_multiScalarMul
+  | Bls12_381_G2_multiScalarMul
   | Bls12_381_millerLoop
   | Bls12_381_mulMlResult
   | Bls12_381_finalVerify
@@ -155,13 +172,27 @@ inductive BuiltinFun
   | Ripemd_160
 -- Batch 6
   | ExpModInteger
+-- Batch 7
+  | DropList
 deriving Repr, BEq
 
+deriving instance DecidableEq for BuiltinFun
+
+instance : LawfulBEq BuiltinFun where
+  eq_of_beq {a b} h := by
+    simp only [BEq.beq, instBEqBuiltinFun.beq, decide_eq_true_eq] at h
+    rw [← BuiltinFun.ofNat_ctorIdx a, ← BuiltinFun.ofNat_ctorIdx b, h]
+  rfl {a} := by simp [BEq.beq, instBEqBuiltinFun.beq]
+
+/-- Terms use de Bruijn indices: `Var i` refers to the binder `i` levels out
+    (0 = innermost enclosing `Lam`). An index that reaches past the enclosing
+    binders denotes a free variable, which the CEK machine rejects at
+    evaluation time. -/
 inductive Term
-  | Var : String → Term
+  | Var : Nat → Term
   | Const : Const → Term
   | Builtin : BuiltinFun → Term
-  | Lam : String → Term → Term
+  | Lam : Term → Term
   | Apply : Term → Term → Term
   | Delay : Term → Term
   | Force : Term → Term

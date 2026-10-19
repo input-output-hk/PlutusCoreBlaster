@@ -1,9 +1,12 @@
+import PlutusCore.ByteString
+import PlutusCore.Cbor
 import PlutusCore.Data
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.Data
+
 namespace PLC
   open PlutusCore.Data
   export PlutusCore.Data (
@@ -22,11 +25,18 @@ namespace PLC
     mkPairData
     mkNilData
     mkNilPairData
-    -- TODO: export serialiseData
+    -- serialiseData
+  )
+  open PlutusCore.Cbor
+  export PlutusCore.Cbor (
+    encodeData
   )
 end PLC
+
+open PlutusCore.ByteString (ByteString)
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Utils
 
 -- NOTE: Args are deliberately reversed on the Cek machine stack for performance
 
@@ -76,37 +86,46 @@ def bData (Vs : List CekValue) : Option CekValue :=
 def unConstrData (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Data d)] =>
-      tryCatchSome (PLC.unConstrData d)
-      (fun (i, xs) =>
-        CekValue.VCon (Const.Pair ((Const.Integer i), Const.ConstDataList xs)))
+        match d with
+        | .Constr idx fields =>
+            some (CekValue.VCon (Const.Pair ((Const.Integer idx), Const.ConstDataList fields)))
+        | _ => none
   | _ => none
 
 -- Define unMapData
 def unMapData (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Data d)] =>
-      tryCatchSome (PLC.unMapData d) (CekValue.VCon ∘ Const.ConstPairDataList)
+       match d with
+       | .Map map => some (CekValue.VCon (Const.ConstPairDataList map))
+       | _ => none
   | _ => none
 
 -- Define unListData
 def unListData (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Data d)] =>
-      tryCatchSome (PLC.unListData d) (CekValue.VCon ∘ Const.ConstDataList)
+        match d with
+        | .List xs => some (CekValue.VCon (Const.ConstDataList xs))
+        | _ => none
   | _ => none
 
 -- Define unIData
 def unIData (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Data d)] =>
-      tryCatchSome (PLC.unIData d) (CekValue.VCon ∘ Const.Integer)
+        match d with
+        | .I i => some (CekValue.VCon (Const.Integer i))
+        | _ => none
   | _ => none
 
 -- Define unBData
 def unBData (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Data d)] =>
-      tryCatchSome (PLC.unBData d) (CekValue.VCon ∘ Const.ByteString)
+        match d with
+        | .B bs => some (CekValue.VCon (Const.ByteString bs))
+        | _ => none
   | _ => none
 
 
@@ -138,6 +157,10 @@ def mkNilPairData (Vs : List CekValue) : Option CekValue :=
       CekValue.VCon $ Const.ConstPairDataList (PLC.mkNilPairData ())
   | _ => none
 
+-- Define serializeData
+def serializeData (Vs : List CekValue) : Option CekValue :=
+  match Vs with
+  | [CekValue.VCon (Const.Data d)] => (CekValue.VCon ∘ Const.ByteString ∘ ByteString.mk) <$> PLC.encodeData d
+  | _                              => none
 
-
-end PlutusCore.UPLC.CekValue
+end PlutusCore.UPLC.BuiltinFunctions.Data

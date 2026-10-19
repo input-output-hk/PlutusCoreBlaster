@@ -1,220 +1,138 @@
 # PlutusCoreBlaster
 
-[![Lean Version](https://img.shields.io/badge/Lean-v4.24.0-blue.svg)](https://github.com/leanprover/lean4)
+[![Lean Version](https://img.shields.io/badge/Lean-v4.24.0-blue.svg)](lean-toolchain)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](#contributing)
 
-A Lean 4 formalization of [Untyped Plutus Core (UPLC)](https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf) — the smart contract execution language of the Cardano blockchain.
+PlutusCoreBlaster is a Lean 4 formalization of [Untyped Plutus Core (UPLC)](https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf), the smart contract execution language of Cardano. It provides UPLC syntax, decoders, a CEK evaluator, builtin functions, tests, and tools for preparing programs for proofs. The project is working toward conformance with the Haskell reference implementation; see [Conformance testing](#conformance-testing) for the current scope.
 
-The goal is a machine-checked specification that is **provably conformant** with the Haskell reference implementation, verified against the official Plutus conformance test suite.
+## Contents
 
-## Table of Contents
+- [Installation and building](#installation-and-building)
+- [Using the library](#using-the-library)
+- [Libraries and modules](#libraries-and-modules)
+- [Preparing a UPLC program](#preparing-a-uplc-program)
+- [Testing](#testing)
+- [Conformance testing](#conformance-testing)
+- [Benchmarks](#benchmarks)
+- [Current scope](#current-scope)
+- [Contributing](#contributing)
 
-- [PlutusCoreBlaster](#plutuscoreblaster)
-  - [Table of Contents](#table-of-contents)
-  - [Installation](#installation)
-    - [Prerequisites](#prerequisites)
-    - [Installing Lean4](#installing-lean4)
-    - [Building](#building)
-  - [How to use?](#how-to-use)
-    - [Using lakefile.toml](#using-lakefiletoml)
-    - [Using lakefile.lean](#using-lakefilelean)
-  - [Features](#features)
-    - [PlutusCore library](#plutuscore-library)
-    - [Cryptograph library](#cryptograph-library)
-    - [Lemmas library](#lemmas-library)
-  - [The #prep\_uplc command](#the-prep_uplc-command)
-  - [Tests](#tests)
-  - [General description](#general-description)
-    - [CEK machines](#cek-machines)
-    - [Builtin functions](#builtin-functions)
-    - [Encoding formats](#encoding-formats)
-  - [Status](#status)
-  - [Contributing](#contributing)
-    - [Ways to Contribute](#ways-to-contribute)
+## Installation and building
 
+Install Lean 4 through [elan](https://github.com/leanprover/elan). The version selected by this repository is recorded in [`lean-toolchain`](lean-toolchain) (currently 4.24.0). Lake fetches the [Lean-blaster](https://github.com/input-output-hk/Lean-blaster) dependency; the `Cryptograph` library is included in this repository.
 
-## Installation
-
-### Prerequisites
-
-PlutusCoreBlaster requires:
-
-- **Lean4** v4.24.0 (or compatible version)
-
-All other dependencies (`Cryptograph`, `Blaster`) are either bundled in this repository or fetched automatically by `lake`.
-
-### Installing Lean4
-
-We strive to stay in sync with the latest **stable release** of Lean4.
-
-**Currently supported version:** Lean4 v4.24.0
-
-Please follow the official installation guidelines from the [Lean4 GitHub repository](https://github.com/leanprover/lean4).
-
-### Building
-
-```bash
-lake build
+```sh
+lake build          # build the default PlutusCore target
+lake build Lemmas   # build the proof library
+lake test           # build the standard test suite
 ```
 
-To run the test suite:
+The corresponding Make targets are `make build_plutus_core`, `make build_tests`, and `make check_all`. The `check_*` targets also check that the expected Lean files are covered by their builds.
 
-```bash
-lake build Tests
-```
+## Using the library
 
-## How to use?
-
-In order to use PlutusCoreBlaster as a library, your project needs to depend on it.
-
-### Using lakefile.toml
+The Lake package is named **`PlutusCore`**, while the Git repository is named `PlutusCoreBlaster`. Add it to your project's Lake configuration in either format:
 
 ```toml
+# lakefile.toml
 [[require]]
 name = "PlutusCore"
 git = "https://github.com/input-output-hk/PlutusCoreBlaster"
 rev = "main"
 ```
 
-### Using lakefile.lean
-
 ```lean
+-- lakefile.lean
 require «PlutusCore» from git
   "https://github.com/input-output-hk/PlutusCoreBlaster" @ "main"
 ```
 
-## Features
+For reproducible builds, replace `main` with a commit or release tag that you have tested.
 
-### PlutusCore library
+## Libraries and modules
 
-| Module | What it formalizes |
-|--------|--------------------|
-| `UPLC/Term` | Abstract syntax: the 9 UPLC term constructors, builtin types, and constants (integers, byte strings, BLS12-381 elements, …) |
-| `UPLC/CekMachine` | Budget-aware CEK abstract machine — frames, stack, states (`Eval`, `Return`, `Error`, `Halt`) |
-| `UPLC/CekValue` | Runtime value types (`VCon`, `VLam`, `VDelay`, `VConstr`, `VBuiltin`) and environments |
-| `UPLC/ExBudget` | CPU and memory budget types with saturation arithmetic |
-| `UPLC/CostModels` | Per-step cost functions (CEK machine steps + per-builtin costs) |
-| `UPLC/BuiltinFunctions` | ~50 builtin implementations: integer arithmetic, byte-string ops, cryptography, list/pair/data operations, bitwise ops |
-| `UPLC/FlatEncoding` | Bit-level decoder for the compact flat binary format (Appendix C of the spec) |
-| `UPLC/ScriptEncoding` | CBOR/hex script encoding used for on-chain storage |
-| `UPLC/PlutusScript` | `PlutusLanguage` (V1/V2/V3) and `PlutusScript` envelope wrapping a UPLC program |
-| `UPLC/PreProcess` | `#prep_uplc` command — optimizes and compiles a `PlutusScript` for formal verification |
-| `UPLC/Utils` | Helper predicates and accessors over CEK machine states |
-| `Bitwise` | Bitwise byte-string operations (and/or/xor/complement, shifts, rotates, bit read/write) |
+| Library or module | Purpose |
+| --- | --- |
+| `PlutusCore.UPLC.Term` | UPLC terms, programs, constants, and builtin names |
+| `PlutusCore.UPLC.CekMachine` | CEK evaluation with a step limit or an execution budget |
+| `PlutusCore.UPLC.BuiltinFunctions` | Arithmetic, byte strings, cryptography, data, lists, pairs, and bitwise operations |
+| `PlutusCore.UPLC.TextEncoding` | Parser for textual `.uplc` programs |
+| `PlutusCore.UPLC.FlatEncoding` | Decoder for Flat-encoded programs |
+| `PlutusCore.UPLC.ScriptEncoding` | Decoders and import commands for Flat, CBOR-wrapped, hexadecimal, and textual scripts |
+| `PlutusCore.UPLC.PlutusScript` | Script envelope and Plutus V1/V2/V3 language tags |
+| `PlutusCore.UPLC.PreProcess` | `#prep_uplc` command for preparing proof and execution expressions |
+| `Cryptograph` | Bundled BLS12-381, Ed25519, Secp256k1, hash, and modular arithmetic code |
+| `Lemmas` | Proofs and helper lemmas for the formalization |
 
-### Cryptograph library
+The CEK machine has four states: `Eval`, `Return`, `Error`, and `Halt`. Its step-limited execution and budget-aware execution use the same UPLC model. Some newer array and value/coin features are not implemented yet; see [Current scope](#current-scope).
 
-The `Cryptograph` library is bundled in this repository and provides all cryptographic primitives used by UPLC builtins:
+## Preparing a UPLC program
 
-| Module | What it provides |
-|--------|-----------------|
-| `BLS12_381` | G1/G2 point arithmetic and pairing |
-| `Ed25519` | Edwards curve field, points, and signature verification |
-| `Secp256k1` | ECDSA and Schnorr signature verification |
-| `Sha2` | SHA-256 and SHA-512 |
-| `Sha3` | SHA3-256 |
-| `Keccak` | Keccak-256 |
-| `Ripemd` | RIPEMD-160 |
-| `Blake2b` | BLAKE2b |
-| `Integer` | Modular exponentiation |
-
-### Lemmas library
-
-Formal proofs and helper lemmas about the encoding/decoding functions.
-
-## The #prep_uplc command
-
-`#prep_uplc` is a Lean 4 command that takes a `PlutusScript` instance, optimizes the embedded UPLC program using [Blaster](https://github.com/input-output-hk/Lean-blaster)'s expression optimizer, and generates a `PrepUPLC` structure containing:
-
-- **`prop`** — the optimized UPLC expression, suitable as a proof obligation
-- **`exec`** — the original unoptimized expression, used for execution
+`#prep_uplc` takes a named `PlutusScript`, an optional input-conversion function, and a maximum number of CEK steps. It creates a named structure with `lang`, `prop` (the optimized expression for proofs), and `exec` (the original expression for execution). For example, this closed program is adapted from [`PlutusCore/UPLC/PreProcess/Tests.lean`](PlutusCore/UPLC/PreProcess/Tests.lean):
 
 ```lean
--- Define a Plutus script
-def myScript : PlutusScript := {
-  lang := .PlutusV3,
-  script := <your UPLC program>
-}
+import PlutusCore.UPLC.PreProcess
 
--- Compile it for formal verification (budget limit: 500 steps)
-#prep_uplc myCompiledScript myScript 500
+open PlutusCore.UPLC.PlutusScript (PlutusScript)
+open PlutusCore.UPLC.Term (Program Version Term Const)
 
--- The generated PrepUPLC instance exposes:
--- myCompiledScript.prop  ← optimized, ready for proof
--- myCompiledScript.exec  ← original, ready for execution
+def answerScript : PlutusScript :=
+  { lang := .PlutusV3
+    script := Program.Program (Version.Version 1 1 0)
+      (Term.Const (Const.Integer 42)) }
+
+#prep_uplc preparedAnswer answerScript 10
+#check preparedAnswer.prop
+#check preparedAnswer.exec
 ```
 
-## Tests
+The final number is a **step limit**, not a CPU or memory `ExBudget`. Programs that take inputs can provide an input-conversion function before that number; see the syntax and example in [`PreProcess.lean`](PlutusCore/UPLC/PreProcess.lean).
 
-The `Tests` library covers:
+## Testing
 
-- **Encoding round-trips** — flat and script (CBOR/hex) encoding correctness
-- **Bitwise operations** — byte-string bitwise op correctness
-- **CBOR** — CBOR encoding/decoding correctness
-- **Cryptographic test vectors** — BLS12-381, BLAKE2b, Keccak-256, RIPEMD-160, SHA-256, SHA-512, SHA3-256
-
-```bash
-lake build Tests
+```sh
+lake test
+# or: make build_tests
 ```
 
-## General description
+The standard `Tests` target covers encoding and CBOR, bitwise operations, CEK execution, preprocessing, cryptographic vectors, and equality. It includes textual UPLC parser tests. It does **not** run the generated conformance suite.
 
-PlutusCoreBlaster formalizes UPLC evaluation in three layers: syntax, machine, and builtins.
+## Conformance testing
 
-### CEK machines
+The generator in [`scripts/GenConformanceTests.lean`](scripts/GenConformanceTests.lean) derives Lean cases from the [Plutus conformance corpus](https://github.com/IntersectMBO/plutus/tree/master/plutus-conformance). The generated tests compare evaluation results and execution budgets with the reference expectations. Categories that rely on features not yet implemented can be excluded during generation (including array and value/coin operations).
 
-The CEK machine (`UPLC/CekMachine`) implements the standard CEK machine as specified in the Plutus Core specification. Evaluation proceeds through four states:
+The conformance suite needs the external Plutus corpus at `.plutus-conformance/plutus-conformance`. After providing that path, run:
 
-Two version are delivered:
-- **Budget-aware CEK** — tracks an `ExBudget` and halts with an error if the budget is exceeded
-- **Step-counting CEK** — ignores budgets and simply counts the number of steps taken
+```sh
+make gen_conformance_tests excludeNotImplemented=1
+make check_conformance
+```
 
-### Builtin functions
+The [conformance workflow](.github/workflows/ci-conformance.yaml) runs separately from the normal CI. A maintainer can trigger it on a PR with `/run-conformance` or run it manually. A passing `lake test` does not imply that all conformance cases pass.
 
-`UPLC/BuiltinFunctions` provides implementations of all ~50 builtins, except the newer around `coins` and `arrays`, including:
+## Benchmarks
 
-- Integer arithmetic and comparison
-- Byte-string operations
-- Cryptographic primitives (see `Cryptograph`)
-- List, pair, and data constructors/destructors
-- Bitwise operations
+The `#prep_uplc` benchmark suite measures preprocessing time and memory and can compare two runs. See [`Benchmark/README.md`](Benchmark/README.md) for requirements, case selection, commands, and result fields.
 
-### Encoding formats
+```sh
+make build_benchmark
+make bench_prep_uplc BENCH_ARGS="--suite repo,symbolic"
+```
 
-PlutusCoreBlaster supports the two binary wire formats used in the Plutus ecosystem:
+## Current scope
 
-- **Flat** (`.flat`) — compact binary format decoded by `UPLC/FlatEncoding`, specified in Appendix C of the spec
-- **Script** — CBOR-wrapped flat encoding used for on-chain storage, handled by `UPLC/ScriptEncoding`
-
-## Status
-
-| Component | Status |
-|-----------|--------|
-| UPLC syntax & values | ✅ Complete |
-| CEK machine (budget-aware) | ✅ Complete |
-| Builtin functions (Batches 1–7) | ✅ Complete |
-| Flat / script encoding | ✅ Complete |
-| Cryptographic primitives | ✅ Complete |
-| PlutusScript + #prep_uplc | ✅ Complete |
-| Encoding tests | ✅ Passing |
-| Formal proofs (Lemmas) | 🚧 In progress |
-| Conformance tests | 🚧 In progress |
+| Component | State |
+| --- | --- |
+| UPLC syntax and CEK evaluation | Implemented; the budgeted evaluator's termination proof is pending |
+| Text, Flat, and script decoding | Implemented for supported UPLC features |
+| Builtin functions and cryptographic primitives | Implemented for supported batches; array and value/coin features remain open |
+| Standard tests | Built by `lake test` |
+| Formal proofs in `Lemmas` | In progress |
+| Reference conformance | Generated and checked separately; unsupported categories can be excluded |
 
 ## Contributing
 
-We welcome all contributions! Whether it's bug reports, feature requests, documentation improvements, or code contributions, your help is appreciated.
+Bug reports, documentation improvements, tests, and code changes are welcome. Open an [issue](https://github.com/input-output-hk/PlutusCoreBlaster/issues) to discuss a problem or submit a pull request. Before submitting code, run `make check_all`; changes affecting reference behavior may also need a conformance run.
 
-### Ways to Contribute
-
-- Report bugs and issues
-- Suggest new features or improvements
-- Improve documentation
-- Submit pull requests
-
-**Maintained by:**
-- [Jean-Frédéric Etienne](https://github.com/etiennejf)
-- [Romain Soulat](https://github.com/RSoulatIOHK)
-- [Mark Petruska](https://github.com/mpetruska)
-
-**Questions?** Feel free to [open an issue](https://github.com/input-output-hk/PlutusCoreBlaster/issues) or reach out to the maintainers.
+Maintainers: [Jean-Frédéric Etienne](https://github.com/etiennejf), [Romain Soulat](https://github.com/RSoulatIOHK), and [Mark Petruska](https://github.com/mpetruska).

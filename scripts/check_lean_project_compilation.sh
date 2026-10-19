@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 
 exec_found=0
-if [[ $# -eq 1 ]]
+if [[ $# -ge 1 ]]
 then
-  PROJECT_NAME=$1
-  LEAN_FILES=`find $PROJECT_NAME -name '*.lean' 2>/dev/null`
+  LIB_NAME=$1
+  FIND_PATH=${2:-$LIB_NAME}
+  EXCLUDE_PATH=$3
+  if [[ -n "$EXCLUDE_PATH" ]]
+  then
+    # Exclude both the EXCLUDE_PATH directory subtree and its sibling barrel file
+    # (e.g. excluding "Tests/Conformance" drops both "Tests/Conformance/**" and "Tests/Conformance.lean").
+    LEAN_FILES=`find $FIND_PATH -name '*.lean' 2>/dev/null | grep -Ev "^${EXCLUDE_PATH}(/|\.lean$)"`
+  else
+    LEAN_FILES=`find $FIND_PATH -name '*.lean' 2>/dev/null`
+  fi
   EXEC_FILES=`cat lakefile.lean | grep root | sed 's/root := .//g'`
   # build lean project with log
-  echo "Building Lean project $PROJECT_NAME ..."
-  lake build $PROJECT_NAME 2>&1 | tee build.log
+  echo "Building Lean project $LIB_NAME ..."
+  lake build $LIB_NAME 2>&1 | tee build.log
   if [[ $? -ne 0 ]]
   then
     cat build.log
@@ -36,6 +45,9 @@ then
   rm -rf build.log
 else
 cat <<EOF
- usage: check_lean_project_compilation.sh <PROJECT NAME>
+ usage: check_lean_project_compilation.sh <LIB NAME> [<FIND PATH>] [<EXCLUDE PATH>]
+   LIB NAME    : Lake target to build (e.g. Tests, Tests.Conformance)
+   FIND PATH   : directory to walk for .lean files (default: LIB NAME)
+   EXCLUDE PATH: subdirectory under FIND PATH to skip
 EOF
 fi

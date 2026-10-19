@@ -4,7 +4,8 @@ import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.ByteString
+
 namespace PLC
   open PlutusCore.ByteString
   export PlutusCore.ByteString (
@@ -23,8 +24,10 @@ namespace PLC
     BuiltinSemanticsVariant
   )
 end PLC
+
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Utils
 
 -- NOTE: Args are deliberately reversed on the Cek machine stack for performance
 
@@ -40,7 +43,8 @@ def consByteString (semanticsVersion : PLC.BuiltinSemanticsVariant) (Vs : List C
   match Vs with
   | [CekValue.VCon (Const.ByteString bs), CekValue.VCon (Const.Integer x)] =>
        match semanticsVersion with
-       | .defaultFunSemanticsVariantC => tryCatchSome (PLC.consByteStringV2 x bs) (CekValue.VCon ∘ Const.ByteString)
+       | .defaultFunSemanticsVariantC | .defaultFunSemanticsVariantE =>
+           tryCatchSome (PLC.consByteStringV2 x bs) (CekValue.VCon ∘ Const.ByteString)
        | _ => some (CekValue.VCon (Const.ByteString (PLC.consByteStringV1 x bs)))
   | _ => none
 
@@ -86,4 +90,4 @@ def lessThanEqualsByteString (Vs : List CekValue) : Option CekValue :=
       some (CekValue.VCon (Const.Bool (PLC.lessThanEqualsByteString op1 op2)))
   | _ => none
 
-end PlutusCore.UPLC.CekValue
+end PlutusCore.UPLC.BuiltinFunctions.ByteString

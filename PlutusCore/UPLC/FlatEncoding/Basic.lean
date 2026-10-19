@@ -159,7 +159,9 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
           | Const.Data d₁, Const.Data d₂ => some (s₂, Const.PairData (d₁, d₂))
           | _, _ => none
       | _, _ => some (s₂, Const.Pair (c₁, c₂))
-
+  | .AtomicType .TypeBls12_381_G1_element -- BLS values are not serializable
+  | .AtomicType .TypeBls12_381_G2_element
+  | .AtomicType .TypeBls12_381_MlResult   => none
 
 /- Decodes a constant. -/
 def decodeConst (s : List Bool) : Option (List Bool × Const) := do
@@ -258,12 +260,12 @@ def builtinTable : List (Nat × BuiltinFun) :=
     (85, .FindFirstSetBit),
     (86, .Ripemd_160),
     (87, .ExpModInteger),
-    -- (88, .DropList),   -- TODO: implement these for batch 6
+    (88, .DropList),
     -- (89, .LengthOfArray),
     -- (90, .ListToArray),
     -- (91, .IndexArray),
-    -- (92, .Bls12_381_G1_multiScalarMul),
-    -- (93, .Bls12_381_G2_multiScalarMul),
+    (92, .Bls12_381_G1_multiScalarMul),
+    (93, .Bls12_381_G2_multiScalarMul),
     -- (94, .InsertCoin),
     -- (95, .LookupCoin),
     -- (96, .UnionValue),
@@ -278,20 +280,20 @@ def decodeBuiltinFun (_v : Version) (s : List Bool) : Option (List Bool × Built
   .some (s', builtinFun)
 
 /- Decodes a DeBruijn index.
-   Note: the name of the variable is arbitrarily chose to be `dbi_X`. -/
-def varName (debruijn : Nat) : String := s!"dbi_{debruijn}"
-
-/- Decodes a DeBruijn index and generates a variable name for it. -/
-def decodeVar (nextDebruijn : Nat) (s : List Bool) : Option (List Bool × String) := do
+   Flat encodes 1-based relative indices (index 0 is invalid); `Term.Var`
+   uses 0-based indices (0 = innermost binder), so we subtract 1. -/
+def decodeVar (s : List Bool) : Option (List Bool × Nat) := do
   let (s', n) ← decodeNat s
   let _       ← Option.filter (λ () => n > 0) (.some ())
-  .some (s', varName (nextDebruijn - n))
+  .some (s', n - 1)
 
-/- Decodes a UPLC term. -/
+/- Decodes a UPLC term.
+   `nextDeBruijn` counts enclosing binders and is used only to synthesize
+   display names for lambdas; variables decode to plain indices. -/
 partial def decodeTerm (v : Version) (nextDeBruijn : Nat) : List Bool → Option (List Bool × Term)
-  | false :: false :: false :: false :: s => Prod.map id .Var                          <$> decodeVar nextDeBruijn s
+  | false :: false :: false :: false :: s => Prod.map id .Var                          <$> decodeVar s
   | false :: false :: false :: true  :: s => Prod.map id .Delay                        <$> decodeTerm v nextDeBruijn s
-  | false :: false :: true  :: false :: s => Prod.map id (.Lam (varName nextDeBruijn)) <$> decodeTerm v (nextDeBruijn + 1) s
+  | false :: false :: true  :: false :: s => Prod.map id .Lam  <$> decodeTerm v (nextDeBruijn + 1) s
   | false :: false :: true  :: true  :: s => do
       let (s' , t₁) ← decodeTerm v nextDeBruijn s
       let (s'', t₂) ← decodeTerm v nextDeBruijn s'

@@ -7,13 +7,38 @@ open PlutusCore.UPLC.Term
 inductive ExpectedBuiltinArg
 | ArgV : ExpectedBuiltinArg
 | ArgQ : ExpectedBuiltinArg
-deriving Repr
+deriving Repr, BEq
+
+instance : LawfulBEq ExpectedBuiltinArg where
+  eq_of_beq {a b} h := by cases a <;> cases b <;> first | rfl | contradiction
+  rfl {a} := by cases a <;> rfl
+
+instance : DecidableEq ExpectedBuiltinArg := instDecidableEqOfLawfulBEq
 
 -- Define expectedBuiltinArgs
 inductive ExpectedBuiltinArgs
 | One : ExpectedBuiltinArg → ExpectedBuiltinArgs
 | More : ExpectedBuiltinArg → ExpectedBuiltinArgs → ExpectedBuiltinArgs
-deriving Repr
+deriving Repr, BEq
+
+theorem ExpectedBuiltinArgs.eq_of_beq :
+    ∀ {a b : ExpectedBuiltinArgs}, (a == b) = true → a = b := by
+  intro a b h
+  change instBEqExpectedBuiltinArgs.beq _ _ = true at h
+  cases a <;> cases b <;> simp_all [instBEqExpectedBuiltinArgs.beq]
+  case More.More => exact ExpectedBuiltinArgs.eq_of_beq h.2
+
+theorem ExpectedBuiltinArgs.beq_refl : ∀ a : ExpectedBuiltinArgs, (a == a) = true := by
+  intro a
+  change instBEqExpectedBuiltinArgs.beq _ _ = true
+  cases a <;> simp [instBEqExpectedBuiltinArgs.beq]
+  case More => exact ExpectedBuiltinArgs.beq_refl _
+
+instance : LawfulBEq ExpectedBuiltinArgs where
+  eq_of_beq := ExpectedBuiltinArgs.eq_of_beq
+  rfl := ExpectedBuiltinArgs.beq_refl _
+
+instance : DecidableEq ExpectedBuiltinArgs := instDecidableEqOfLawfulBEq
 
 namespace ExpectedArgNotations
 
@@ -106,14 +131,32 @@ def expectedArgs (b : BuiltinFun) : ExpectedBuiltinArgs :=
   | Bls12_381_G2_hashToGroup        => ArgV ⊙ One ArgV
   | Bls12_381_G2_compress           => One ArgV
   | Bls12_381_G2_uncompress         => One ArgV
+  | Bls12_381_G1_multiScalarMul     => ArgV ⊙ One ArgV
+  | Bls12_381_G2_multiScalarMul     => ArgV ⊙ One ArgV
   | Bls12_381_millerLoop            => ArgV ⊙ One ArgV
   | Bls12_381_mulMlResult           => ArgV ⊙ One ArgV
   | Bls12_381_finalVerify           => ArgV ⊙ One ArgV
-  | Keccak_256                      => ArgV ⊙ One ArgV
-  | Blake2b_224                     => ArgV ⊙ One ArgV
+  | Keccak_256                      => One ArgV
+  | Blake2b_224                     => One ArgV
   | IntegerToByteString             => ArgV ⊙ ArgV ⊙ One ArgV
   | ByteStringToInteger             => ArgV ⊙ One ArgV
-  | _ => One ExpectedBuiltinArg.ArgV
+  -- Batch 5 (bitwise)
+  | AndByteString                   => ArgV ⊙ ArgV ⊙ One ArgV
+  | OrByteString                    => ArgV ⊙ ArgV ⊙ One ArgV
+  | XorByteString                   => ArgV ⊙ ArgV ⊙ One ArgV
+  | ComplementByteString            => One ArgV
+  | ReadBit                         => ArgV ⊙ One ArgV
+  | WriteBits                       => ArgV ⊙ ArgV ⊙ One ArgV
+  | ReplicateByte                   => ArgV ⊙ One ArgV
+  | ShiftByteString                 => ArgV ⊙ One ArgV
+  | RotateByteString                => ArgV ⊙ One ArgV
+  | CountSetBits                    => One ArgV
+  | FindFirstSetBit                 => One ArgV
+  | Ripemd_160                      => One ArgV
+  -- Batch 6
+  | ExpModInteger                   => ArgV ⊙ ArgV ⊙ One ArgV
+  -- Batch 7
+  | DropList                        => ArgQ ⊙ ArgV ⊙ One ArgV
 
 namespace BuiltinNotations
 

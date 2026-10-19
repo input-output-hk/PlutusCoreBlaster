@@ -1,9 +1,11 @@
 import PlutusCore.Integer
+import PlutusCore.Crypto.ExpMod
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
 
-namespace PlutusCore.UPLC.CekValue
+namespace PlutusCore.UPLC.BuiltinFunctions.Integer
+
 namespace PLC
   open PlutusCore.Integer
   export PlutusCore.Integer (
@@ -19,9 +21,13 @@ namespace PLC
     lessThanInteger
     lessThanEqualsInteger
   )
+  open PlutusCore.Crypto.ExpMod
+  export PlutusCore.Crypto.ExpMod (expModInteger)
 end PLC
+
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
+open PlutusCore.UPLC.BuiltinFunctions.Utils
 
 -- NOTE: Args are deliberately reversed on the Cek machine stack for performance
 
@@ -50,28 +56,36 @@ def multiplyInteger (Vs : List CekValue) : Option CekValue :=
 def divideInteger (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Integer op2), CekValue.VCon (Const.Integer op1)] =>
-       tryCatchSome (PLC.divideInteger op1 op2) (CekValue.VCon ∘ Const.Integer)
+       if op2 != 0
+       then some (CekValue.VCon (Const.Integer (Int.fdiv op1 op2)))
+       else none
   | _ => none
 
 -- Define modInteger (truncates towards negative infinity)
 def modInteger (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Integer op2), CekValue.VCon (Const.Integer op1)] =>
-      tryCatchSome (PLC.modInteger op1 op2) (CekValue.VCon ∘ Const.Integer)
+        if op2 != 0
+        then some (CekValue.VCon (Const.Integer (Int.fmod op1 op2)))
+        else none
   | _ => none
 
 -- Define quotientInteger (truncates towards zero)
 def quotientInteger (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Integer op2), CekValue.VCon (Const.Integer op1)] =>
-      tryCatchSome (PLC.quotientInteger op1 op2) (CekValue.VCon ∘ Const.Integer)
+        if op2 != 0
+        then some (CekValue.VCon (Const.Integer (Int.tdiv op1 op2)))
+        else none
   | _ => none
 
 -- Define remainderInteger (truncates towards zero)
 def remainderInteger (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.Integer op2), CekValue.VCon (Const.Integer op1)] =>
-      tryCatchSome (PLC.remainderInteger op1 op2) (CekValue.VCon ∘ Const.Integer)
+        if op2 != 0
+        then some (CekValue.VCon (Const.Integer (Int.tmod op1 op2)))
+        else none
   | _ => none
 
 
@@ -96,4 +110,11 @@ def lessThanEqualsInteger (Vs : List CekValue) : Option CekValue :=
       some (CekValue.VCon (Const.Bool (PLC.lessThanEqualsInteger op1 op2)))
   | _ => none
 
-end PlutusCore.UPLC.CekValue
+-- Define expModInteger: args reversed as [m, e, b]
+def expModInteger (Vs : List CekValue) : Option CekValue :=
+  match Vs with
+  | [CekValue.VCon (Const.Integer m), CekValue.VCon (Const.Integer e), CekValue.VCon (Const.Integer b)] =>
+      tryCatchSome (PLC.expModInteger b e m) (CekValue.VCon ∘ Const.Integer)
+  | _ => none
+
+end PlutusCore.UPLC.BuiltinFunctions.Integer

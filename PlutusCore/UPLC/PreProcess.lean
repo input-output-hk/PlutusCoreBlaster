@@ -147,7 +147,7 @@ def preprocessImp : CommandElab := fun stx => do
       let termType := Lean.mkConst ``UPLC.Term.Term
       let uplcProg := mkProj ``PlutusScript 1 plutusScript
       match (← validConversionFun stx[3]) with
-      | none => return mkApp3 cekExec uplcProg (mkApp (Lean.mkConst ``List.nil) termType) (mkNatLit unit)
+      | none => return mkApp3 cekExec uplcProg (mkApp (Lean.mkConst ``List.nil [levelZero]) termType) (mkNatLit unit)
       | some f =>
            Meta.lambdaTelescope (← Meta.etaExpand f) fun xs _ =>
              mkLambdaFVars xs (mkApp3 cekExec uplcProg (mkAppN f xs) (mkNatLit unit))

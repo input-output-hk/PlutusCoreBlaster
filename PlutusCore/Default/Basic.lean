@@ -8,18 +8,18 @@ open PlutusCore.UPLC.Term
 
 /- Semantics variants depend on both the protocol version and the ledger language.
 
-   Here's a table specifying the mapping in full:
+   Here's a table specifying the mapping in full (as of plutus 1.64.0.0 / Van Rossem era):
 
     plutus-version  pre-Conway  post-Conway
-                 1           A            B
-                 2           A            B
-                 3           C            C
+                 1           A            D
+                 2           A            D
+                 3           C            E
 
   I.e. for example
 
-  - post-Conway 'PlutusV1' corresponds to 'DefaultFunSemanticsVariantB'
+  - post-Conway 'PlutusV1' corresponds to 'DefaultFunSemanticsVariantD'
   - pre-Conway  'PlutusV2' corresponds to 'DefaultFunSemanticsVariantA'
-  - post-Conway 'PlutusV3' corresponds to 'DefaultFunSemanticsVariantC'
+  - post-Conway 'PlutusV3' corresponds to 'DefaultFunSemanticsVariantE'
   -/
 
 /-- Plutus version. -/
@@ -48,16 +48,19 @@ inductive BuiltinSemanticsVariant
   | defaultFunSemanticsVariantA
   | defaultFunSemanticsVariantB
   | defaultFunSemanticsVariantC
+  | defaultFunSemanticsVariantD
+  | defaultFunSemanticsVariantE
 
 instance : Inhabited BuiltinSemanticsVariant where
-  default := .defaultFunSemanticsVariantC
+  default := .defaultFunSemanticsVariantE
 
 def PlutusVersion.toSemanticsVariant : PlutusVersion → ProtocolVersion → BuiltinSemanticsVariant
   | .plutusV1, .preConway  => .defaultFunSemanticsVariantA
-  | .plutusV1, .postConway => .defaultFunSemanticsVariantB
+  | .plutusV1, .postConway => .defaultFunSemanticsVariantD
   | .plutusV2, .preConway  => .defaultFunSemanticsVariantA
-  | .plutusV2, .postConway => .defaultFunSemanticsVariantB
-  | .plutusV3, _           => .defaultFunSemanticsVariantC
+  | .plutusV2, .postConway => .defaultFunSemanticsVariantD
+  | .plutusV3, .preConway  => .defaultFunSemanticsVariantC
+  | .plutusV3, .postConway => .defaultFunSemanticsVariantE
 
 end Internal
 

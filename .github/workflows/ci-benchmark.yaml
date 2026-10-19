@@ -1,0 +1,386 @@
+name: ci-benchmark
+
+# Runs the `#prep_uplc` benchmark suite (Benchmark/README.md) and publishes its results:
+# the run's summary page shows the full report, the whole run directory is uploaded as an
+# artifact, and a comment-triggered run also comments on the PR and reports a `benchmark` check.
+#
+# Trigger with a PR comment, from a maintainer, of the form
+#   /run-benchmark [<plutus-ref>] [<option>...]
+# e.g. `/run-benchmark`, `/run-benchmark --suite repo,symbolic`,
+# `/run-benchmark 1.64.0.0 --filter example/ --runs 3`; or run the workflow manually.
+#
+# The PR head can change between the comment and the checkout: GitHub does not report when a
+# commit was pushed, and commit dates are set by their author. So the job that runs the PR's
+# code (`benchmark`) gets a read-only token and keeps no credentials, and only the jobs that
+# never run it (`authorize`, `report`) can write to the PR. The report names the commit it
+# benchmarked.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      plutus_ref:
+        description: "IntersectMBO/plutus ref (branch, tag, or commit) whose conformance tests to benchmark"
+        required: false
+        default: "master"
+      bench_args:
+        description: "bench_prep_uplc options, e.g. --suite repo,symbolic --filter example/"
+        required: false
+        default: ""
+  issue_comment:
+    types: [created]
+
+# Only authorized requests share a concurrency group. Other comments get their own group,
+# so an unauthorized /run-benchmark comment cannot cancel a benchmark in progress.
+concurrency:
+  group: >-
+    ci-benchmark-${{ github.event.issue.number || github.ref }}-${{
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        startsWith(github.event.comment.body, '/run-benchmark') &&
+        (github.event.comment.author_association == 'OWNER' ||
+         github.event.comment.author_association == 'MEMBER' ||
+         github.event.comment.author_association == 'COLLABORATOR'))) && 'run' || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  LEAN_VERSION: "4.24.0"
+  Z3_VERSION: "4.15.2"
+  GLIBC_Z3: "2.39"
+  # Where the benchmark run directory goes, relative to the PlutusCoreBlaster checkout.
+  RUN_DIR: Benchmark/results/ci
+  ARTIFACT: prep-uplc-benchmark-${{ github.run_id }}
+
+jobs:
+  # Checks the trigger and prepares the run. Never runs the PR's code.
+  authorize:
+    # Run on:
+    #   - any workflow_dispatch invocation, OR
+    #   - a PR comment whose body starts with the trigger phrase, authored by
+    #     a project maintainer (repo owner, org member, or invited collaborator).
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       startsWith(github.event.comment.body, '/run-benchmark') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+    outputs:
+      repo: ${{ steps.pr.outputs.repo }}
+      sha: ${{ steps.pr.outputs.sha }}
+      check_id: ${{ steps.check.outputs.id }}
+      plutus_ref: ${{ steps.opts.outputs.plutus_ref }}
+      args: ${{ steps.opts.outputs.args }}
+
+    steps:
+      - name: Acknowledge comment trigger
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Add an "eyes" reaction to the triggering comment so the author sees
+          # the workflow picked it up. Best-effort — failures here don't matter.
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content='eyes' || true
+
+      - name: Resolve PR head
+        if: github.event_name == 'issue_comment'
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO_OWNER: ${{ github.event.repository.owner.login }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          # The commit the benchmark checks out, by SHA. It is the PR head now, which may be newer
+          # than the commit reviewed when the comment was posted (see the note at the top).
+          query='query($owner: String!, $repo: String!, $num: Int!) {
+            repository(owner: $owner, name: $repo) {
+              pullRequest(number: $num) {
+                headRefOid
+                headRepository { nameWithOwner }
+              }
+            }
+          }'
+          result=$(gh api graphql -f query="$query" -F owner="$REPO_OWNER" -F repo="$REPO_NAME" -F num="$PR_NUMBER")
+          head_sha=$(echo "$result" | jq -r '.data.repository.pullRequest.headRefOid')
+          head_repo=$(echo "$result" | jq -r '.data.repository.pullRequest.headRepository.nameWithOwner')
+          echo "PR head: $head_repo@$head_sha"
+          echo "sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "repo=$head_repo" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve benchmark options
+        id: opts
+        env:
+          # Passed via env vars: untrusted input is never interpolated into the script.
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          DISPATCH_REF: ${{ github.event.inputs.plutus_ref }}
+          DISPATCH_ARGS: ${{ github.event.inputs.bench_args }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          set -f  # no filename expansion of the tokens
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+            # `/run-benchmark [<plutus-ref>] [<option>...]`, on the first line of the comment.
+            first_line=$(printf '%s\n' "$COMMENT_BODY" | head -n1 | tr -d '\r')
+            rest=$(printf '%s' "$first_line" | sed -E 's|^/run-benchmark[[:space:]]*||')
+            read -ra tokens <<< "$rest"
+            ref=master
+            if (( ${#tokens[@]} > 0 )) && [[ "${tokens[0]}" != -* ]]; then
+              ref=${tokens[0]}
+              tokens=("${tokens[@]:1}")
+            fi
+          else
+            ref=${DISPATCH_REF:-master}
+            read -ra tokens <<< "$DISPATCH_ARGS"
+          fi
+          # Whitelist refs to git-safe characters (alnum, dot, dash, underscore, slash).
+          if ! [[ "$ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Refusing unsafe plutus ref: $ref"
+            exit 1
+          fi
+          # Only these driver options, each with one value made of safe characters.
+          args=()
+          i=0
+          while (( i < ${#tokens[@]} )); do
+            opt=${tokens[i]}
+            case "$opt" in
+              --suite|--filter|--exclude|--max-steps|--symbolic-steps|--timeout|--max-rss-mb|--runs|-j|--jobs) ;;
+              *)
+                echo "::error::Unsupported option '$opt'. Allowed: --suite --filter --exclude" \
+                     "--max-steps --symbolic-steps --timeout --max-rss-mb --runs --jobs"
+                exit 1 ;;
+            esac
+            val=${tokens[i+1]:-}
+            if ! [[ "$val" =~ ^[A-Za-z0-9._/,@+-]+$ ]]; then
+              echo "::error::Invalid value for $opt: '$val'"
+              exit 1
+            fi
+            args+=("$opt" "$val")
+            i=$((i + 2))
+          done
+          echo "plutus_ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "args=${args[*]}" >> "$GITHUB_OUTPUT"
+          echo "Resolved IntersectMBO/plutus ref: $ref; benchmark options: ${args[*]:-(defaults)}"
+
+      # The last step: validate options before creating a check that report must complete.
+      - name: Create check run on PR head
+        if: github.event_name == 'issue_comment'
+        id: check
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # A Check Run on the PR head SHA makes the benchmark appear in the PR's "Checks" panel.
+          # Best-effort: without it the report job skips finalizing it and the benchmark still runs.
+          id=$(gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/check-runs" \
+            -f name='benchmark' \
+            -f head_sha="$HEAD_SHA" \
+            -f status='in_progress' \
+            -f details_url="$RUN_URL" \
+            --jq '.id')
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  # Builds and runs the PR's code, so it gets a read-only token and keeps no credentials.
+  benchmark:
+    needs: authorize
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact_url: ${{ steps.upload.outputs.artifact-url }}
+
+    steps:
+      - name: Setup Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "/home/runner/.elan/bin" >> $GITHUB_PATH
+          chmod +x /home/runner/.elan/bin/*
+
+      - name: Fix Elan version
+        run: |
+          elan toolchain install ${{ env.LEAN_VERSION }}
+          elan default ${{ env.LEAN_VERSION }}
+
+      - name: Install Z3
+        run: |
+          cd /home/runner/
+          wget -q https://github.com/Z3Prover/z3/releases/download/z3-${{ env.Z3_VERSION }}/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          unzip -q z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
+
+      - name: Tools version
+        run: |
+          elan --version
+          lake --version
+          lean --version
+          z3 --version
+
+      - name: Checkout PlutusCoreBlaster
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: ${{ needs.authorize.outputs.repo || github.repository }}
+          ref: ${{ needs.authorize.outputs.sha || github.ref }}
+          path: PlutusCoreBlaster
+          persist-credentials: false
+
+      - name: Checkout IntersectMBO/plutus
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: IntersectMBO/plutus
+          ref: ${{ needs.authorize.outputs.plutus_ref }}
+          path: plutus
+          persist-credentials: false
+
+      - name: Symlink .plutus-conformance
+        run: |
+          ln -s "${GITHUB_WORKSPACE}/plutus" "${GITHUB_WORKSPACE}/PlutusCoreBlaster/.plutus-conformance"
+
+      # The conformance cases are read from the generated tests, which must match the plutus
+      # checkout: regenerate them, as ci-conformance does.
+      - name: Generate conformance test suite
+        working-directory: PlutusCoreBlaster
+        run: make gen_conformance_tests excludeNotImplemented=1
+
+      - name: Build benchmark
+        working-directory: PlutusCoreBlaster
+        run: make build_benchmark
+
+      - name: Run benchmark
+        working-directory: PlutusCoreBlaster
+        env:
+          BENCH_ARGS: ${{ needs.authorize.outputs.args }}
+        run: |
+          set -euo pipefail
+          set -f
+          # Defaults sized to the runner: half its cores as parallel cases, its memory (less 2 GB)
+          # shared among them, and 5 minutes per case. Options from the trigger come last and
+          # override them.
+          cores=$(nproc)
+          mem_mb=$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024 ))
+          jobs=$(( cores / 2 > 0 ? cores / 2 : 1 ))
+          max_rss=$(( (mem_mb - 2048) / jobs ))
+          read -ra extra <<< "$BENCH_ARGS"
+          echo "Runner: $cores cores, $mem_mb MB; defaults: -j $jobs --max-rss-mb $max_rss --timeout 300"
+          lake exe bench_prep_uplc run --no-build --out "$RUN_DIR" \
+            -j "$jobs" --max-rss-mb "$max_rss" --timeout 300 "${extra[@]}"
+
+      - name: Show the report on the summary page
+        if: always()
+        working-directory: PlutusCoreBlaster
+        run: |
+          if [[ -f "$RUN_DIR/summary.md" ]]; then
+            cat "$RUN_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload benchmark results
+        if: always()
+        id: upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: ${{ env.ARTIFACT }}
+          path: PlutusCoreBlaster/${{ env.RUN_DIR }}
+          if-no-files-found: warn
+
+  # Reports the results on the PR. Never runs the PR's code: it only reads the uploaded results,
+  # as data.
+  report:
+    needs: [authorize, benchmark]
+    if: always() && needs.authorize.result == 'success' && github.event_name == 'issue_comment'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      checks: write
+
+    steps:
+      - name: Download benchmark results
+        continue-on-error: true
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6.0.0
+        with:
+          name: ${{ env.ARTIFACT }}
+          path: ${{ runner.temp }}/results
+
+      - name: Write the PR comment
+        env:
+          RESULTS: ${{ runner.temp }}/results
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_URL: ${{ needs.benchmark.outputs.artifact_url }}
+          HEAD_REPO: ${{ needs.authorize.outputs.repo }}
+          HEAD_SHA: ${{ needs.authorize.outputs.sha }}
+          PLUTUS_REF: ${{ needs.authorize.outputs.plutus_ref }}
+          BENCH_ARGS: ${{ needs.authorize.outputs.args }}
+          RESULT: ${{ needs.benchmark.result }}
+        run: |
+          set -euo pipefail
+          summary="$RESULTS/summary.md"
+          # The status, time and native-time tables, followed by links to the rest.
+          {
+            echo "### \`#prep_uplc\` benchmark"
+            echo
+            echo "Benchmarked commit: \`$HEAD_SHA\` (${HEAD_REPO}), the PR head when the run started." \
+                 "Check it is the commit you reviewed."
+            echo
+            if [[ -f "$summary" ]]; then
+              echo "[Run ${GITHUB_RUN_ID}]($RUN_URL), with the conformance tests of IntersectMBO/plutus" \
+                   "\`$PLUTUS_REF\`; options: \`${BENCH_ARGS:-defaults}\`."
+              echo "The full report is on the run's summary page;" \
+                   "the per-case results and logs are in the [artifact](${ARTIFACT_URL:-$RUN_URL})."
+              echo
+              awk '/^## Status/ {p = 1} /^## Slowest/ {p = 0} p' "$summary"
+              awk '/^## Native/ {n = 1} n {print; if (/^\|/) t = 1; else if (t && /^$/) exit}' "$summary"
+            else
+              echo "The [benchmark run]($RUN_URL) ended ($RESULT) before producing results."
+            fi
+          } > "$RUNNER_TEMP/comment.md"
+
+      - name: Comment on PR
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body-file "$RUNNER_TEMP/comment.md"
+
+      - name: Finalize check run
+        if: always() && needs.authorize.outputs.check_id != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_ID: ${{ needs.authorize.outputs.check_id }}
+          RESULTS: ${{ runner.temp }}/results
+          # The benchmark job's result: success, failure, cancelled or skipped, all valid
+          # conclusions for the Checks API.
+          CONCLUSION: ${{ needs.benchmark.result }}
+        run: |
+          set -euo pipefail
+          title="#prep_uplc benchmark"
+          if [[ -f "$RESULTS/results.jsonl" ]]; then
+            counts=$(jq -rs 'group_by(.status) | map("\(length) \(.[0].status)") | join(", ")' "$RESULTS/results.jsonl")
+            title="$title: $counts"
+          fi
+          summary=$(cat "$RUNNER_TEMP/comment.md" 2>/dev/null || echo "No results.")
+          jq -n --arg c "$CONCLUSION" --arg t "$title" --arg s "$summary" \
+            '{status: "completed", conclusion: $c, output: {title: $t, summary: $s}}' |
+            gh api --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/check-runs/$CHECK_ID" \
+              --input -
