@@ -56,7 +56,7 @@ compiler='--with-compiler='+a.ghc
 names=['game','parameters','auction','recursive']
 if not a.skip_build:
     run('build-core',['lake','build','Blaster:shared','PlutusCore.UPLC.BlueprintEncoding.Assurance'])
-    run('build-ledger',['lake','build','CardanoLedgerApi.Examples.Auction','PlutusCore.UPLC.BlueprintEncoding.Assurance'],ledger)
+    run('build-ledger',['lake','build','CardanoLedgerApi.V3','PlutusCore.UPLC.BlueprintEncoding.Assurance'],ledger)
     run('build-plutus',['cabal','build',project,compiler,*[f'docusaurus-examples:exe:example-ual-{n}' for n in names],'plutus-tx:test:plutus-tx-test'],a.plutus,timeout=7200)
 generators={n:capture(['cabal','list-bin',project,compiler,f'docusaurus-examples:exe:example-ual-{n}'],a.plutus) for n in names}
 base=core/'Tests/BlueprintVerify'

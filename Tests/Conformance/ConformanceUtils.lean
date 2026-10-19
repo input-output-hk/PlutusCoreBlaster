@@ -55,8 +55,7 @@ private instance : Inhabited Term := ⟨.Error⟩
 -- VLam and VDelay close their bodies using their environments before
 -- comparing, so closures that differ only in how the environment is
 -- folded into the body still compare as equal. With de Bruijn indices,
--- comparison of the closed terms is plain structural equality (BEq Term),
--- which ignores display-only binder names.
+-- comparison of the closed terms is plain structural equality (BEq Term).
 mutual
   -- Convert a CekValue back to a Term for substitution.
   private def cekValueToTerm : Nat → CekValue → Term

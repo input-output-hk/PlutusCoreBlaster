@@ -4,6 +4,7 @@ import PlutusCore.UPLC.BlueprintEncoding
 import PlutusCore.UPLC.BuiltinFunctions
 import PlutusCore.UPLC.Builtins
 import PlutusCore.UPLC.CekMachine
+import PlutusCore.UPLC.CekMachine.DecidableEq
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.FlatEncoding
 import PlutusCore.UPLC.PlutusScript

@@ -161,11 +161,11 @@ A function proposition must depend on its compiled program. Errors and exhausted
 steps cannot satisfy a return-value predicate.
 
 The Plutus `Example/Ual/Auction` example keeps annotations in `FormalSpec.hs`,
-with imported bindings from `OnChain.hs`/`AuctionValidator.hs`. Its ledger model
-and end-to-end runner live in CardanoLedgerApiBlaster:
-`CardanoLedgerApi/Examples/Auction.lean` and
-`Tests/BlueprintVerify/run_auction.py`. The runner checks concrete bid/payout
-examples, quantified claims, and rejects altered helper code, wrong wire types,
+with imported bindings from `OnChain.hs`/`AuctionValidator.hs`. Its scenario
+constructors are emitted as assurance formal fragments from that detached spec;
+the verifier imports only the general `CardanoLedgerApi.V3` library. The
+end-to-end runner lives at `CardanoLedgerApiBlaster/Tests/BlueprintVerify/run_auction.py`.
+It checks quantified bid/payout claims and rejects altered helper code, wrong wire types,
 invalid scopes and exhausted fuel. It writes separate evidence-bearing output.
 Use a Z3 compatible with the loaded Blaster checkout; the environment manifest
 pins the selected binary rather than assuming a globally installed version.
