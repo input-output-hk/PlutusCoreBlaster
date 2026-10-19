@@ -66,7 +66,7 @@ mutual
     cases a <;> cases b <;> simp_all [constBeq]
     case ConstList.ConstList => exact listBeq_true_imp_eq _ _ h
     case Pair.Pair => exact Prod.ext (constBeq_true_imp_eq _ _ h.1) (constBeq_true_imp_eq _ _ h.2)
-    case ConstArray.ConstArray => exact arrayBeq_true_imp_eq _ _ h
+    case ConstArray.ConstArray => exact listBeq_true_imp_eq _ _ h
 
   theorem listBeq_true_imp_eq : ∀ (a b : List Const), listBeq a b = true → a = b := by
     intro a b h
@@ -85,7 +85,7 @@ mutual
     cases a <;> simp [constBeq]
     case ConstList => exact listBeq_refl _
     case Pair => exact ⟨constBeq_refl _, constBeq_refl _⟩
-    case ConstArray => exact arrayBeq_refl _
+    case ConstArray => exact listBeq_refl _
 
   theorem listBeq_refl : ∀ a : List Const, listBeq a a = true := by
     intro a
