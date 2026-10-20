@@ -26,7 +26,7 @@ lean_exe «gen_conformance_tests» where
 
 -- `#prep_uplc` benchmark harness (see Benchmark/README.md).
 -- Must not be precompiled: its generated cases import
--- `PlutusCore.UPLC.ScriptEncoding.Tests`, whose native code would then have to be built.
+-- `Tests.UPLC.ScriptEncoding.Tests`, whose native code would then have to be built.
 lean_lib «Benchmark»
 
 lean_exe «bench_prep_uplc» where

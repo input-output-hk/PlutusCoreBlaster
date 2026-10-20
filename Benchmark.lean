@@ -3,4 +3,4 @@
 -- `lake build Benchmark` prepares them all before any case runs.
 import Benchmark.PrepUplc.Harness
 import Benchmark.PrepUplc.Inputs
-import PlutusCore.UPLC.ScriptEncoding.Tests
+import Tests.UPLC.ScriptEncoding.Tests

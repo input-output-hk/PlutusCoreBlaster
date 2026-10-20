@@ -1,5 +1,5 @@
 import PlutusCore.UPLC.CekMachine.DecidableEq
-import PlutusCore.UPLC.CekMachine.Tests
+import Tests.UPLC.CekMachine.Tests
 
 namespace PlutusCore.UPLC.CekMachine
 
