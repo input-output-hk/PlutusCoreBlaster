@@ -1,6 +1,7 @@
 import PlutusCore.Data
 import PlutusCore.Integer
 import PlutusCore.ByteString
+import PlutusCore.String
 
 namespace PlutusCore.IsData
 
@@ -37,11 +38,18 @@ instance : IsData Unit where
   toData   _ := Data.Constr 0 []
   fromData | Data.Constr 0 [] => some () | _ => none
 
-/-- On-chain `Data` has no text type; a schema `#string` field is carried as a
-    `ByteString` payload (mirroring how `ByteString` already wraps a `String`). -/
+/-- A UTF-8 text view of `Data.B`. Decoding fails on invalid UTF-8 or character
+    values outside the byte range. Claims quantified over `String` cover valid
+    UTF-8 text only; use `ByteString` or `Data` to include arbitrary payloads.
+    Native UPLC strings are represented separately by `Const.String`. -/
 instance : IsData String where
-  toData   s := Data.B { data := s }
-  fromData | Data.B b => some b.data | _ => none
+  toData s := Data.B (PlutusCore.String.encodeUtf8 s)
+  fromData
+  | Data.B b =>
+    if b.data.data.all (fun c => c.toNat < 256) then
+      (PlutusCore.String.decodeUtf8 b).toOption
+    else none
+  | _ => none
 
 instance [IsData α] : IsData (Option α) where
   toData | none   => Data.Constr 1 []

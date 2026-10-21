@@ -33,8 +33,8 @@ run_cmd do
   match Wire.nativeList [.I 7] (.I 0), Wire.nativePair (.I 7, .I 8) (.I 0) with
   | .Halt (.VCon (.ConstDataList [.I 7])), .Halt (.VCon (.PairData (.I 7, .I 8))) => pure ()
   | _, _ => throw (IO.userError "native container encoding mismatch")
-  match Wire.nativeBool true (.I 0), Wire.nativeString "hi" (.I 0), Wire.nativeUnit () (.I 0) with
-  | .Halt (.VCon (.Bool true)), .Halt (.VCon (.String "hi")), .Halt (.VCon .Unit) => pure ()
+  match Wire.nativeBool true (.I 0), Wire.nativeString "é€😀" (.I 0), Wire.nativeUnit () (.I 0) with
+  | .Halt (.VCon (.Bool true)), .Halt (.VCon (.String "é€😀")), .Halt (.VCon .Unit) => pure ()
   | _, _, _ => throw (IO.userError "native primitive encoding mismatch")
 
 -- Raw Flat Data artifacts must consume their complete embedded CBOR payload.

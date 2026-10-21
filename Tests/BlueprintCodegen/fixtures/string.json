@@ -18,6 +18,12 @@
         }
       ]
     },
-    "Str": { "dataType": "#string" }
+    "Str": { "dataType": "#string" },
+    "StrList": {
+      "title": "StrList",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [{ "title": "labels", "dataType": "list", "items": { "$ref": "#/definitions/Str" } }]
+    }
   }
 }
