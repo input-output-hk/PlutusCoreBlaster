@@ -83,6 +83,22 @@ theorem runSteps_eq_stepN (sv : BuiltinSemanticsVariant) (s : State) (n : Nat) :
       | Eval st rho t => exact ih (step sv (State.Eval st rho t))
       | Return st v => exact ih (step sv (State.Return st v))
 
+/-- The assurance runner retains unfinished states at the same step index as `stepN`. -/
+theorem runStepsPreservingState_eq_stepN (sv : BuiltinSemanticsVariant) (s : State)
+    (n : Nat) : runStepsPreservingState sv s n = stepN sv s n := by
+  induction n generalizing s with
+  | zero => cases s <;> rfl
+  | succ n ih =>
+      cases s with
+      | Halt V =>
+          simp only [runStepsPreservingState, stepN, step]
+          exact (stepN_of_terminal sv (State.Halt V) (Or.inl ⟨V, rfl⟩) n).symm
+      | Error =>
+          simp only [runStepsPreservingState, stepN, step]
+          exact (stepN_of_terminal sv State.Error (Or.inr rfl) n).symm
+      | Eval st rho t => exact ih (step sv (State.Eval st rho t))
+      | Return st v => exact ih (step sv (State.Return st v))
+
 /-! ### Program execution -/
 
 /-- A program's halt result does not depend on how much fuel it was given, past enough. -/
@@ -92,9 +108,7 @@ theorem cekExecuteProgramWithSemanticVariant_halt_stable
     cekExecuteProgramWithSemanticVariant sv p params (n + m) = State.Halt V := by
   cases p with
   | Program ver body =>
-      simp only [cekExecuteProgramWithSemanticVariant, runSteps_eq_stepN] at h ⊢
-      have hs : stepN sv (initialState (applyParams body params)) n = State.Halt V := by
-        split at h <;> simp_all
-      rw [stepN_fix sv _ n (Or.inl ⟨V, hs⟩) m, hs]
+      simp only [cekExecuteProgramWithSemanticVariant, runStepsPreservingState_eq_stepN] at h ⊢
+      rw [stepN_fix sv _ n (Or.inl ⟨V, h⟩) m, h]
 
 end PlutusCore.UPLC.CekMachine

@@ -1,0 +1,23 @@
+{
+  "preamble": { "title": "map_fixture", "version": "1.0.0", "plutusVersion": "v3" },
+  "validators": [
+    {
+      "title": "mapv.mapv.spend",
+      "datum": { "title": "datum", "schema": { "$ref": "#/definitions/MapDatum" } }
+    }
+  ],
+  "definitions": {
+    "MapDatum": {
+      "title": "MapDatum",
+      "anyOf": [
+        {
+          "title": "MapDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [ { "title": "prices", "$ref": "#/definitions/Prices" } ]
+        }
+      ]
+    },
+    "Prices": { "dataType": "map", "keys": { "dataType": "bytes" }, "values": { "dataType": "integer" } }
+  }
+}

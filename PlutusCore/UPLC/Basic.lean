@@ -1,4 +1,5 @@
 
+import PlutusCore.UPLC.BlueprintEncoding
 import PlutusCore.UPLC.BuiltinFunctions
 import PlutusCore.UPLC.FlatEncoding
 import PlutusCore.UPLC.PlutusScript

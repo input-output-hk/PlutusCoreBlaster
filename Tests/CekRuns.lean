@@ -55,9 +55,9 @@ example (m : Nat) :
 def dataProgram : Program :=
   Program.Program (Version.Version 1 1 0) dataTerm
 
--- One step short of enough fuel the program is an `Error`.
-example : cekExecuteProgramWithSemanticVariant testSemanticsVariant dataProgram [] 4
-    = State.Error := by decide
+-- One step short of enough fuel the assurance runner retains an unfinished state.
+example : ¬ terminal (cekExecuteProgramWithSemanticVariant testSemanticsVariant dataProgram [] 4) :=
+  by decide
 
 -- At five and at every larger fuel the program halts on the `Data` constant.
 example : cekExecuteProgramWithSemanticVariant testSemanticsVariant dataProgram [] 5

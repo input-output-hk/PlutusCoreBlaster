@@ -1,0 +1,46 @@
+{
+  "preamble": { "title": "nested_fixture", "version": "1.0.0", "plutusVersion": "v3" },
+  "validators": [
+    {
+      "title": "nv.nv.spend",
+      "datum": { "title": "datum", "schema": { "$ref": "#/definitions/Vault" } }
+    }
+  ],
+  "definitions": {
+    "Vault": {
+      "title": "Vault",
+      "anyOf": [
+        {
+          "title": "Vault",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            { "title": "owner", "$ref": "#/definitions/Credential" },
+            { "title": "assets", "$ref": "#/definitions/Assets" }
+          ]
+        }
+      ]
+    },
+    "Credential": {
+      "title": "Credential",
+      "anyOf": [
+        { "title": "VerificationKey", "dataType": "constructor", "index": 0, "fields": [ { "$ref": "#/definitions/H" } ] },
+        { "title": "Script", "dataType": "constructor", "index": 1, "fields": [ { "$ref": "#/definitions/H" } ] }
+      ]
+    },
+    "Assets": { "dataType": "list", "items": { "$ref": "#/definitions/Asset" } },
+    "Asset": {
+      "title": "Asset",
+      "anyOf": [
+        {
+          "title": "Asset",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [ { "title": "name", "$ref": "#/definitions/H" }, { "title": "amount", "$ref": "#/definitions/I" } ]
+        }
+      ]
+    },
+    "H": { "dataType": "bytes" },
+    "I": { "dataType": "integer" }
+  }
+}

@@ -1,0 +1,92 @@
+name: compiled-assurance
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: assurance-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  workspace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: PlutusCoreBlaster
+      - name: Read coordinated source pins
+        id: pins
+        run: |
+          python3 - <<'PYCODE'
+          import json, os, re
+          d = json.load(open('PlutusCoreBlaster/scripts/assurance-workspace.json'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              assert re.fullmatch('[0-9a-f]{40}', d['blasterCommit'])
+              print('blaster=' + d['blasterCommit'], file=out)
+              for name, item in d['repositories'].items():
+                  assert re.fullmatch('[0-9a-f]{40}', item['commit'])
+                  print(name + '=' + item['commit'], file=out)
+          PYCODE
+      - uses: actions/checkout@v6
+        with:
+          repository: input-output-hk/Lean-blaster
+          ref: ${{ steps.pins.outputs.blaster }}
+          path: Lean-blaster
+      - uses: actions/checkout@v6
+        with:
+          repository: RSoulatIOHK/plutus
+          ref: ${{ steps.pins.outputs.plutus }}
+          path: plutus
+      - uses: actions/checkout@v6
+        with:
+          repository: RSoulatIOHK/CIPs
+          ref: ${{ steps.pins.outputs.cips }}
+          path: CIPs
+      - uses: actions/checkout@v6
+        with:
+          repository: input-output-hk/UniversalAnnotationLanguage
+          ref: ${{ steps.pins.outputs.ual }}
+          path: UniversalAnnotationLanguage
+      - uses: actions/checkout@v6
+        with:
+          repository: input-output-hk/CardanoLedgerApiBlaster
+          ref: ${{ steps.pins.outputs.ledger }}
+          path: CardanoLedgerApiBlaster
+      - name: Install Lean toolchain
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.24.0
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: actions/cache@v4
+        id: solver
+        with:
+          path: ${{ runner.temp }}/assurance-z3
+          key: assurance-z3-${{ runner.os }}-${{ hashFiles('Lean-blaster/scripts/build-assurance-z3.sh') }}
+      - name: Build pinned solver
+        if: steps.solver.outputs.cache-hit != 'true'
+        run: bash Lean-blaster/scripts/build-assurance-z3.sh "$RUNNER_TEMP/assurance-z3"
+      - name: Python schema checker
+        run: |
+          python3 -m venv "$RUNNER_TEMP/schema-python"
+          "$RUNNER_TEMP/schema-python/bin/pip" install -r CIPs/CIP-XXXX/tests/requirements.txt
+      - name: Build and verify clean workspace
+        working-directory: plutus
+        env:
+          ASSURANCE_RESULTS: ${{ github.workspace }}/assurance-results
+        run: |
+          nix develop --accept-flake-config .#ghc96 --command bash -euc '
+            export PATH="$HOME/.elan/bin:$PATH"
+            cabal update --project-file=cabal.assurance.project
+            "$RUNNER_TEMP/schema-python/bin/python" ../PlutusCoreBlaster/scripts/verify_assurance_workspace.py \
+              --plutus "$PWD" --cips "$PWD/../CIPs" --ual "$PWD/../UniversalAnnotationLanguage" \
+              --z3 "$RUNNER_TEMP/assurance-z3/bin/z3" --output "$ASSURANCE_RESULTS"
+          '
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: compiled-assurance-results
+          path: assurance-results

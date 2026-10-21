@@ -31,6 +31,11 @@ def isHaltState : State -> Prop
  | .Halt _ => True
  | _ => False
 
+/-- An unfinished execution at the verification step limit. This is not rejection. -/
+def isExhausted : State → Prop
+ | .Eval .. | .Return .. => True
+ | _ => False
+
 def isSuccessful := isHaltState
 
 def isUnsuccessful := isErrorState

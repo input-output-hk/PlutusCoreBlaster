@@ -14,14 +14,25 @@ concurrency:
 
 env:
   LEAN_VERSION: "4.24.0"
-  Z3_VERSION: "4.15.2"
-  GLIBC_Z3: "2.39"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: PlutusCoreBlaster
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          path: PlutusCoreBlaster
+      - name: Checkout coordinated Blaster
+        uses: actions/checkout@v6
+        with:
+          repository: input-output-hk/Lean-blaster
+          ref: 7a2f4f0547cce56ec3db3f4f39a8b3bb541c85b9
+          path: Lean-blaster
       - name: Setup Lean
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
@@ -33,13 +44,16 @@ jobs:
           elan toolchain install ${{ env.LEAN_VERSION }}
           elan default ${{ env.LEAN_VERSION }}
 
-      - name: Install Z3
-        run: |
-          cd /home/runner/
-          wget -q https://github.com/Z3Prover/z3/releases/download/z3-${{ env.Z3_VERSION }}/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
-          unzip -q z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
-          chmod +x z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
-          echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
+      - uses: actions/cache@v4
+        id: solver
+        with:
+          path: ${{ runner.temp }}/assurance-z3
+          key: assurance-z3-${{ runner.os }}-${{ hashFiles('Lean-blaster/scripts/build-assurance-z3.sh') }}
+      - name: Build compatible solver
+        if: steps.solver.outputs.cache-hit != 'true'
+        run: bash ../Lean-blaster/scripts/build-assurance-z3.sh "$RUNNER_TEMP/assurance-z3"
+      - name: Select solver
+        run: echo "$RUNNER_TEMP/assurance-z3/bin" >> "$GITHUB_PATH"
 
       - name: Tools version
         run: |
@@ -47,9 +61,6 @@ jobs:
           lake --version
           lean --version
           z3 --version
-
-      - name: Checkout repository
-        uses: actions/checkout@v6
 
       - name: Build and Validate PlutusCore
         run: make check_plutus_core
@@ -59,7 +70,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: plutus-core-build
-          path: build.log
+          path: PlutusCoreBlaster/build.log
 
       - name: Execute and Validate Tests
         run: make check_tests
@@ -69,4 +80,4 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: tests-build
-          path: build.log
+          path: PlutusCoreBlaster/build.log

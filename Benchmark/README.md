@@ -88,7 +88,7 @@ The `repo` scripts:
 
   | file | origin | UPLC | size |
   | --- | --- | --- | --- |
-  | `aiken-validator-v1.cbor.hex` | line 89 (also `FlatEncoding/Tests.lean:103`) | 1.0.0 | 3.5 KB |
+  | `aiken-validator-v1.cbor.hex` | line 89 (also `Tests/UPLC/FlatEncoding/Tests.lean:103`) | 1.0.0 | 3.5 KB |
   | `nonce-list-v3.cbor.hex` | line 94 | 1.1.0 | 254 B |
   | `minting-policy-v3.cbor.hex` | line 99, trace messages renamed | 1.1.0 | 483 B |
 

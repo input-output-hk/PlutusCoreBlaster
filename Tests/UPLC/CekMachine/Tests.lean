@@ -47,13 +47,12 @@ example :
     runSteps testSemanticsVariant (stepN testSemanticsVariant testStart 1) 1
       = State.Halt testResult := rfl
 
--- One step short of enough fuel the program is an `Error`, and past enough the halt
--- result does not change.
+-- The assurance runner preserves the unfinished state one step before halting.
 def testProgram : PlutusCore.UPLC.Term.Program :=
   PlutusCore.UPLC.Term.Program.Program (PlutusCore.UPLC.Term.Version.Version 1 1 0) testTerm
 
 example : cekExecuteProgramWithSemanticVariant testSemanticsVariant testProgram [] 1
-    = State.Error := rfl
+    = State.Return [] testResult := rfl
 example (m : Nat) :
     cekExecuteProgramWithSemanticVariant testSemanticsVariant testProgram [] (2 + m)
       = State.Halt testResult :=
