@@ -3,12 +3,15 @@
 This suite measures the time and memory of the `#prep_uplc` command
 (`PlutusCore/UPLC/PreProcess.lean`) on every script of the repository, the conformance suite
 included. It also times the compiled CEK machine on the same programs. It compares runs, e.g.
-before and after a change to Blaster or to the CEK machine.
+before and after a change to Blaster or to the CEK machine. With `--with-cost`, it measures
+`#prep_uplc_with_cost` instead and records what each program costs (see
+[Costed runs](#costed-runs)).
 
 ```sh
 make bench_prep_uplc                                  # all 885 cases, one at a time: ~1.5 h
 make bench_prep_uplc JOBS=8                           # ~15 min, noisier
 make bench_prep_uplc BENCH_ARGS="--suite repo,symbolic"
+make bench_prep_uplc_cost JOBS=8                      # the same on #prep_uplc_with_cost
 lake exe bench_prep_uplc list --filter example/       # which cases a selection runs
 lake exe bench_prep_uplc run --filter example/factorial --runs 5
 make bench_prep_uplc_compare BASE=Benchmark/results/<run-a> NEW=Benchmark/results/<run-b>
@@ -59,12 +62,16 @@ Heartbeats are not reported: the Blaster optimizer resets the counter while it r
 | `cpu_ms` | user + system CPU time of the process during the best run |
 | `rss_before_kb`, `peak_rss_kb`, `rss_after_kb` | resident set size before, at the peak of, and after `#prep_uplc`. The peak is `VmHWM`, reset through `/proc/self/clear_refs` just before the run. |
 | `peak_delta_kb` | `peak_rss_kb − rss_before_kb`, the memory `#prep_uplc` needed. It includes the pages of the memory-mapped `.olean` files it touched. |
-| `native_result` | how `cekExecuteProgram` ends on a closed program: `halt`, `error`, or `exhausted` when its `Error` comes from running out of fuel (so `#prep_uplc` sees an error too) |
+| `command` | the measured command: `#prep_uplc`, or `#prep_uplc_with_cost` in a [costed run](#costed-runs) |
+| `native_result` | how `cekExecuteProgram` (in a costed run, `cekExecuteScriptWithCost`) ends on a closed program: `halt`, `error`, or `exhausted` when it runs out of fuel (`cekExecuteProgram` then ends in `Error`, so `#prep_uplc` sees an error too) |
 | `cek_steps` | the machine steps of that run, counted by iterating `step`. Empty when that count ends differently from `cekExecuteProgram`, e.g. after a change to `runSteps`. |
 | `native_ms`, `native_runs` | best time of `cekExecuteProgram` on the program, and how many runs it is the best of |
+| `cost_cpu`, `cost_mem` | costed runs: what the native run of a closed program cost, in CPU and memory units |
+| `expected_cpu`, `expected_mem` | the budget a conformance program's test expects it to cost (its `budgetMatches`), if it has one |
 | `prep_steps_per_s`, `native_steps_per_s` | `cek_steps` per second of `#prep_uplc` and of the native run. The `#prep_uplc` rate is given only for the closed programs it fully evaluates, since otherwise it did not take all these steps. It includes the fixed cost of about 0.2 s, so it means something only for programs of thousands of steps. |
 | `prop_head`, `prop_objs` | head constant of the optimized term, under its binders, and its size in distinct objects (`Expr.numObjs`). A closed program is fully evaluated when this head is the state it natively ends in. `summary.md` lists the cases where it isn't. |
 | `prop_hash` | `Expr.hash` of the optimized term (32 bits). It changes whenever the term does, barring collisions. |
+| `prop_cost_cpu`, `prop_cost_mem` | costed runs: the cost in the optimized term, when it is a literal |
 | `process_s`, `exit_code`, `max_rss_observed_kb` | the whole `lean` process, as the driver saw it (it samples memory every 200 ms) |
 
 ## Cases
@@ -142,7 +149,7 @@ does so at up to 1000 steps.
    process id to watch memory and to stop the case after `--timeout` or above `--max-rss-mb`.
 4. Each case runs in its own process, so a crash stays contained and each peak is its own.
 
-A run directory, by default `Benchmark/results/<time>-<commit>[-<label>]` (not committed),
+A run directory, by default `Benchmark/results/<time>-<commit>[-cost][-<label>]` (not committed),
 holds:
 
 - `meta.json`: machine, Lean, PlutusCore and Blaster revisions (a checkout with local changes shows
@@ -207,10 +214,61 @@ Things to keep in mind:
 - **Correctness.** This is not a correctness check: changed native results, step counts or
   optimized terms point at a semantic change, but the conformance tests are what show whether
   the machine is right.
-- **The machine's API.** The harness calls `cekExecuteProgram`, `step`, `initialState`,
-  `applyParams`, and matches `State.Halt` and `State.Error` (`runNative`, `countSteps` and
-  `nativeRun?` in `PrepUplc/Harness.lean`). Renaming or re-typing those means adapting these
-  three functions.
+- **The machine's API.** The harness calls `cekExecuteProgram`, `cekExecuteScriptWithCost`,
+  `step`, `initialState`, `applyParams`, and matches `State.Halt` and `State.Error` (`runNative`,
+  `runNativeWithCost`, `countSteps` and `nativeRun?` in `PrepUplc/Harness.lean`). Renaming or
+  re-typing those means adapting these four functions.
+
+## Costed runs
+
+`--with-cost` (`make bench_prep_uplc_cost`) runs the same cases on `#prep_uplc_with_cost`, which
+reduces a script to the state it reaches and to what reaching it costs, under the cost model of
+its ledger language (post-Conway). It shows what costing adds to the optimization, and whether
+the costs come out right.
+
+```sh
+make bench_prep_uplc_cost JOBS=8
+make bench_prep_uplc_cost BENCH_ARGS="--suite repo,symbolic --label cost-model-change"
+make bench_prep_uplc_compare BASE=Benchmark/results/<plain-run> NEW=Benchmark/results/<costed-run>
+```
+
+What changes:
+
+- The case files set `bench.prepUplc.withCost`, so the harness measures `#prep_uplc_with_cost`,
+  with the same arguments.
+- The native run of a closed program is `cekExecuteScriptWithCost` instead of
+  `cekExecuteProgram`, and its cost goes into `cost_cpu` and `cost_mem`. Out of fuel, it ends in
+  the state it reached rather than in `Error`.
+- The script runs under the builtin semantics of its ledger language, post-Conway: variant E for
+  PlutusV3 (the default variant `cekExecuteProgram` uses in a plain run) and D for PlutusV1 and
+  PlutusV2.
+- `prop_head` is the head of the optimized state. When the optimized cost is not a literal,
+  Blaster may split the term on the conditions of that cost; the state is then the one all the
+  branches share, if they share one. Otherwise `prop_head` is the head of the whole term, such as
+  `Blaster.dite'`.
+- The run directory's name ends in `-cost`, and `--resume` refuses to continue a run made with
+  the other setting.
+
+`summary.md` gets an *Execution cost* section. Per suite, its table counts the closed programs
+whose optimized state is the one they natively end in, and those whose optimized cost is a
+literal. Even with the state fully evaluated, the cost often isn't: the cost of an integer
+builtin depends on the size of its arguments, a `log2` that Blaster leaves as an unreduced
+`Nat.rec`. The table also checks the costs against each other:
+
+- a literal optimized cost against the native cost;
+- the native cost of a conformance program that halts against the budget its test expects, with
+  the native cost capped at the Int64 maximum as `budgetMatches` does.
+
+Any disagreement is listed below the table: it is a bug. The section ends with the most expensive
+programs.
+
+`compare` takes runs of either kind:
+
+- **A plain run and a costed one:** the time and memory ratios are what costing adds to the
+  optimization, and the native ratios what it adds to the compiled machine. The optimized terms
+  differ by construction and are not compared.
+- **Two costed runs:** `compare` also lists the closed programs whose native cost changed, e.g.
+  after a change to the cost model.
 
 ## Running on GitHub
 
@@ -248,8 +306,14 @@ Where the results go:
 - **The PR:** a comment-triggered run posts a comment with the status, time and native-time
   tables and links to the rest. It also reports a `benchmark` check on the PR head.
 
+The `ci-benchmark-cost` workflow (`.github/workflows/ci-benchmark-cost.yaml`) makes a
+[costed run](#costed-runs) the same way. Its trigger is a PR comment starting with
+`/run-cost-benchmark` instead, with the same arguments. Its artifact is
+`prep-uplc-cost-benchmark-<run-id>`, its check `cost-benchmark`, and its PR comment also has the
+execution cost table.
+
 GitHub's runners are shared and vary from run to run. Compare their timings with care; status
-changes, native results and optimized-term changes are exact.
+changes, native results, costs and optimized-term changes are exact.
 
 ## Noise
 
@@ -271,6 +335,7 @@ per file:
 #bench_prep_uplc "<id>" <PlutusScript-or-Program constant> [<conversion-fn>] <max-steps>
 #bench_prep_uplc_file "<id>" <PlutusV1|PlutusV2|PlutusV3> <format|auto> "<path>" [<conversion-fn>] <max-steps>
 set_option bench.prepUplc.runs 5   -- before the command
+set_option bench.prepUplc.withCost true   -- measure #prep_uplc_with_cost instead
 ```
 
 A conversion function that takes no arguments, such as

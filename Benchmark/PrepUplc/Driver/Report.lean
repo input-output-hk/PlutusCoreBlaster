@@ -18,7 +18,13 @@ structure Result where
   id               : String
   suite            : String
   category         : String
+  /-- The command measured: `#prep_uplc` or `#prep_uplc_with_cost`. None in runs made before
+      costed runs existed, which all measured `#prep_uplc`. -/
+  command          : Option String := none
   expected         : String := ""
+  /-- The budget the conformance test expects the program to cost. -/
+  expectedCpu      : Option Nat := none
+  expectedMem      : Option Nat := none
   /-- `ok`, `import_error` or `prep_error` (from the harness), else `timeout`, `mem_limit`,
       `crash` (the process failed before reporting) or `no_result`. -/
   status           : String
@@ -42,10 +48,16 @@ structure Result where
   /-- Best time of that run. -/
   nativeMs         : Option Float := none
   nativeRuns       : Option Nat := none
+  /-- What that run cost, in a costed run (`cekExecuteScriptWithCost`). -/
+  costCpu          : Option Nat := none
+  costMem          : Option Nat := none
   propHead         : Option String := none
   propObjs         : Option Nat := none
   /-- Hash of the optimized term. -/
   propHash         : Option String := none
+  /-- The cost in the optimized term of a costed run, when it is a literal. -/
+  propCostCpu      : Option Nat := none
+  propCostMem      : Option Nat := none
   /-- The individual runs, as reported by the harness. -/
   runs             : Json := Json.arr #[]
   /-- Wall time of the whole `lean` process. -/
@@ -62,6 +74,7 @@ def field? (j : Json) (α : Type) [FromJson α] (key : String) : Option α :=
 /-- Fills in what the harness reported. -/
 def Result.withHarness (r : Result) (j : Json) : Result :=
   { r with
+    command      :=  field? j String "command"
     status       := (field? j String "status"   ).getD "no_result"
     error        :=  field? j String "error"
     inputs       := (field? j String "inputs"   ).getD "none"
@@ -77,9 +90,13 @@ def Result.withHarness (r : Result) (j : Json) : Result :=
     cekSteps     :=  field? j Nat    "cek_steps"
     nativeMs     :=  field? j Float  "native_ms"
     nativeRuns   :=  field? j Nat    "native_runs"
+    costCpu      :=  field? j Nat    "cost_cpu"
+    costMem      :=  field? j Nat    "cost_mem"
     propHead     :=  field? j String "prop_head"
     propObjs     :=  field? j Nat    "prop_objs"
     propHash     :=  field? j String "prop_hash"
+    propCostCpu  :=  field? j Nat    "prop_cost_cpu"
+    propCostMem  :=  field? j Nat    "prop_cost_mem"
     runs         := j.getObjValD     "runs" }
 
 def statuses : List String :=
@@ -87,13 +104,52 @@ def statuses : List String :=
 
 /-! ## Derived metrics -/
 
-/-- Whether `#prep_uplc` reduced a closed program to the state the machine natively ends in. -/
+def plainCommand : String := "#prep_uplc"
+def costCommand  : String := "#prep_uplc_with_cost"
+
+/-- The command the case measured. -/
+def Result.measured (r : Result) : String := r.command.getD plainCommand
+
+def Result.withCost (r : Result) : Bool := r.measured == costCommand
+
+/-- The command a run measured. -/
+def measuredCommand (results : Array Result) : String :=
+  if results.any (·.withCost) then costCommand else plainCommand
+
+/-- The native run of the closed programs: `cekExecuteProgram`, or `cekExecuteScriptWithCost` in
+    a costed run. -/
+def nativeName (command : String) : String :=
+  if command == costCommand then "cekExecuteScriptWithCost" else "cekExecuteProgram"
+
+/-- Whether `#prep_uplc` (or the state of `#prep_uplc_with_cost`) reduced a closed program to the
+    state the machine natively ends in. -/
 def Result.fullyEvaluated (r : Result) : Bool :=
   match r.nativeResult, r.propHead with
   | some "halt"     , some head => head == "State.Halt"
   | some "error"    , some head => head == "State.Error"
-  | some "exhausted", some head => head == "State.Error"
+  -- Out of fuel, `cekExecuteProgram` ends in `Error`; `cekExecuteScriptWithCost` in the state reached.
+  | some "exhausted", some head =>
+    if r.withCost then head == "State.Eval" || head == "State.Return" else head == "State.Error"
   | _               , _         => false
+
+/-- Whether `#prep_uplc_with_cost` reduced the cost of a closed program to a literal. -/
+def Result.costEvaluated (r : Result) : Bool :=
+  r.propCostCpu.isSome && r.propCostMem.isSome
+
+/-- Whether the literal cost in the optimized term is the native cost. -/
+def Result.propCostMatches? (r : Result) : Option Bool := do
+  return (← r.propCostCpu) == (← r.costCpu) && (← r.propCostMem) == (← r.costMem)
+
+/-- Int64 max: Haskell's budget arithmetic saturates there, and so do the budgets the conformance
+    tests expect (see `budgetMatches`). -/
+def int64Max : Nat := 9223372036854775807
+
+/-- Whether a program that halts natively costs the budget its conformance test expects. -/
+def Result.costMatchesExpected? (r : Result) : Option Bool := do
+  guard (r.nativeResult == some "halt")
+  let cpu ← r.costCpu
+  let mem ← r.costMem
+  return min cpu int64Max == (← r.expectedCpu) && min mem int64Max == (← r.expectedMem)
 
 /-- Machine steps per second of `#prep_uplc`, on a closed program it fully evaluates (otherwise
     it did not take all of these steps). -/
@@ -203,6 +259,7 @@ def csvHeader : List String :=
   , "expected"
   , "inputs"
   , "max_steps"
+  , "command"
   , "status"
   , "wall_ms"
   , "wall_ms_median"
@@ -215,11 +272,17 @@ def csvHeader : List String :=
   , "cek_steps"
   , "native_ms"
   , "native_runs"
+  , "cost_cpu"
+  , "cost_mem"
+  , "expected_cpu"
+  , "expected_mem"
   , "prep_steps_per_s"
   , "native_steps_per_s"
   , "prop_head"
   , "prop_objs"
   , "prop_hash"
+  , "prop_cost_cpu"
+  , "prop_cost_mem"
   , "process_s"
   , "exit_code"
   , "max_rss_observed_kb"
@@ -235,6 +298,7 @@ def Result.csvRow (r : Result) : List String :=
   , r.expected
   , r.inputs
   , toString r.maxSteps
+  , r.measured
   , r.status
   , (r.wallMs.map fmt2).getD ""
   , (r.wallMsMedian.map fmt2).getD ""
@@ -247,11 +311,17 @@ def Result.csvRow (r : Result) : List String :=
   , opt r.cekSteps
   , (r.nativeMs.map (fmtDec · 4)).getD ""
   , opt r.nativeRuns
+  , opt r.costCpu
+  , opt r.costMem
+  , opt r.expectedCpu
+  , opt r.expectedMem
   , rate r.prepStepsPerS?
   , rate r.nativeStepsPerS?
   , opt r.propHead
   , opt r.propObjs
   , opt r.propHash
+  , opt r.propCostCpu
+  , opt r.propCostMem
   , fmt2 r.processS
   , opt r.exitCode
   , opt r.maxRssObservedKb
@@ -315,9 +385,9 @@ def nativeTable (results : Array Result) : String :=
     [s, toString times.size, fmtDuration (times.foldl (· + ·) 0), fmtOpt fmtDuration (percentile times 0.5),
      fmtOpt fmtDuration (percentile times 0.9), fmtOpt fmtDuration times.back?])
 
-def topNativeTable (results : Array Result) (n : Nat) : String :=
+def topNativeTable (command : String) (results : Array Result) (n : Nat) : String :=
   let rs := results.filter (·.nativeMs.isSome) |>.qsort (λ a b => a.nativeMs.getD 0 > b.nativeMs.getD 0)
-  mdTable ["id", "native", "result", "CEK steps", "`#prep_uplc` ms"] <| (rs.toList.take n).map (λ r =>
+  mdTable ["id", "native", "result", "CEK steps", s!"`{command}` ms"] <| (rs.toList.take n).map (λ r =>
     [r.id, fmtOpt fmtDuration r.nativeMs, fmtOpt id r.nativeResult, fmtOpt toString r.cekSteps,
      fmtOpt fmt1 r.wallMs])
 
@@ -327,10 +397,10 @@ def notFullyEvaluated (results : Array Result) : Array Result :=
 
 /-- Median and best machine steps per second, per suite, over the closed programs of at least
     `rateMinSteps` steps. -/
-def ratesTable (results : Array Result) : String :=
+def ratesTable (command : String) (results : Array Result) : String :=
   let rated  := results.filter (λ r => r.cekSteps.getD 0 ≥ rateMinSteps)
   let suites := Suite.all.map (·.name) |>.filter (λ s => rated.any (·.suite == s))
-  mdTable ["suite", "cases", "`#prep_uplc` median", "`#prep_uplc` best", "native median", "native best"] <| suites.map (λ s =>
+  mdTable ["suite", "cases", s!"`{command}` median", s!"`{command}` best", "native median", "native best"] <| suites.map (λ s =>
     let rs     := rated.filter (·.suite == s)
     let prep   := sortedFloats (rs.filterMap (·.prepStepsPerS?))
     let native := sortedFloats (rs.filterMap (·.nativeStepsPerS?))
@@ -338,17 +408,74 @@ def ratesTable (results : Array Result) : String :=
      fmtOpt fmtRate (percentile native 0.5), fmtOpt fmtRate native.back?])
 
 /-- The `n` closed programs that take the most machine steps, with their rates. -/
-def topStepsTable (results : Array Result) (n : Nat) : String :=
+def topStepsTable (command : String) (results : Array Result) (n : Nat) : String :=
   let rs := results.filter (·.cekSteps.isSome) |>.qsort (λ a b => a.cekSteps.getD 0 > b.cekSteps.getD 0)
-  mdTable ["id", "CEK steps", "`#prep_uplc` ms", "`#prep_uplc` steps/s", "native", "native steps/s"] <| (rs.toList.take n).map (λ r =>
+  mdTable ["id", "CEK steps", s!"`{command}` ms", s!"`{command}` steps/s", "native", "native steps/s"] <| (rs.toList.take n).map (λ r =>
     [r.id, fmtOpt toString r.cekSteps, fmtOpt fmt1 r.wallMs, fmtOpt fmtRate r.prepStepsPerS?,
      fmtOpt fmtDuration r.nativeMs, fmtOpt fmtRate r.nativeStepsPerS?])
 
 /-- What the rates mean, above their tables. -/
-def ratesExplanation : String :=
-  s!"The machine steps a closed program takes, per second of `#prep_uplc` (for the programs it fully \
+def ratesExplanation (command : String) : String :=
+  s!"The machine steps a closed program takes, per second of `{command}` (for the programs it fully \
     evaluates) or of the native run. Programs of fewer than {rateMinSteps} steps are left out of the \
-    statistics: for them, the fixed cost of `#prep_uplc` (about 0.2 s) is most of the time.\n\n"
+    statistics: for them, the fixed cost of `{command}` (about 0.2 s) is most of the time.\n\n"
+
+/-! ### Costs -/
+
+/-- What the cost tables show, above them. -/
+def costExplanation : String :=
+  "What each closed program costs, in CPU and memory units, under the cost model of its ledger \
+    language (post-Conway): natively (`cekExecuteScriptWithCost`), in the term `#prep_uplc_with_cost` \
+    reduces it to when that cost is a literal, and the budget its conformance test expects when the \
+    program halts. *State evaluated* counts the programs whose optimized state is the one they \
+    natively end in; *cost evaluated*, those whose optimized cost is a literal.\n\n"
+
+def costTable (results : Array Result) : String :=
+  let costed := results.filter (·.costCpu.isSome)
+  let suites := Suite.all.map (·.name) |>.filter (λ s => costed.any (·.suite == s))
+  mdTable ["suite", "closed programs", "state evaluated", "cost evaluated", "literal = native",
+      "literal ≠ native", "checked against expected", "native = expected", "native ≠ expected"] <|
+    suites.map (λ s =>
+      let rs := costed.filter (·.suite == s)
+      let count (p : Result → Bool) := toString (rs.filter p).size
+      [s, toString rs.size, count (λ r => r.status == "ok" && r.fullyEvaluated), count (·.costEvaluated),
+       count (·.propCostMatches? == some true), count (·.propCostMatches? == some false),
+       count (·.costMatchesExpected?.isSome), count (·.costMatchesExpected? == some true),
+       count (·.costMatchesExpected? == some false)])
+
+/-- `cpu / memory`, or `–`. -/
+def fmtCost (cpu? mem? : Option Nat) : String :=
+  match cpu?, mem? with
+  | some cpu, some mem => s!"{cpu} / {mem}"
+  | _       , _        => "–"
+
+/-- Cases whose costs disagree: the literal cost in the optimized term with the native one, or the
+    native cost with the budget the conformance test expects. -/
+def costMismatches (results : Array Result) : Array Result :=
+  results.filter (λ r => r.propCostMatches? == some false || r.costMatchesExpected? == some false)
+
+def costMismatchTable (rs : Array Result) (n : Nat) : String :=
+  mdTable ["id", "native", "native CPU / memory", "optimized CPU / memory", "expected CPU / memory"] <|
+    (rs.toList.take n).map (λ r =>
+      [r.id, fmtOpt id r.nativeResult, fmtCost r.costCpu r.costMem, fmtCost r.propCostCpu r.propCostMem,
+       fmtCost r.expectedCpu r.expectedMem])
+
+def topCostTable (results : Array Result) (n : Nat) : String :=
+  let rs := results.filter (·.costCpu.isSome) |>.qsort (λ a b => a.costCpu.getD 0 > b.costCpu.getD 0)
+  mdTable ["id", "result", "CEK steps", "CPU", "memory", "cost evaluated", s!"`{costCommand}` ms"] <|
+    (rs.toList.take n).map (λ r =>
+      [r.id, fmtOpt id r.nativeResult, fmtOpt toString r.cekSteps, fmtOpt toString r.costCpu,
+       fmtOpt toString r.costMem, if r.costEvaluated then "yes" else "no", fmtOpt fmt1 r.wallMs])
+
+/-- The cost section of the summary. -/
+def costSection (results : Array Result) : String :=
+  let mismatches := costMismatches results
+  let mismatchPart :=
+    if mismatches.isEmpty then "No cost disagrees with another.\n"
+    else s!"Costs that disagree ({mismatches.size}{if mismatches.size > 40 then ", the first 40" else ""}):\n\n" ++
+      costMismatchTable mismatches 40
+  costExplanation ++ costTable results ++ "\n" ++ mismatchPart ++ "\nThe most expensive:\n\n" ++
+    topCostTable results 10
 
 /-- A section of a Markdown report. -/
 def mdSection (title body : String) : String :=
@@ -356,7 +483,8 @@ def mdSection (title body : String) : String :=
 
 def summaryMarkdown (runName : String) (runInfo : Json) (results : Array Result) : String :=
   let info := metaLine runInfo
-  let header := s!"# `#prep_uplc` benchmark: {runName}\n\n\
+  let command := measuredCommand results
+  let header := s!"# `{command}` benchmark: {runName}\n\n\
     - Started {info "started_utc"} on {info "host"} ({info "cpu"}, {info "cores"} cores, \
       {info "mem_total"}), {info "os"}\n\
     - {info "lean"}\n\
@@ -369,10 +497,13 @@ def summaryMarkdown (runName : String) (runInfo : Json) (results : Array Result)
     (rerun: `lake lean {r.caseFile}`; log: `{r.log}`)\n"
   let sections : List (Option String) := [
     some (mdSection "Status" (statusTable results)),
-    some (mdSection "Time and memory of `#prep_uplc` (ok cases)" (totalsTable results)),
+    some (mdSection s!"Time and memory of `{command}` (ok cases)" (totalsTable results)),
+    if results.any (·.costCpu.isSome) then
+      some (mdSection "Execution cost (closed programs)" (costSection results))
+    else none,
     if results.any (·.cekSteps.isSome) then
       some (mdSection "Machine steps per second" <|
-        ratesExplanation ++ ratesTable results ++ "\n" ++ topStepsTable results 10)
+        ratesExplanation command ++ ratesTable command results ++ "\n" ++ topStepsTable command results 10)
     else none,
     some (mdSection "Slowest" (topTable results (·.wallMs) 20)),
     some (mdSection "Most memory" (topTable results (λ r => r.peakDeltaKb.map mb) 20)),
@@ -380,9 +511,9 @@ def summaryMarkdown (runName : String) (runInfo : Json) (results : Array Result)
       some (mdSection "Conformance by category" (categoryTable results))
     else none,
     if results.any (·.nativeMs.isSome) then
-      some (mdSection "Native `cekExecuteProgram` (closed programs)" <|
-        "Best time of the compiled machine running each program, whatever `#prep_uplc` did.\n\n" ++
-          nativeTable results ++ "\n" ++ topNativeTable results 10)
+      some (mdSection s!"Native `{nativeName command}` (closed programs)" <|
+        s!"Best time of the compiled machine running each program, whatever `{command}` did.\n\n" ++
+          nativeTable results ++ "\n" ++ topNativeTable command results 10)
     else none,
     if partial_.isEmpty then none
     else some (mdSection s!"Not fully evaluated ({partial_.size})" <|
@@ -395,9 +526,11 @@ def summaryMarkdown (runName : String) (runInfo : Json) (results : Array Result)
 
 /-- The part of the summary printed on the console. -/
 def consoleSummary (results : Array Result) : String :=
-  let rates := if results.any (·.cekSteps.isSome) then s!"\nMachine steps per second (closed programs of at least {rateMinSteps} steps)\n\n{ratesTable results}" else ""
-  "Status\n\n" ++ statusTable results ++ "\nTime and memory of `#prep_uplc` (ok cases)\n\n" ++
-    totalsTable results ++ rates ++ "\nSlowest\n\n" ++ topTable results (·.wallMs) 10
+  let command := measuredCommand results
+  let rates := if results.any (·.cekSteps.isSome) then s!"\nMachine steps per second (closed programs of at least {rateMinSteps} steps)\n\n{ratesTable command results}" else ""
+  let costs := if results.any (·.costCpu.isSome) then s!"\nExecution cost (closed programs)\n\n{costTable results}" else ""
+  "Status\n\n" ++ statusTable results ++ s!"\nTime and memory of `{command}` (ok cases)\n\n" ++
+    totalsTable results ++ costs ++ rates ++ "\nSlowest\n\n" ++ topTable results (·.wallMs) 10
 
 /-! ## Comparing two runs -/
 
@@ -473,20 +606,32 @@ def compareMarkdown (baseName newName : String) (baseMeta newMeta : Json) (base 
     b.nativeResult.isSome && n.nativeResult.isSome &&
       (b.nativeResult != n.nativeResult || b.cekSteps != n.cekSteps))
   let outputChanges := both.filter (λ (b, n) => propChanged b n)
+  let costPairs := pairs.filter (λ (b, n) => b.costCpu.isSome && n.costCpu.isSome)
+  let costChanges := costPairs.filter (λ (b, n) => b.costCpu != n.costCpu || b.costMem != n.costMem)
   let prepLimits (count : Nat)   := s!"{fmt1 threshold}% ({count} of {prepRatios.size} cases of at least {fmt1 minMs} ms)"
   let nativeLimits (count : Nat) := s!"{fmt1 threshold}% ({count} of {nativeRatios.size} runs of at least {fmtDuration minNativeMs})"
-  let header := s!"# `#prep_uplc` benchmark comparison\n\n\
-    - Base: {baseName} (Blaster {metaLine baseMeta "blaster"}; PlutusCore {metaLine baseMeta "plutuscore"})\n\
-    - New: {newName} (Blaster {metaLine newMeta "blaster"}; PlutusCore {metaLine newMeta "plutuscore"})\n\
+  let baseCommand := measuredCommand base
+  let newCommand  := measuredCommand new
+  let sameCommand := baseCommand == newCommand
+  -- `#prep_uplc`, or `#prep_uplc` → `#prep_uplc_with_cost` when the runs measure different commands.
+  let label (f : String → String) := if sameCommand then f newCommand else s!"{f baseCommand} → {f newCommand}"
+  let prepLabel   := label (s!"`{·}`")
+  let nativeLabel := label (s!"`{nativeName ·}`")
+  let header := s!"# {prepLabel} benchmark comparison\n\n\
+    - Base: {baseName} (`{baseCommand}`; Blaster {metaLine baseMeta "blaster"}; PlutusCore {metaLine baseMeta "plutuscore"})\n\
+    - New: {newName} (`{newCommand}`; Blaster {metaLine newMeta "blaster"}; PlutusCore {metaLine newMeta "plutuscore"})\n\
     - Ratios are new / base: above 1 is slower or bigger, except for steps per second, where above 1 is faster.\n\
     - The geometric means are the overall comparison. The lists of slower and faster cases show single cases, \
-      which vary from run to run: a few land there even when nothing changed.\n\n"
+      which vary from run to run: a few land there even when nothing changed.\n" ++
+    (if sameCommand then "" else
+      s!"- The runs measure different commands: the ratios are `{newCommand}` over `{baseCommand}`. \
+        Their optimized terms differ by construction and are not compared.\n") ++ "\n"
   let sections : List (Option String) := [
-    some (mdSection "`#prep_uplc`, cases ok in both runs" prepSummary),
+    some (mdSection s!"{prepLabel}, cases ok in both runs" prepSummary),
     if native.isEmpty then none
-    else some (mdSection "Native `cekExecuteProgram`, closed programs run in both" nativeSummary),
-    some (mdSection s!"Cases where `#prep_uplc` is slower by more than {prepLimits slower.size}" (prepTable slower)),
-    some (mdSection s!"Cases where `#prep_uplc` is faster by more than {prepLimits faster.size}" (prepTable faster)),
+    else some (mdSection s!"Native {nativeLabel}, closed programs run in both" nativeSummary),
+    some (mdSection s!"Cases where {prepLabel} is slower by more than {prepLimits slower.size}" (prepTable slower)),
+    some (mdSection s!"Cases where {prepLabel} is faster by more than {prepLimits faster.size}" (prepTable faster)),
     if native.isEmpty then none
     else some (mdSection s!"Cases where the native run is slower by more than {nativeLimits nativeSlower.size}" (nativeTable nativeSlower)),
     if native.isEmpty then none
@@ -498,7 +643,13 @@ def compareMarkdown (baseName newName : String) (baseMeta newMeta : Json) (base 
       - Only in new: {onlyNew.size}{examples onlyNew}\n"),
     some (mdSection s!"Native result or step count changed ({nativeChanges.size})" <|
       mdTable ["id", "base", "new"] (nativeChanges.toList.map (λ (b, n) => [n.id, b.nativeDescr, n.nativeDescr]))),
-    some (mdSection s!"Optimized term changed ({outputChanges.size})" <|
+    if costPairs.isEmpty then none
+    else some (mdSection s!"Native cost changed ({costChanges.size} of {costPairs.size} closed programs costed in both\
+        {if costChanges.size > 40 then ", the first 40" else ""})" <|
+      mdTable ["id", "base CPU / memory", "new CPU / memory"] (costChanges.toList.take 40 |>.map (λ (b, n) =>
+        [n.id, fmtCost b.costCpu b.costMem, fmtCost n.costCpu n.costMem]))),
+    if !sameCommand then none
+    else some (mdSection s!"Optimized term changed ({outputChanges.size})" <|
       mdTable ["id", "base prop (objects)", "new prop (objects)"] (outputChanges.toList.map (λ (b, n) =>
         [n.id, b.propDescr ++ fmtOpt (" " ++ ·) b.propHash, n.propDescr ++ fmtOpt (" " ++ ·) n.propHash])))]
   header ++ String.join (sections.filterMap id)

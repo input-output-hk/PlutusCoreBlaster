@@ -23,6 +23,7 @@ structure Options where
   maxSteps      : Nat := 100000
   symbolicSteps : List Nat := [2000]
   runs          : Nat := 1
+  withCost      : Bool := false
   leanArgs      : Array String := #[]
   label?        : Option String := none
   out?          : Option String := none
@@ -45,6 +46,7 @@ def Options.describe (o : Options) : Json :=
     ("max_steps"     , toJson o.maxSteps),
     ("symbolic_steps", toJson o.symbolicSteps),
     ("runs"          , toJson o.runs),
+    ("with_cost"     , toJson o.withCost),
     ("lean_args"     , toJson o.leanArgs),
     ("label"         , toJson o.label?)
   ]
@@ -72,9 +74,11 @@ Running (run):
   --timeout S             Stop a case after S seconds (default 600).
   --max-rss-mb N          Stop a case above N MB resident (default 16384; 0: no limit).
   --runs N                Run `#prep_uplc` N times per case; report the best (default 1).
+  --with-cost             Measure `#prep_uplc_with_cost` instead, and record what each closed
+                          program costs (see Benchmark/README.md).
   --lean-arg ARG          Pass ARG to lean (repeatable), e.g. --lean-arg=--tstack=200000.
   --label L               Suffix of the run directory name.
-  --out DIR               Run directory (default Benchmark/results/<time>-<commit>[-<label>]).
+  --out DIR               Run directory (default Benchmark/results/<time>-<commit>[-cost][-<label>]).
   --resume DIR            Continue an interrupted run: skip the cases it finished, rerun
                           the ones that crashed.
   --no-build              Skip `lake build Benchmark`.
@@ -114,6 +118,7 @@ def parseOptions (o : Options) : List String → Except String Options
   | "--out"            :: v :: rest => parseOptions { o with out? := some v, compareOut? := some v } rest
   | "--resume"         :: v :: rest => parseOptions { o with resume? := some v } rest
   | "--no-build"            :: rest => parseOptions { o with build := false } rest
+  | "--with-cost"           :: rest => parseOptions { o with withCost := true } rest
   | "--threshold"      :: v :: rest => do parseOptions { o with thresholdPct := ← parseNat "--threshold" v } rest
   | "--min-ms"         :: v :: rest => do parseOptions { o with minMs := ← parseNat "--min-ms" v } rest
   | "--min-native-us"  :: v :: rest => do
@@ -145,13 +150,14 @@ def selectCases (o : Options) : IO (Array BenchCase) := do
     (o.filters.isEmpty || o.filters.any (containsStr c.id ·)) && !o.excludes.any (containsStr c.id ·)
   return disambiguate ((conformance ++ repo ++ symbolic).filter keep)
 
-def defaultRunDir (label? : Option String) : IO FilePath := do
+def defaultRunDir (withCost : Bool) (label? : Option String) : IO FilePath := do
   let time := (← tryCmd "date" #["-u", "+%Y%m%d-%H%M%S"]).getD "run"
   let rev := (← tryCmd "git" #["rev-parse", "--short=8", "HEAD"]).getD "unknown"
+  let cost := if withCost then "-cost" else ""
   let label := match label? with
     | some l => "-" ++ l
     | none   => ""
-  return "Benchmark" / "results" / s!"{time}-{rev}{label}"
+  return "Benchmark" / "results" / s!"{time}-{rev}{cost}{label}"
 
 def readMeta (runDir : FilePath) : IO Json := do
   try IO.ofExcept (Json.parse (← IO.FS.readFile (runDir / "meta.json"))) catch _ => return Json.mkObj []
@@ -173,17 +179,24 @@ def runCommand (o : Options) : IO UInt32 := do
     return 1
   let runDir ← match o.resume?, o.out? with
     | some dir, _ | none, some dir => pure (FilePath.mk dir)
-    | none, none => defaultRunDir o.label?
+    | none, none => defaultRunDir o.withCost o.label?
   let resultsFile := runDir / "results.jsonl"
   if o.resume?.isNone && (← resultsFile.pathExists) then
     throw <| IO.userError s!"{runDir} already holds results; pass --resume {runDir} to continue it"
+  if o.resume?.isSome && (← (runDir / "meta.json").pathExists) then
+    let options := (← readMeta runDir).getObjValD "options"
+    let withCost := (field? options Bool "with_cost").getD false
+    if withCost != o.withCost then
+      throw <| IO.userError <|
+        if withCost then s!"{runDir} was run with --with-cost: pass --with-cost to resume it"
+        else s!"{runDir} was run without --with-cost: resume it without --with-cost"
   ["raw", "logs", "setup"].forM (IO.FS.createDirAll <| runDir / ·)
   let previous ← loadResults resultsFile
   -- Cases that crashed or reported nothing (e.g. `lean` could not start) run again.
   let finished : Std.HashSet String := previous.foldl (init := {}) (λ done r =>
     if r.status == "crash" || r.status == "no_result" then done else done.insert r.id)
   let todo := cases.filter (!finished.contains ·.id)
-  writeCaseFiles cases o.runs
+  writeCaseFiles cases o.runs o.withCost
   if o.build then
     buildBenchmark
   let setups ← moduleSetups todo
