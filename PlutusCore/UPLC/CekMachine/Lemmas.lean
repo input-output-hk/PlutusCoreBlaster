@@ -102,13 +102,13 @@ theorem cekExecuteProgramWithSemanticVariant_halt_stable
     stepN sv (State.Halt V) n = State.Halt V := by
   induction n with
   | zero => rfl
-  | succ n ih => simpa [stepN, stepAbs] using ih
+  | succ n ih => simpa [stepN]
 
 @[simp] theorem stepN_error (sv : BuiltinSemanticsVariant) (n : Nat) :
     stepN sv State.Error n = State.Error := by
   induction n with
   | zero => rfl
-  | succ n ih => simpa [stepN, stepAbs] using ih
+  | succ n ih => simpa [stepN]
 
 /-! ## Costs  -/
 
@@ -153,14 +153,10 @@ theorem runStepsCosting_fst (sv : BuiltinSemanticsVariant) (s : State) (n : Nat)
   | zero => cases s <;> rfl
   | succ n ih =>
       cases s with
-      | Halt V =>
-          simp only [runStepsCosting, stepN, stepAbs]
-          exact (stepN_halt sv V n).symm
-      | Error =>
-          simp only [runStepsCosting, stepN, stepAbs]
-          exact (stepN_error sv n).symm
-      | Eval st rho t => simp only [runStepsCosting, stepN, stepAbs]; exact ih _ _ _
-      | Return st v => simp only [runStepsCosting, stepN, stepAbs]; exact ih _ _ _
+      | Halt V        => simp [runStepsCosting, stepN, step]
+      | Error         => simp [runStepsCosting, stepN, step]
+      | Eval st rho t => simp [runStepsCosting, stepN, ih]
+      | Return st v   => simp [runStepsCosting, stepN, ih]
 
 theorem runStepsWithCost_fst (sv : BuiltinSemanticsVariant) (s : State) (n : Nat) :
     (runStepsWithCost sv s n).1 = stepN sv s n :=
@@ -170,7 +166,8 @@ theorem runStepsWithCost_fst (sv : BuiltinSemanticsVariant) (s : State) (n : Nat
 theorem runSteps_halt_iff_runStepsWithCost (sv : BuiltinSemanticsVariant) (s : State)
     (V : CekValue) (n : Nat) :
     runSteps sv s n = State.Halt V ↔ (runStepsWithCost sv s n).1 = State.Halt V := by
-  rw [runStepsWithCost_fst]; exact runSteps_halt_iff_stepN sv s V n
+  simp [runStepsWithCost_fst, runSteps_eq_stepN]
+  cases (stepN sv s n) <;> simp
 
 @[simp] theorem runStepsWithCost_halt (sv : BuiltinSemanticsVariant) (V : CekValue) (n : Nat) :
     runStepsWithCost sv (State.Halt V) n = (State.Halt V, ExBudget.zero) := by
