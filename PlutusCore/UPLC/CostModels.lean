@@ -76,12 +76,18 @@ def defaultCekMachineCostsE : CekMachineCosts := defaultCekMachineCostsC
 
 -- Helpers
 
--- TODO: Either fix something so we can add the real implementation or decide if we're ok with that
-/-- Blaster friendly Integer size-/
+/-- Recursive logarithm for symbolic costing. Lean's native `Nat.log2` logical
+    model uses a higher-order recursor which Blaster cannot translate. -/
+def costingLog2 (n : Nat) : Nat :=
+  if h : 2 ≤ n then costingLog2 (n / 2) + 1 else 0
+termination_by n
+decreasing_by exact Nat.log2_terminates _ ‹_›
+
+/-- Integer size in 64-bit words, with a one-word minimum. -/
 def integerSize (i : Integer) : Nat :=
   let n := i.natAbs
   if n == 0 then 1
-  else n.log2 / 64 + 1
+  else costingLog2 n / 64 + 1
 
 
 /-- Calculate the size of a bytestring in 8-byte words (minimum 1).
