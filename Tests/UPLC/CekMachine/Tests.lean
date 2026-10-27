@@ -104,15 +104,6 @@ example : EvaluationResult.ofCostedRun (testBudget 100 100)
     (cekExecuteProgramWithCost testSemanticsVariant testProgram [] 1)
     = .BudgetExhausted (testBudget 0 0) := rfl
 
-/-- The budget a run consumed, if it succeeded. -/
-def consumed? : EvaluationResult → Option ExBudget
-  | .Success _ b => some b
-  | _ => none
-
-def isEvaluationError : EvaluationResult → Bool
-  | .EvaluationError => true
-  | _ => false
-
 def testProgramOf (t : PlutusCore.UPLC.Term.Term) : PlutusCore.UPLC.Term.Program :=
   PlutusCore.UPLC.Term.Program.Program (PlutusCore.UPLC.Term.Version.Version 1 0 0) t
 

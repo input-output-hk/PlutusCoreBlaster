@@ -204,7 +204,12 @@ def runCommand (o : Options) : IO UInt32 := do
     IO.FS.writeFile (runDir / "meta.json") (← collectMeta o.describe).pretty
   IO.println s!"Running {todo.size} cases in {runDir} ({o.jobs} at a time)"
   let cfg : RunConfig := {
-    jobs := o.jobs, timeoutS := o.timeoutS, maxRssMb := o.maxRssMb, leanArgs := o.leanArgs, runDir }
+      jobs := o.jobs
+    , timeoutS := o.timeoutS
+    , maxRssMb := o.maxRssMb
+    , leanArgs := o.leanArgs
+    , runDir
+    , withCost := o.withCost }
   let new ← runCases cfg todo setups (λ r n => do
     IO.FS.withFile resultsFile .append (·.putStrLn (toJson r).compress)
     let time := match r.wallMs with

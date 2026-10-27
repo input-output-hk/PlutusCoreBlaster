@@ -319,10 +319,33 @@ def semVarToCosts : BuiltinSemanticsVariant → CekMachineCosts
   | .defaultFunSemanticsVariantE => defaultCekMachineCostsE
 
 /-- What a list of builtin calls costs. -/
-def builtinCallsCost (semanticsVariant : BuiltinSemanticsVariant) :
-    List (BuiltinFun × List CekValue) → ExBudget
-  | [] => ExBudget.zero
+def builtinCallsCost (semanticsVariant : BuiltinSemanticsVariant) : List (BuiltinFun × List CekValue) → ExBudget
+  | []                 => .zero
   | (b, args) :: calls => builtinCostSelected semanticsVariant b args + builtinCallsCost semanticsVariant calls
+
+def builtinCallsCostTR (semanticsVariant : BuiltinSemanticsVariant) (xs : List (BuiltinFun × List CekValue)) : ExBudget :=
+  let rec loop (acc : ExBudget) : List (BuiltinFun × List CekValue) → ExBudget
+    | []                 => acc
+    | (b, args) :: calls => loop (acc + builtinCostSelected semanticsVariant b args) calls
+  loop .zero xs
+
+theorem builtinCallsCostTR.loop_TR_correct : ∀ s exBudget xs, loop s exBudget xs = exBudget + loop s ExBudget.zero xs := by
+  intros s exBudget xs
+  induction xs generalizing exBudget with
+  | nil          => simp [loop]
+  | cons x xs ih =>
+      simp [loop]
+      rw [ih, ih (builtinCostSelected s x.fst x.snd)]
+      simp [ExBudget.add_assoc]
+
+@[csimp]
+theorem builtinCallsCost_equiv_TR : builtinCallsCost = builtinCallsCostTR := by
+  funext s xs
+  induction xs with
+  | nil          => simp [builtinCallsCost, builtinCallsCostTR, builtinCallsCostTR.loop]
+  | cons x xs ih =>
+      simp [builtinCallsCost, builtinCallsCostTR, builtinCallsCostTR.loop] at *
+      rw [ih, ←builtinCallsCostTR.loop_TR_correct]
 
 /-- The steps of `runSteps`, adding the step costs to `stepCost` and recording the builtin calls
     in `calls`, most recent first. It stops at `Halt`, at `Error`, or when the steps run out, and
@@ -382,5 +405,14 @@ def cekExecuteProgramWithBudget (p : Program) (plutusVer : PlutusVersion) (proto
 def cekExecuteScriptWithCost (ps : PlutusScript) (params : List Term) (n : Nat) : State × ExBudget :=
   cekExecuteProgramWithCost (PlutusVersion.toSemanticsVariant ps.lang.toPlutusVersion .postConway)
     ps.script params n
+
+/-- The budget a run consumed, if it succeeded. -/
+def consumed? : EvaluationResult → Option ExBudget
+  | .Success _ b => some b
+  | _            => none
+
+def isEvaluationError : EvaluationResult → Bool
+  | .EvaluationError => true
+  | _                => false
 
 end PlutusCore.UPLC.CekMachine

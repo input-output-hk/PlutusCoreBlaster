@@ -74,7 +74,7 @@ def field? (j : Json) (α : Type) [FromJson α] (key : String) : Option α :=
 /-- Fills in what the harness reported. -/
 def Result.withHarness (r : Result) (j : Json) : Result :=
   { r with
-    command      :=  field? j String "command"
+    command      :=  field? j String "command" <|> r.command
     status       := (field? j String "status"   ).getD "no_result"
     error        :=  field? j String "error"
     inputs       := (field? j String "inputs"   ).getD "none"
