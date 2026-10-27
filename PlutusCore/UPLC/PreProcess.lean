@@ -1,8 +1,14 @@
 import Lean
 import PlutusCore.UPLC.CekMachine
+import PlutusCore.UPLC.StagedCekProofs
 import PlutusCore.UPLC.PlutusScript
 import Blaster.Optimize.Basic
 open Lean Elab Command Term Meta Blaster.Optimize
+
+register_option plutuscore.stagedCek : Bool := {
+  defValue := false
+  descr := "Use the verified fused CEK interpreter during preparation (experimental)."
+}
 
 namespace PlutusCore.UPLC.PreProcess
 open CekMachine
@@ -37,7 +43,17 @@ def preprocessImp : CommandElab := fun stx => do
       withoutModifyingEnv $ runTermElabM fun _ => do
         let plutusScript ← validUplcProg stx[2]
         let app ← mkUplcApply stx plutusScript
-        let (e, _) ← Optimize.main app|>.run default
+        -- StagedCek.execute_eq certifies this interpreter replacement for all
+        -- inputs and fuel. The executable definition keeps the reference CEK.
+        let staged := plutuscore.stagedCek.get (← getOptions)
+        let optApp := if staged then
+          app.replace fun e => match e with
+            | .const ``cekExecuteProgram ls => some (.const ``StagedCek.execute ls)
+            | _ => none
+          else app
+        if staged && (optApp.find? (·.isConstOf ``StagedCek.execute)).isNone then
+          throwError "staged CEK entry point was not installed"
+        let (e, _) ← Optimize.main optApp|>.run default
         let t ← inferType e
         let baseName ← validNewDef stx[1]
         let propName := Name.append baseName `prop
