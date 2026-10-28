@@ -24,8 +24,8 @@ example (args : List PlutusCore.UPLC.CekValue.CekValue) (i : Nat) :
     else 0) := by
   unfold argListLen
   by_cases h : i < args.length
-  · simp only [dif_pos h, List.get_eq_getElem]
-    cases args[i] <;> try rfl
+  · simp only [dif_pos h, List.get_eq_getElem, List.getElem?_eq_getElem h]
+    split <;> split <;> simp_all
   · simp [h]
 
 #blaster [∀ n : Int, argSize [.VCon (.Integer n)] 0 = integerSize n]
