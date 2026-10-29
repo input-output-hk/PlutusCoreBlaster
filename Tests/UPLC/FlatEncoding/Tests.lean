@@ -8,6 +8,14 @@ open PlutusCore.UPLC.FlatEncoding.Internal
 example : decodeFixedNat 8 [true, true, true, true, false, false, false, false] = .some ([], 0xF0)      := by rfl
 example : decodeFixedNat 7 [true, true, true, true, false, false, false, false] = .some ([false], 0x78) := by rfl
 
+-- Compiled reader: all byte values, preserved suffixes, truncation, and values
+-- beyond the native small-Nat boundary. The universal csimp proof covers every width.
+#guard (List.range 256).all (fun n =>
+  decodeFixedNat 8 (byteToBits (Char.ofNat n) ++ [true]) == some ([true], n))
+#guard decodeFixedNat 0 [true, false] == some ([true, false], 0)
+#guard decodeFixedNat 9 (List.replicate 8 true) == none
+#guard decodeFixedNat 65 (List.replicate 65 true) == some ([], 2 ^ 65 - 1)
+
 example : decodeList (decodeFixedNat 2) [true, false, true, true, true, false, false] = .some ([], [1, 2]) := by native_decide
 
 example : decodeNat [false, false, true, false, true, false, true, false] = .some ([], 42) := by native_decide
