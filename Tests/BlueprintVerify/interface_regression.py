@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Negative checks over a freshly generated UAL 0.6-draft bundle.
+"""Negative checks over a freshly generated UAL 1.0 bundle.
 Usage: lake env python3 Tests/BlueprintVerify/interface_regression.py /path/to/run
 """
 import copy

@@ -53,6 +53,29 @@ run_cmd do
     if (Internal.parseBlueprint invalidBlueprint.compress).isOk then
       throwError "accepted #void in a legacy argument"
 
+-- Repeated schema titles must preserve two different types, including their refs.
+-- Tokens declared by an importing library must not break generated field names.
+syntax "review_token" : term
+#import_blueprints ReviewBp "Tests/BlueprintCodegen/fixtures/review.json"
+#check (ReviewBp.Review.mk : ReviewBp.Option_Int → ReviewBp.Option_ByteArray →
+  PlutusCore.Integer.Integer → ReviewBp.Review)
+example : IsData.toData (ReviewBp.Review.mk (.Some 7) (.Some { data := "a" }) 9) =
+    .Constr 0 [.Constr 0 [.I 7], .Constr 0 [.B { data := "a" }], .I 9] := rfl
+#guard ((IsData.fromData (.Constr 0 [.Constr 0 [.I 7], .Constr 0 [.B { data := "a" }], .I 9]) :
+  Option ReviewBp.Review).map (·.Type)) == some 9
+
+run_cmd do
+  let blueprint ← ofExcept (Json.parse (include_str "fixtures/review.json"))
+  let defs ← ofExcept (blueprint.getObjVal? "definitions")
+  let option ← ofExcept (defs.getObjVal? "Option$Int")
+  let collision := Json.mkObj [("a$b", option), ("a_b", option)]
+  let bp ← ofExcept (blueprint.getObj?)
+  let invalid := Json.obj (bp.insert "definitions" collision)
+  match Internal.parseBlueprint invalid.compress with
+  | .error e => unless (e.splitOn "a$b").length > 1 && (e.splitOn "a_b").length > 1 do
+      throwError "collision diagnostic must identify both raw definition keys: {e}"
+  | .ok _ => throwError "accepted colliding sanitized definition keys"
+
 def bytes (values : List Nat) : ByteString :=
   { data := String.mk (values.map Char.ofNat) }
 

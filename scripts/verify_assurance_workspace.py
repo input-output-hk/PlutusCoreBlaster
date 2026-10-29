@@ -80,14 +80,15 @@ run('definition-tests',[testbin,'-p','PlutusTx.Blueprint.Definition'],a.plutus/'
 source_inputs = {}
 for label, root, patterns in [
     ('core', core, ['PlutusCore/UPLC/BlueprintEncoding/*.lean','PlutusCore/UPLC/BlueprintEncoding/*.schema.json','PlutusCore/UPLC/CekMachine.lean','PlutusCore/UPLC/FlatEncoding/*.lean','PlutusCore/UPLC/ScriptEncoding/*.lean','Tests/Bitwise/**/*','Tests/Cbor/**/*','Tests/Cryptograph/**/*','Tests/UPLC/**/*','Tests/BlueprintVerify/*.py','Tests/BlueprintVerify/*.lean','scripts/*assurance*']),
-    ('ledger', ledger, ['CardanoLedgerApi/Examples/*.lean','Tests/BlueprintVerify/*.py','Tests/BlueprintVerify/*.lean']),
+    ('ledger', ledger, ['CardanoLedgerApi/**/*.lean','Tests/BlueprintVerify/*.py','Tests/BlueprintVerify/*.lean']),
     ('plutus', a.plutus, ['plutus-tx/src/PlutusTx/Assurance/*.hs','plutus-tx/src/PlutusTx/Ual/*.hs','plutus-tx/src/PlutusTx/Blueprint/Definition/*.hs','doc/docusaurus/static/code/Example/Ual/**/*.hs','cabal.assurance.project*','doc/docusaurus/docusaurus-examples.cabal']),
     ('cips', a.cips, ['CIP-XXXX/**/*.json','CIP-XXXX/**/*.md','CIP-XXXX/tests/*.py','CIP-0057/extensions/compiled-interface/**/*.json','CIP-0057/extensions/compiled-interface/**/*.md'])]:
     for pattern in patterns:
         for path in root.glob(pattern):
             if path.is_file(): source_inputs[label+'/'+str(path.relative_to(root))] = digest(path)
 if a.ual:
-    source_inputs['ual/README.md'] = digest(a.ual/'README.md')
+    for name in ['README.md', 'UniversalAnnotationLanguage.md', 'TemporalOperators.md']:
+        source_inputs['ual/'+name] = digest(a.ual/name)
 report={'status':'passed','sourceInputs':source_inputs,'checks':results,'lock':lock,'z3Sha256':digest(a.z3.resolve()),'generatorSha256':{n:digest(g) for n,g in generators.items()},
         'repositories':{name:{'head':capture(['git','rev-parse','HEAD'],repo),'trackedDiffSha256':hashlib.sha256(subprocess.check_output(['git','-c','core.fsmonitor=false','diff','HEAD','--binary'],cwd=repo)).hexdigest()} for name,repo in [('plutus',a.plutus),('core',core),('ledger',ledger),('blaster',blaster),('cips',a.cips)]}}
 (a.output/'workspace-report.json').write_text(json.dumps(report,indent=2)+'\n')

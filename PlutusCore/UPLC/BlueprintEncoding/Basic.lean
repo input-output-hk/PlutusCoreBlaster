@@ -265,12 +265,40 @@ private def isNameableDef (defn : Lean.Json) : Bool :=
     | none => isCtor defn
   supported && !isBoolShapeDef defn && !isUnitShapeDef defn
 
-/-- The Lean-facing name of a definition: its `title`, falling back to the key. -/
-private def defTypeName (key : String) (defn : Lean.Json) : String :=
-  (getOptStr defn "title").getD key
+def sanitizeName (s : String) : String :=
+  String.mk <| s.data.map fun c => if c.isAlphanum || c == '_' then c else '_'
+
+/-- Quote every generated identifier, including keywords introduced by imports. -/
+private def escapeIdent (s : String) : String := "«" ++ s ++ "»"
+
+/-- A single definition-key → Lean-name plan, shared by declarations and refs.
+Repeated titles (e.g. Aiken's `Optional`) fall back to definition keys. -/
+private def planTypeNames (defs : Json) : Except String (List (String × String)) := do
+  let entries : List (String × Json) := match defs with
+    | .obj fields => fields.toArray.toList.filter (fun (_, d) => isNameableDef d)
+    | _ => []
+  let titles := entries.map fun (key, d) => sanitizeName ((getOptStr d "title").getD key)
+  let names := entries.map fun (key, d) =>
+    let title := sanitizeName ((getOptStr d "title").getD key)
+    (key, if title.isEmpty || (titles.filter (· == title)).length > 1 then sanitizeName key else title)
+  let rec resolve (fuel : Nat) (names : List (String × String)) : Except String (List (String × String)) := do
+    let conflicts := names.filter fun (_, name) =>
+      name.isEmpty || (names.filter (fun (_, n) => n == name)).length > 1
+    if conflicts.isEmpty then return names
+    match fuel with
+    | 0 => throw s!"generated schema type name collision for definitions {conflicts.map (·.1)}"
+    | n + 1 =>
+      -- A key fallback may itself meet another definition's unique title.
+      -- Move every participant to its key, and resolve cascading collisions.
+      let next := names.map fun (key, name) =>
+        (key, if (conflicts.map (·.1)).contains key then sanitizeName key else name)
+      if next == names then
+        throw s!"generated schema type name collision for definitions {conflicts.map (·.1)}"
+      resolve n next
+  resolve (names.length + 1) names
 
 private partial def parseSchemaType (defs : Lean.Json) (j : Lean.Json) (depth : Nat)
-    (inVariant : Bool := false) : PlutusType :=
+    (inVariant : Bool := false) (names : List (String × String) := []) : PlutusType :=
   if depth == 0 then .opaque "<max depth>" else
   match j.getObjVal? "$ref" with
   | .ok (.str ref) =>
@@ -281,8 +309,8 @@ private partial def parseSchemaType (defs : Lean.Json) (j : Lean.Json) (depth : 
     match defs.getObjVal? key with
     -- Preserve the name of nameable definitions so they can reference an
     -- emitted Lean type instead of inlining (and collapsing to `Data`).
-    | .ok defn => if isNameableDef defn then .named (defTypeName key defn)
-                  else parseSchemaType defs defn (depth - 1) inVariant
+    | .ok defn => if isNameableDef defn then .named ((names.lookup key).getD key)
+                  else parseSchemaType defs defn (depth - 1) inVariant names
     | _        => .opaque key
   | _ =>
   let anyOneOf := match j.getObjVal? "anyOf" with
@@ -292,8 +320,8 @@ private partial def parseSchemaType (defs : Lean.Json) (j : Lean.Json) (depth : 
       | _ => none
   match anyOneOf with
   | some arr =>
-    if arr.size == 1 then parseSchemaType defs arr[0]! (depth - 1) inVariant else
-    let variants := arr.toList.map (fun v => parseSchemaType defs v (depth - 1) true)
+    if arr.size == 1 then parseSchemaType defs arr[0]! (depth - 1) inVariant names else
+    let variants := arr.toList.map (fun v => parseSchemaType defs v (depth - 1) true names)
     match variants with
     | [.constr none 0 [], .constr none 1 []] => .bool
     | _        => if arr.all (fun v => getOptStr v "dataType" == some "constructor")
@@ -309,16 +337,16 @@ private partial def parseSchemaType (defs : Lean.Json) (j : Lean.Json) (depth : 
     | "#unit"      => .unit
     | "#list" | "list" =>
       let items := match j.getObjVal? "items" with
-        | .ok i => parseSchemaType defs i (depth - 1)
+        | .ok i => parseSchemaType defs i (depth - 1) false names
         | _     => .data
       .list items
     | "map" =>
-      let keys   := match j.getObjVal? "keys"   with | .ok k => parseSchemaType defs k (depth-1) | _ => .data
-      let values := match j.getObjVal? "values" with | .ok v => parseSchemaType defs v (depth-1) | _ => .data
+      let keys   := match j.getObjVal? "keys"   with | .ok k => parseSchemaType defs k (depth-1) false names | _ => .data
+      let values := match j.getObjVal? "values" with | .ok v => parseSchemaType defs v (depth-1) false names | _ => .data
       .map keys values
     | "#pair" | "pair" =>
-      let left  := match j.getObjVal? "left"  with | .ok l => parseSchemaType defs l (depth-1) | _ => .data
-      let right := match j.getObjVal? "right" with | .ok r => parseSchemaType defs r (depth-1) | _ => .data
+      let left  := match j.getObjVal? "left"  with | .ok l => parseSchemaType defs l (depth-1) false names | _ => .data
+      let right := match j.getObjVal? "right" with | .ok r => parseSchemaType defs r (depth-1) false names | _ => .data
       .pair left right
     | "constructor" =>
       let title  := getOptStr j "title"
@@ -330,7 +358,7 @@ private partial def parseSchemaType (defs : Lean.Json) (j : Lean.Json) (depth : 
           arr.toList.map fun f =>
             let ftitle  := getOptStr f "title"
             let fschema := match f.getObjVal? "schema" with | .ok s => s | _ => f
-            (ftitle, parseSchemaType defs fschema (depth - 1))
+            (ftitle, parseSchemaType defs fschema (depth - 1) false names)
         | _ => []
       if index == 0 && fields.isEmpty && !inVariant then .unit
       else .constr title index fields
@@ -340,26 +368,22 @@ private partial def parseSchemaType (defs : Lean.Json) (j : Lean.Json) (depth : 
   | some "Data" => .data
   | _           => .data
 
-/-- Extract the Lean-friendly type name from a `$ref` by looking up the
-    definition's `"title"` field, falling back to the decoded key. -/
-private def extractTypeName (defs : Lean.Json) (schema : Lean.Json) : Option String :=
+/-- Resolve a definition reference through the same name plan as declarations. -/
+private def extractTypeName (names : List (String × String)) (schema : Lean.Json) : Option String :=
   match schema.getObjVal? "$ref" with
   | .ok (.str ref) =>
     let defsPrefix := "#/definitions/"
     if ref.startsWith defsPrefix then
       let key := decodeJsonPointer (ref.drop defsPrefix.length)
-      let fromTitle := match defs.getObjVal? key with
-        | .ok defn => getOptStr defn "title"
-        | _        => none
-      some (fromTitle.getD key)
+      names.lookup key
     else none
   | _ => none
 
-private def parseSchemaInfo (defs : Lean.Json) (j : Lean.Json) : SchemaInfo :=
+private def parseSchemaInfo (defs : Lean.Json) (names : List (String × String)) (j : Lean.Json) : SchemaInfo :=
   let schema := match j.getObjVal? "schema" with | .ok s => s | _ => j
   { title    := getOptStr j "title"
-    typeName := extractTypeName defs schema
-    ptype    := parseSchemaType defs schema 20 }
+    typeName := extractTypeName names schema
+    ptype    := parseSchemaType defs schema 20 false names }
 
 -- ---------------------------------------------------------------------------
 -- Blueprint parsing
@@ -401,18 +425,21 @@ private partial def validateArgumentSchema (defs j : Lean.Json) (seen : List (St
       else validateArgumentSchema defs target ((key, depth) :: seen) depth
     for (key, value) in fields.toArray do
       if ["items", "keys", "values", "left", "right", "schema"].contains key then
-        validateArgumentSchema defs value seen (depth + if ["items", "keys", "values", "left", "right"].contains key then 1 else 0)
+        let next := depth + if ["items", "keys", "values", "left", "right"].contains key then 1 else 0
+        match key, value with
+        | "items", .arr schemas => for schema in schemas do validateArgumentSchema defs schema seen next
+        | _, _ => validateArgumentSchema defs value seen next
       if ["fields", "anyOf", "oneOf", "allOf"].contains key then
         let .arr values := value | throw s!"argument schema '{key}' must be an array"
         for v in values do validateArgumentSchema defs v seen (depth + if key == "fields" then 1 else 0)
   | _ => throw "argument schema must be an object"
 
 /-- Each argument requires a schema; the empty schema explicitly means raw Data. -/
-private def parseArgument (defs : Lean.Json) (j : Lean.Json) : Except String ArgumentInfo := do
+private def parseArgument (defs : Lean.Json) (names : List (String × String)) (j : Lean.Json) : Except String ArgumentInfo := do
   let encoding := parseArgEncoding (← getStr j "encoding")
   let schema ← (j.getObjVal? "schema").mapError (fun _ => "argument is missing schema")
   validateArgumentSchema defs schema
-  return { encoding, ptype := parseSchemaType defs schema 20 }
+  return { encoding, ptype := parseSchemaType defs schema 20 false names }
 
 /-- A non-negative integer JSON field, rejecting fractional/exponent forms. -/
 private def getNatField (j : Lean.Json) (key : String) : Option Nat :=
@@ -527,7 +554,7 @@ private def selectSlot (v : Json) (role purpose : String) : Except String Json :
     unless purposeMatches slot purpose do throw "runtime schema purpose mismatch"
     slot.getObjVal? "schema"
 
-private def parseInterface (defs v : Json) (version : String) : Except String (Array (String × Array ArgumentInfo)) := do
+private def parseInterface (defs v : Json) (names : List (String × String)) (version : String) : Except String (Array (String × Array ArgumentInfo)) := do
   let iface ← v.getObjVal? "interface"
   let convention ← getStr iface "callingConvention"
   unless convention == "ledger-" ++ version && ["v1", "v2", "v3"].contains version do
@@ -557,8 +584,8 @@ private def parseInterface (defs v : Json) (version : String) : Except String (A
       let ptype := match encoding with
         | .asNative "#list" => PlutusType.list .data
         | .asNative "#pair" => PlutusType.pair .data .data
-        | .asData => if recursiveSchema defs schema then .data else parseSchemaType defs schema 20
-        | _ => parseSchemaType defs schema 20
+        | .asData => if recursiveSchema defs schema then .data else parseSchemaType defs schema 20 false names
+        | _ => parseSchemaType defs schema 20 false names
       parsed := parsed.push { encoding, ptype }
     for i in [:suffix.length] do
       let role := suffix[i]!
@@ -578,17 +605,17 @@ private def parseInterface (defs v : Json) (version : String) : Except String (A
     results := results.push (purpose, parsed)
   return results
 
-private def parseValidator (defs : Lean.Json) (extended : Bool) (version : String) (j : Lean.Json) : Except String BlueprintValidator := do
+private def parseValidator (defs : Lean.Json) (names : List (String × String)) (extended : Bool) (version : String) (j : Lean.Json) : Except String BlueprintValidator := do
   let title ← getStr j "title"
-  let datum      := match j.getObjVal? "datum"      with | .ok d => some (parseSchemaInfo defs d) | _ => none
-  let redeemer   := match j.getObjVal? "redeemer"   with | .ok r => some (parseSchemaInfo defs r) | _ => none
+  let datum      := match j.getObjVal? "datum"      with | .ok d => some (parseSchemaInfo defs names d) | _ => none
+  let redeemer   := match j.getObjVal? "redeemer"   with | .ok r => some (parseSchemaInfo defs names r) | _ => none
   let parameters := match j.getObjVal? "parameters" with
-    | .ok (.arr arr) => arr.map (parseSchemaInfo defs)
+    | .ok (.arr arr) => arr.map (parseSchemaInfo defs names)
     | _              => #[]
   let arguments ← match j.getObjVal? "arguments" with
     | .ok (.arr arr) =>
       some <$> arr.mapM fun a =>
-        (parseArgument defs a).mapError (s!"validator '{title}': 'arguments': {·}")
+        (parseArgument defs names a).mapError (s!"validator '{title}': 'arguments': {·}")
     | .ok _    => .error s!"validator '{title}': 'arguments' must be an array"
     | .error _ => pure none
   let budget ← match j.getObjVal? "budget" with
@@ -605,27 +632,8 @@ private def parseValidator (defs : Lean.Json) (extended : Bool) (version : Strin
     parameters
     arguments
     budget
-    invocations := ← if extended then parseInterface defs j version else pure #[]
+    invocations := ← if extended then parseInterface defs j names version else pure #[]
   }
-
-def sanitizeName (s : String) : String :=
-  String.mk <| s.data.map fun c => if c.isAlphanum || c == '_' then c else '_'
-
-/-- Lean 4 reserved words that a sanitized schema name might collide with. -/
-private def leanKeywords : List String :=
-  ["end", "type", "class", "structure", "inductive", "instance", "def", "theorem",
-   "example", "abbrev", "do", "by", "match", "with", "where", "deriving", "then",
-   "else", "fun", "let", "if", "open", "namespace", "section", "variable", "in",
-   "at", "from", "import", "return", "try", "catch", "finally", "for", "while",
-   "have", "show", "calc", "mutual", "partial", "private", "protected", "macro",
-   "syntax", "notation", "attribute", "set_option", "extends", "sorry", "nomatch"]
-
-/-- Wrap an identifier in `«…»` when it is a Lean keyword or starts with a digit,
-    so the *generated source* parses. The underlying declaration `Name` (built
-    with `Name.mkStr` from the raw sanitized string) is unchanged. -/
-private def escapeIdent (s : String) : String :=
-  let leadingDigit := (s.get? ⟨0⟩).map Char.isDigit |>.getD false
-  if leanKeywords.contains s || leadingDigit then "«" ++ s ++ "»" else s
 
 /-- A field type "degrades to `Data`" when it contains a constructor/sum/opaque
     node the emitter cannot express as a structured Lean type (so it falls back
@@ -703,22 +711,20 @@ def parseBlueprint (s : String) : Except String Blueprint := do
     | .ok j    => parsePreamble j
     | .error e => .error s!"missing 'preamble': {e}"
   let defs := match json.getObjVal? "definitions" with | .ok d => d | _ => .null
+  let typeNames ← planTypeNames defs
   let validators ← match json.getObjVal? "validators" with
-    | .ok (.arr arr) => arr.mapM (parseValidator defs extended preamble.plutusVersion)
+    | .ok (.arr arr) => arr.mapM (parseValidator defs typeNames extended preamble.plutusVersion)
     | .ok _          => .error "'validators' must be an array"
     | .error e       => .error s!"missing 'validators': {e}"
   let candidates : List (String × String × PlutusType) :=
     match defs with
     | .obj o => o.foldl (init := []) (fun acc key defn =>
         if isNameableDef defn then
-          let name := defTypeName key defn
-          let pt := parseSchemaType defs defn 20
+          let name := (typeNames.lookup key).getD key
+          let pt := parseSchemaType defs defn 20 false typeNames
           if canEmitNamedType pt then (sanitizeName name, name, pt) :: acc else acc
         else acc)
     | _ => []
-  let names := candidates.map (·.1)
-  unless names.all (! ·.isEmpty) && names.length == names.eraseDups.length do
-    throw "empty or duplicate generated schema type name"
   let (ordered, droppedTypes) := topoOrderTypes candidates
   let available := ordered.map (·.1)
   let namedTypes := ordered.map fun (_, name, pt) => (name, pt)
@@ -1130,18 +1136,15 @@ is no conversion from execution units to the CEK step count `cekExecuteProgram` 
     applied to, under the `asData` encoding. A `Data` argument is injected
     directly rather than through `IsData.toData`, so the emitted term is
     syntactically the one hand-written CEK properties pass. -/
-private def argToTermStr (varName : String) : PlutusType → String
-  | .data =>
-    "PlutusCore.UPLC.Term.Term.Const (PlutusCore.UPLC.Term.Const.Data " ++ varName ++ ")"
-  | _ =>
-    "PlutusCore.UPLC.Term.Term.Const (PlutusCore.UPLC.Term.Const.Data (IsData.toData " ++
-      varName ++ "))"
+private def argToTermStr (varName : String) (ptype : PlutusType) : String :=
+  "PlutusCore.UPLC.Term.Term.Const (PlutusCore.UPLC.Term.Const.Data (" ++
+    encodeFieldStr varName ptype ++ "))"
 
 /-- Emit `<ns>.<wrapperName> : … → State`, applying the program of the
     already-emitted `<ns>.<scriptName> : PlutusScript` to its encoded arguments
     and running the CEK machine for `steps` steps.
 
-    Callers must have checked `wrapperBlocker` first. Data arguments use IsData;
+    Callers must have checked `wrapperBlocker` first. Data arguments use schema-directed codecs;
     native arguments use their declared builtin constant representation. -/
 def emitAppliedWrapper (ns : Name) (wrapperName scriptName : String)
     (args : Array ArgumentInfo) (steps : Nat) (semantics : String := "E") : CommandElabM Unit := do

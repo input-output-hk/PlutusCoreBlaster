@@ -79,13 +79,16 @@ encoding, ledger execution budgets, and unresolved or unguarded cyclic schemas.
 The step bound is not a ledger execution-cost proof. Interpreter termination alone
 is not a complete ledger-acceptance claim.
 
-Only `def`/`abbrev` predicate fragments are accepted, per-property dependency
-closures are isolated, admitted declarations/local axioms are rejected, and claims
+Only plain `def`/`abbrev` predicate fragments (with optional documentation
+comments) are accepted. Attributes and declaration modifiers are rejected,
+including inside local definitions. Elaboration is audited for new unsafe,
+partial, opaque, admitted or axiom declarations and changes to checker
+registrations. Per-property dependency closures are isolated, and claims
 must reference every scoped compiled program. This last check catches disconnected
 specifications but cannot establish semantic relevance or rule out vacuity.
 Assumptions must appear in the proposition; documentary assumptions are not axioms.
 
-## Coordinated interface profile (UAL 0.6-draft)
+## Coordinated interface profile (UAL 1.0)
 
 The current game generator uses `writeInterfaceBundle` to emit the proposed
 CIP-57 compiled-interface dialect and assurance-v2. `interface` contains ordered

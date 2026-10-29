@@ -36,7 +36,11 @@ private partial def conforms (defs schema : Json) (value : Const) : Except Strin
     return (← (fields.toList.zip values).mapM fun (s, v) => conforms defs s (.Data v)).all id
   | "list", .Data (.List values) | "#list", .ConstDataList values =>
     let items ← schema.getObjVal? "items"
-    return (← values.mapM fun v => conforms defs items (.Data v)).all id
+    match items with
+    | .arr schemas =>
+      unless schemas.size == values.length do return false
+      return (← (schemas.toList.zip values).mapM fun (s, v) => conforms defs s (.Data v)).all id
+    | _ => return (← values.mapM fun v => conforms defs items (.Data v)).all id
   | "map", .Data (.Map values) =>
     let keys ← schema.getObjVal? "keys"
     let vals ← schema.getObjVal? "values"

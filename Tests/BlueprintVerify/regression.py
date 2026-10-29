@@ -72,6 +72,19 @@ def axiom(d,p):
     d['properties'][0]['statement']['formal']['uses'] = ['bad']
 run_case('fragment axioms', axiom, 'only def/abbrev')
 
+def fragment(source):
+    def change(d,p):
+        d['formalFragments'] = [{'id':'review','language':'lean','source':source}]
+        d['properties'][0]['statement']['formal']['uses'] = ['review']
+    return change
+run_case('plain definitional fragment', fragment('/-- documentation is allowed -/ def unused := 1'))
+for modifier in ['@[instance]', '@[macro Lean.Parser.Term.num]', '@[term_elab Lean.Parser.Term.num]',
+                 '@[command_elab Lean.Parser.Command.declaration]', '@[implemented_by id]',
+                 'unsafe', 'partial', 'private', 'noncomputable']:
+    run_case('fragment modifier '+modifier, fragment(modifier+' def unused := 1'), 'do not allow declaration modifiers')
+run_case('fragment sorry', fragment('def admitted : False := by sorry'), 'sorry declaration')
+run_case('nested fragment modifier', fragment('def f : Nat := g where\n  @[inline] g := 0'), 'do not allow declaration modifiers')
+
 def exhaust(d,p):
     d['properties'][0]['statement']['formal']['source'] = d['properties'][0]['statement']['formal']['source'].replace('2500','0')
 run_case('fuel exhaustion is not rejection', exhaust, 'falsified')
