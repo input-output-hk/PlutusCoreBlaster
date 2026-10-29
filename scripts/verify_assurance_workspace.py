@@ -69,7 +69,7 @@ def example(n):
     if n=='game':return run(n,['lake','env',sys.executable,base/'run_generated.py','--generator',generators[n],'--plutus',a.plutus,'--output',a.output/n])
     return run(n,['lake','env',sys.executable,base/f'run_{n}.py',generators[n],a.output/n])
 with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(example,names))
-run('generated-artifacts',[sys.executable,base/'validate_outputs.py','--cips',a.cips,*[a.output/n for n in names]])
+run('generated-artifacts',[sys.executable,base/'validate_outputs.py','--cips',a.cips,'--require-evidence',*[a.output/n for n in names]])
 run('cip-schemas',[sys.executable,'-m','unittest','discover','-s','CIP-XXXX/tests','-v'],a.cips)
 run('legacy-regressions',['lake','env',sys.executable,base/'regression.py'])
 run('interface-regressions',['lake','env',sys.executable,base/'interface_regression.py',a.output/'game'])

@@ -19,6 +19,7 @@ p.add_argument('--generator', required=True, type=Path)
 p.add_argument('--plutus', required=True, type=Path)
 p.add_argument('--output', required=True, type=Path)
 a = p.parse_args()
+from evidence import provenance
 from runtime import lean_command
 lean_args = lean_command()
 
@@ -90,7 +91,7 @@ tracked_inputs = ['PlutusCore/UPLC/BlueprintEncoding/Assurance.lean',
                   'PlutusCore/UPLC/BlueprintEncoding/blueprint.schema.json',
                   'PlutusCore/UPLC/CekMachine.lean', 'PlutusCore/UPLC/Utils.lean',
                   'lakefile.lean', 'lake-manifest.json', 'lean-toolchain', 'Tests/BlueprintVerify/runtime.py']
-report = {'format':'ual-blaster-run-2', 'created':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+report = {'provenance':provenance(repo,generator,__file__),'format':'ual-blaster-run-2', 'created':datetime.datetime.now(datetime.timezone.utc).isoformat(),
           'method':'Blaster SMT; no reconstructed Lean proof',
           'verifiedProperties':verified, 'concreteHashVector':'passed',
           'inputs':{f.name:digest(f) for f in out.glob('*.json') if f.name not in ['run-report.json', 'verified-assurance.json']},

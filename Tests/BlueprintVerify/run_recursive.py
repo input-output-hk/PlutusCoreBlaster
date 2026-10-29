@@ -2,13 +2,13 @@
 """Generate and verify recursive Data contracts. Run under lake env."""
 import copy
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
 import re
 import subprocess
 import sys
+from evidence import provenance, verified_document
 from runtime import lean_command
 
 repo = Path(__file__).resolve().parents[2]
@@ -70,17 +70,10 @@ reject('stale-definitions',lambda d:d['definitions'][key].update(title='changed'
 reject('alias-cycle',lambda d:d['definitions'].__setitem__(key,{'$ref':ref}), 'unguarded recursive schema')
 reject('missing-definition',lambda d:d['definitions'].pop(key), 'unresolved argument schema')
 reject('false-mirror',lambda d:d['properties'][0]['statement']['formal'].update(source='∀ (n : Integer), mirrorData_returns (leaf n) (leaf (n + 1))'), 'falsified')
-report={'status':'verified','properties':sorted(expected),'negativeChecks':negatives,'concreteWitness':'Branch (Leaf 2) (Branch (Leaf 1) (Leaf 4)) accepted',
+report={'provenance':provenance(repo,generator,__file__),'status':'verified','properties':sorted(expected),'negativeChecks':negatives,'concreteWitness':'Branch (Leaf 2) (Branch (Leaf 1) (Leaf 4)) accepted',
         'generatorHash':digest(generator),'blueprintHash':digest(out/'plutus.json'),'assuranceHash':digest(out/'assurance.json'),
         'scope':'Symbolic integers at fixed recursive tree shapes under 3000 CEK steps; not arbitrary-depth termination.',
         'trust':'Blaster SMT; no reconstructed Lean kernel proof.'}
 write(out/'run-report.json',report)
-evidence_doc=copy.deepcopy(doc);evidence_doc['tools']={'blaster':{'name':'Blaster','version':'loaded-environment'}}
-for prop in evidence_doc['properties']:
-    ev={'method':'smt-check','verifier':'Blaster','tool':'blaster','outcome':'verified','date':datetime.now(timezone.utc).date().isoformat(),
-        'checkingContextHash':doc['checkingContexts'][prop['checkingContext']]['hash'],'artifact':{'uri':'run-report.json','hash':digest(out/'run-report.json')},'notes':report['scope']+' '+report['trust']}
-    if prop['scope'].get('validators'):ev['scriptHash']=bp['validators'][0]['hash']
-    if prop['scope'].get('functions'):ev['functionHashes']={'mirrorData':doc['functions']['mirrorData']['hash']}
-    prop['evidence']=[ev]
-write(out/'verified-assurance.json',evidence_doc)
+write(out/'verified-assurance.json',verified_document(doc,bp,digest(out/'run-report.json'),report['scope']+' '+report['trust']))
 print('PASS recursive end-to-end verification',flush=True)

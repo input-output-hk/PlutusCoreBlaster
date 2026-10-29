@@ -10,11 +10,15 @@ import re
 import subprocess
 import sys
 
+from evidence import digest, provenance, verified_document
 from runtime import lean_command
 lean_args = lean_command()
 
 repo=Path(__file__).resolve().parents[2]
 generator=Path(sys.argv[1]).resolve();out=Path(sys.argv[2]).resolve();out.mkdir(parents=True,exist_ok=True)
+for name in ['run-report.json', 'verified-assurance.json']:
+    (out/name).unlink(missing_ok=True)
+
 def run(source,name):
     path=out/name;path.write_text(source)
     result=subprocess.run(lean_args + [str(path)],cwd=repo,text=True,capture_output=True,timeout=300)
@@ -47,6 +51,7 @@ base_prop=next(p for p in original['properties'] if p['id']=='native_applied_sev
 base_context=json.loads((out/original['checkingContexts'][base_prop['checkingContext']]['uri']).read_text())
 def h(path): return {'alg':'sha256','digest':hashlib.sha256(path.read_bytes()).hexdigest()}
 def write(path, obj): path.write_text(json.dumps(obj,indent=2)+'\n')
+negatives=[]
 def reject(name, change, expected):
     d=copy.deepcopy(original);d['properties']=[copy.deepcopy(base_prop)]
     c=copy.deepcopy(base_context);change(c,d)
@@ -55,6 +60,7 @@ def reject(name, change, expected):
     ap=out/(name+'-assurance.json');write(ap,d)
     code,log=run('import PlutusCore.UPLC.BlueprintEncoding.Assurance\n'+f'#verify_blueprint AppliedNegative {json.dumps(str(ap))}\n',name+'.lean')
     if code==0 or expected not in log or ': verified (Blaster SMT' in log: raise AssertionError(name+'\n'+log)
+    negatives.append(name)
     print('PASS',name,flush=True)
 def params(c): return c['targets'][0]['parameters']
 reject('applied-wrong-order',lambda c,d:params(c)['values'][0].update(parameter='/parameters/1'),'applied parameter order/reference mismatch')
@@ -72,4 +78,14 @@ reject('applied-stale-term',lambda c,d:bad_term(c,d,b'bad',False),'checking arti
 valid=(out/params(base_context)['values'][0]['term']['uri']).read_bytes()
 reject('applied-trailing-term',lambda c,d:bad_term(c,d,valid+b'\x00'),'trailing or invalid Flat parameter padding')
 reject('applied-open-term',lambda c,d:bad_term(c,d,bytes.fromhex('200201')),'invalid or open Flat parameter term')
+report={'status':'verified','properties':sorted(p['id'] for p in original['properties']),
+        'negativeChecks':negatives,'swappedWireCounterexample':True,
+        'generatorHash':digest(generator),'blueprintHash':digest(out/'plutus.json'),
+        'assuranceHash':digest(out/'assurance.json'),'environmentHash':digest(out/'environment.json'),
+        'provenance':provenance(repo,generator,__file__),
+        'scope':'Universal and fully applied Data/native parameters under the declared CEK step bounds.',
+        'trust':'Blaster SMT; no reconstructed Lean kernel proof or ledger-cost claim.'}
+write(out/'run-report.json',report)
+write(out/'verified-assurance.json',verified_document(original,json.loads((out/'plutus.json').read_text()),
+      digest(out/'run-report.json'),report['scope']+' '+report['trust']))
 print('PASS six parameter claims and nine applied-binding negative checks',flush=True)

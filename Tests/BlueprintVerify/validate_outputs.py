@@ -11,6 +11,8 @@ from jsonschema import Draft202012Validator, RefResolver
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cips', type=Path, required=True)
+    parser.add_argument('--require-evidence', action='store_true',
+                        help='Require complete fresh evidence and matching Haskell source provenance')
     parser.add_argument('examples', nargs='+', type=Path)
     args = parser.parse_args()
     store = {}
@@ -70,6 +72,8 @@ def main():
                         tag = bytes([int(bp['preamble']['plutusVersion'][1:])])
                         assert hashlib.blake2b(tag + specialized.read_bytes(), digest_size=28).hexdigest() == parameters['appliedScriptHash']
         verified = folder / 'verified-assurance.json'
+        if args.require_evidence:
+            assert verified.is_file(), 'Missing fresh evidence: ' + str(folder)
         if verified.exists():
             evidence_doc = load(verified)
             assert evidence_doc['blueprint'] == doc['blueprint']
@@ -80,9 +84,17 @@ def main():
                 original = originals[prop['id']]
                 assert {k: v for k, v in prop.items() if k != 'evidence'} == {
                     k: v for k, v in original.items() if k != 'evidence'}
+                assert prop.get('evidence'), 'Missing property evidence: ' + prop['id']
                 for evidence in prop['evidence']:
                     assert evidence['checkingContextHash'] == doc['checkingContexts'][prop['checkingContext']]['hash']
-                    artifact(folder, evidence['artifact'])
+                    report_path = artifact(folder, evidence['artifact'])
+                    if args.require_evidence:
+                        assert evidence['outcome'] == 'verified' and evidence['method'] == 'smt-check'
+                        sources = load(report_path)['provenance']['sources']
+                        assert any(Path(p).suffix == '.hs' for p in sources), 'Missing Haskell source provenance'
+                        for source, expected in sources.items():
+                            assert expected['alg'] == 'sha256'
+                            assert hashlib.sha256(Path(source).read_bytes()).hexdigest() == expected['digest'], source
                     if 'scriptHash' in evidence:
                         assert evidence['scriptHash'] in [validators[v]['hash'] for v in prop['scope'].get('validators', [])]
                     for name, digest in evidence.get('functionHashes', {}).items():
