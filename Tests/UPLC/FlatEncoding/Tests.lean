@@ -17,6 +17,32 @@ example : decodeNat ([true]  ++ [false, false, false, false, false, false, false
                   ++ [true]  ++ [false, false, false, false, false, false, false]
                   ++ [false] ++ [false, false, false, false, false, false, true ]) = .some ([], 16384) := by native_decide
 
+-- These run the compiler's linear bit builders, including a non-empty initial prefix.
+example : (List.range 256).all (fun n =>
+    match bitSequenceFromByteString [Char.ofNat n] [] with
+    | some bits => decodeFixedNat 8 bits == some ([], n)
+    | none => false) = true := by native_decide
+
+example : bitSequenceFromHexString "80aB00fF".data [true, false] =
+    bitSequenceFromByteString [Char.ofNat 0x80, Char.ofNat 0xab, Char.ofNat 0, Char.ofNat 0xff]
+      [true, false] := by native_decide
+
+example : bitSequenceFromByteString [Char.ofNat 0x80] [false, true] =
+    some [false, true, true, false, false, false, false, false, false, false] := by native_decide
+
+example : bitSequenceFromByteString [] [true, false] = some [true, false] := by native_decide
+example : bitSequenceFromHexString [] [true, false] = some [true, false] := by native_decide
+example : bitSequenceFromHexString "00f".data [true] = none := by native_decide
+example : bitSequenceFromHexString "00xz".data [true] = none := by native_decide
+
+/-- info: 'PlutusCore.UPLC.FlatEncoding.Internal.bitSequenceFromHexString_eq_linear' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms bitSequenceFromHexString_eq_linear
+
+/-- info: 'PlutusCore.UPLC.FlatEncoding.Internal.bitSequenceFromByteString_eq_linear' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms bitSequenceFromByteString_eq_linear
+
 -- Spec C.5. Example
 
 /-- info: some

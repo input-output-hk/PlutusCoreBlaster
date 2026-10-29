@@ -357,13 +357,68 @@ def bitSequenceFromHexString : List Char → List Bool → Option (List Bool)
       bitSequenceFromHexString t (acc ++ b₁ ++ b₂)
   | _            , _   => .none
 
+def byteToBits (c : Char) : List Bool :=
+  let b := c |> Char.toUInt8 |> UInt8.toBitVec
+  [b.getLsb 7, b.getLsb 6, b.getLsb 5, b.getLsb 4, b.getLsb 3, b.getLsb 2, b.getLsb 1, b.getLsb 0]
+
 /- Generates a bit sequence for a byte string. -/
 def bitSequenceFromByteString : List Char → List Bool → Option (List Bool)
   | []    , acc => .some acc
-  | c :: t, acc =>
-      let b   := c |> Char.toUInt8 |> UInt8.toBitVec
-      let bcc := [b.getLsb 7, b.getLsb 6, b.getLsb 5, b.getLsb 4, b.getLsb 3, b.getLsb 2, b.getLsb 1, b.getLsb 0]
-      bitSequenceFromByteString t (acc ++ bcc)
+  | c :: t, acc => bitSequenceFromByteString t (acc ++ byteToBits c)
+
+/-! The logical definitions above append to an ever-growing prefix. The compiler uses the
+linear implementations below instead: each step prepends at most eight bits to a reversed
+accumulator, which is reversed once at the end. The equality proofs cover every input and
+every initial accumulator, including malformed hex. -/
+
+def bitSequenceFromHexStringRev : List Char → List Bool → Option (List Bool)
+  | []           , acc => .some acc.reverse
+  | h₁ :: h₂ :: t, acc => do
+      let b₁ ← bitSequenceFromHexDigit (Char.toLower h₁)
+      let b₂ ← bitSequenceFromHexDigit (Char.toLower h₂)
+      bitSequenceFromHexStringRev t (b₂.reverse ++ b₁.reverse ++ acc)
+  | _            , _   => .none
+
+def bitSequenceFromHexStringLinear (s : List Char) (acc : List Bool) : Option (List Bool) :=
+  bitSequenceFromHexStringRev s acc.reverse
+
+theorem bitSequenceFromHexStringRev_eq : ∀ (s : List Char) (acc : List Bool),
+    bitSequenceFromHexStringRev s acc = bitSequenceFromHexString s acc.reverse
+  | [], _ => rfl
+  | [_], _ => rfl
+  | h₁ :: h₂ :: t, acc => by
+      simp only [bitSequenceFromHexStringRev, bitSequenceFromHexString]
+      cases bitSequenceFromHexDigit (Char.toLower h₁) with
+      | none => rfl
+      | some b₁ =>
+          cases bitSequenceFromHexDigit (Char.toLower h₂) with
+          | none => rfl
+          | some b₂ =>
+              simp [bitSequenceFromHexStringRev_eq t, List.reverse_append, List.append_assoc]
+
+@[csimp] theorem bitSequenceFromHexString_eq_linear :
+    bitSequenceFromHexString = bitSequenceFromHexStringLinear := by
+  funext s acc
+  simp [bitSequenceFromHexStringLinear, bitSequenceFromHexStringRev_eq]
+
+def bitSequenceFromByteStringRev : List Char → List Bool → Option (List Bool)
+  | []    , acc => .some acc.reverse
+  | c :: t, acc => bitSequenceFromByteStringRev t ((byteToBits c).reverse ++ acc)
+
+def bitSequenceFromByteStringLinear (s : List Char) (acc : List Bool) : Option (List Bool) :=
+  bitSequenceFromByteStringRev s acc.reverse
+
+theorem bitSequenceFromByteStringRev_eq (s : List Char) (acc : List Bool) :
+    bitSequenceFromByteStringRev s acc = bitSequenceFromByteString s acc.reverse := by
+  induction s generalizing acc with
+  | nil => rfl
+  | cons c t ih =>
+      simp [bitSequenceFromByteStringRev, bitSequenceFromByteString, ih, List.reverse_append]
+
+@[csimp] theorem bitSequenceFromByteString_eq_linear :
+    bitSequenceFromByteString = bitSequenceFromByteStringLinear := by
+  funext s acc
+  simp [bitSequenceFromByteStringLinear, bitSequenceFromByteStringRev_eq]
 
 /- Decodes a Program from a hex string. -/
 def decodeProgramFromHexString (hexString : String) : Option Program :=
