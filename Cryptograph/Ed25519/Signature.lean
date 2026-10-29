@@ -37,6 +37,11 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
       match EdPoint.decompress rBytes with
       | none => false
       | some r =>
+        -- Match libsodium/Cardano's single-signature verification: reject small-order
+        -- keys/nonces, then check the uncofactored equation. Cofactor multiplication
+        -- would accept e.g. the identity key with an identity nonce and scalar zero.
+        if EdPoint.isZero ((8 : Nat) * a) || EdPoint.isZero ((8 : Nat) * r) then false
+        else
         -- Decode s as scalar (little-endian)
         let s := bytesToNat sBytes
 
@@ -51,11 +56,11 @@ def verify (publicKey : List UInt8) (message : List UInt8) (signature : List UIn
           -- Reduce hash modulo L
           let h := reduceModL hashBytes
 
-          -- Compute left side: 8 * (s*B), cofactored equation as of RFC 8032
-          let leftSide := 8 * s * EdPoint.basePoint
+          -- Compute left side: s*B
+          let leftSide := s * EdPoint.basePoint
 
-          -- Compute right side: 8 * (R + h*A), cofactored equation as of RFC 8032
-          let rightSide := 8 * (r + h * a)
+          -- Compute right side: R + h*A
+          let rightSide := r + h * a
 
           -- Check if points are equal (in affine coordinates)
           let (lx, ly) := EdPoint.toAffine leftSide

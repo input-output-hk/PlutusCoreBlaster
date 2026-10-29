@@ -168,7 +168,9 @@ private def padMessage (msg : ByteArray) : ByteArray :=
   let padded := msg.push 0x80
 
   -- Pad with zeros until length ≡ 56 (mod 64)
-  let padLen := (56 - (msgLen + 1) % 64) % 64
+  -- Nat subtraction saturates: add one block before subtracting so lengths 56..62
+  -- receive the required second block rather than dropping the final length field.
+  let padLen := (120 - (msgLen + 1) % 64) % 64
   let padded := (List.range padLen).foldl (fun arr _ => arr.push 0) padded
 
   -- Append length as 64-bit little-endian integer

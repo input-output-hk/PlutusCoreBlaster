@@ -23,6 +23,11 @@ PlutusCoreBlaster is a Lean 4 formalization of [Untyped Plutus Core (UPLC)](http
 Install z3 version 4.15.2.
 Install Lean 4 through [elan](https://github.com/leanprover/elan). The version selected by this repository is recorded in [`lean-toolchain`](lean-toolchain) (currently 4.24.0). Lake fetches the [Lean-blaster](https://github.com/input-output-hk/Lean-blaster) dependency; the `Cryptograph` library is included in this repository.
 
+Compiled crypto also requires a C toolchain, `pkg-config` and libsodium development files
+(`apt install libsodium-dev pkg-config` or `brew install libsodium pkg-config`). See
+[native crypto](Cryptograph/FFI/README.md) for the supported primitives, reference APIs and
+conformity tests.
+
 ```sh
 lake build          # build the default PlutusCore target
 lake build Lemmas   # build the proof library

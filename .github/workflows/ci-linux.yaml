@@ -51,6 +51,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Install native crypto dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsodium-dev pkg-config
+
       - name: Build and Validate PlutusCore
         run: make check_plutus_core
 
@@ -72,7 +75,10 @@ jobs:
           path: build.log
 
       - name: Build native CEK benchmark
-        run: lake build bench_cek
+        run: lake build bench_cek test_crypto_ffi
+
+      - name: Check native and Lean crypto against independent vectors
+        run: python3 scripts/test_crypto_ffi.py
 
       - name: Checkout pinned Plutus VM Benchmark reference
         uses: actions/checkout@v6
