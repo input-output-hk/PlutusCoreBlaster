@@ -27,6 +27,9 @@ usage:
 	@echo "                      symlink and a previously generated test suite."
 # Benchmarks
 	@echo " - build_benchmark: Build the #prep_uplc benchmark harness and driver."
+	@echo " - build_cek_benchmark: Build the standalone native CEK benchmark."
+	@echo " - check_cek_benchmark: Check the native benchmark CLI. BENCHMARK_ROOT=<path>"
+	@echo "                        also checks every Plutus VM Benchmark reference script."
 	@echo " - bench_prep_uplc: Benchmark #prep_uplc on every script of the repository,"
 	@echo "                    the conformance suite included (see Benchmark/README.md)."
 	@echo "                    JOBS=N runs N cases at a time (default 1);"
@@ -96,6 +99,13 @@ BENCH_ARGS ?=
 .PHONY: build_benchmark
 build_benchmark:
 	lake build Benchmark bench_prep_uplc
+
+.PHONY: build_cek_benchmark check_cek_benchmark
+build_cek_benchmark:
+	lake build bench_cek
+
+check_cek_benchmark: build_cek_benchmark
+	python3 scripts/test_bench_cek.py $(if $(BENCHMARK_ROOT),--benchmark-root "$(BENCHMARK_ROOT)")
 
 .PHONY: bench_prep_uplc
 bench_prep_uplc:
