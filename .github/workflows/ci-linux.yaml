@@ -85,13 +85,13 @@ jobs:
             data/plutus_use_cases
             check/reference
 
-      - name: Check native CLI and all reference scripts
-        run: python3 scripts/test_bench_cek.py --benchmark-root .benchmark-reference
+      - name: Check native CLI, reference scripts and profiler equivalence
+        run: python3 scripts/test_bench_cek.py --benchmark-root .benchmark-reference --profile-corpus
 
-      - name: Upload native CEK check CSV
+      - name: Upload native CEK check CSV and diagnostic profiles
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: native-cek-check
-          path: Benchmark/results/cek/plutuscore-lean-check.csv
+          path: Benchmark/results/cek/
           if-no-files-found: ignore

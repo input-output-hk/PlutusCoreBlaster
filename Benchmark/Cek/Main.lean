@@ -1,65 +1,8 @@
-import PlutusCore.UPLC.CekMachine
-import PlutusCore.UPLC.FlatEncoding
-
-/-!
-Native CEK benchmark for the Plutus VM Benchmark image contract.
-
-`check FILE [MAX_STEPS]` prints one headerless `vm,script,status,cpu,mem` CSV row.
-`time FILE d3,eval MEASURE_MS [MAX_STEPS]` prints loop markers and timing CSV rows,
-prefixed by `PVB_RESULT <loop> `. File I/O is outside timing. D3 converts the raw bytes,
-decodes Flat, and evaluates on every iteration; eval decodes once before timing.
-
-Both paths use the library's compiled-in variant E costs and builtin semantics (PlutusV3,
-protocol version 11). Each evaluation has fresh state and counts costs, startup included.
-An exhausted step limit is an infrastructure error, never a CEK evaluation error.
--/
+import Benchmark.Cek.Profile
 
 namespace Benchmark.Cek
 
 open PlutusCore.UPLC.Term (Program)
-open PlutusCore.UPLC.CekMachine
-open PlutusCore.UPLC.ExBudget (ExBudget)
-open PlutusCore.UPLC.FlatEncoding (decodeProgramFromByteString)
-
-def vm : String := "plutuscore-lean"
-def defaultMaxSteps : Nat := 100_000_000
-def timingHeader : String := "vm,script,mean_ns,median_ns,min_ns,max_ns,stddev_ns,iterations"
-
-def csvField (s : String) : String :=
-  if s.contains ',' || s.contains '"' || s.contains '\n' || s.contains '\r' then
-    "\"" ++ s.replace "\"" "\"\"" ++ "\""
-  else s
-
-def scriptName (path : System.FilePath) : String :=
-  path.fileStem.getD path.toString
-
-/-- Each raw byte is one character of the decoder's byte-string representation. UTF-8
-decoding would replace or reject arbitrary Flat bytes. This conversion belongs to D3. -/
-def decode (bytes : ByteArray) : Except String Program :=
-  let input := String.mk (bytes.data.toList.map Char.ofUInt8)
-  match decodeProgramFromByteString input with
-  | some program => .ok program
-  | none => .error "Flat decode failed"
-
-structure Outcome where
-  ok : Bool
-  cost : ExBudget
-deriving BEq
-
-def evaluate (program : Program) (maxSteps : Nat) : Except String Outcome :=
-  let (state, cost) := cekExecuteProgramWithCost .defaultFunSemanticsVariantE program [] maxSteps
-  match state with
-  | .Halt _ => .ok ⟨true, cost⟩
-  | .Error => .ok ⟨false, cost⟩
-  | _ => .error s!"CEK step limit exhausted ({maxSteps})"
-
-/-- Non-inlined IO boundaries prevent the compiler from moving the pure evaluation out of
-the repeated timed operation. The status and both cost components are consumed each time. -/
-@[noinline] def runEval (program : Program) (maxSteps : Nat) : IO Outcome :=
-  IO.ofExcept (evaluate program maxSteps)
-
-@[noinline] def runD3 (bytes : ByteArray) (maxSteps : Nat) : IO Outcome :=
-  IO.ofExcept (decode bytes >>= fun program => evaluate program maxSteps)
 
 def check (path : System.FilePath) (maxSteps : Nat) : IO Unit := do
   let bytes ← IO.FS.readBinFile path
@@ -133,6 +76,7 @@ def positiveNat (label value : String) : Except String Nat := do
 inductive Command where
   | check : System.FilePath → Nat → Command
   | time : System.FilePath → List String → Nat → Nat → Command
+  | profile : System.FilePath → Nat → Nat → Command
 
 def parseTime (path loops ms : String) (maxSteps : Nat) : Except String Command := do
   let loops := loops.splitOn ","
@@ -141,13 +85,18 @@ def parseTime (path loops ms : String) (maxSteps : Nat) : Except String Command 
   return .time path loops (← positiveNat "MEASURE_MS" ms) maxSteps
 
 def parseArgs : List String → Except String Command
+  | ["profile", path] => .ok (.profile path 10 defaultMaxSteps)
+  | ["profile", path, runs] => do
+    return .profile path (← positiveNat "RUNS" runs) defaultMaxSteps
+  | ["profile", path, runs, steps] => do
+    return .profile path (← positiveNat "RUNS" runs) (← positiveNat "MAX_STEPS" steps)
   | ["check", path] => .ok (.check path defaultMaxSteps)
   | ["check", path, steps] => do
     return .check path (← positiveNat "MAX_STEPS" steps)
   | ["time", path, loops, ms] => parseTime path loops ms defaultMaxSteps
   | ["time", path, loops, ms, steps] => do
     parseTime path loops ms (← positiveNat "MAX_STEPS" steps)
-  | _ => .error "usage: bench_cek check FILE [MAX_STEPS]\n       bench_cek time FILE d3,eval MEASURE_MS [MAX_STEPS]"
+  | _ => .error "usage: bench_cek check FILE [MAX_STEPS]\n       bench_cek time FILE d3,eval MEASURE_MS [MAX_STEPS]\n       bench_cek profile FILE [RUNS] [MAX_STEPS]"
 
 end Benchmark.Cek
 
@@ -161,6 +110,7 @@ def main (args : List String) : IO UInt32 := do
       match command with
       | .check path steps => Benchmark.Cek.check path steps
       | .time path loops ms steps => Benchmark.Cek.time path loops ms steps
+      | .profile path runs steps => Benchmark.Cek.Profile.report path runs steps
       return 0
     catch error =>
       IO.eprintln s!"EVAL_FAIL: {error}"
