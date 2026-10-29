@@ -369,6 +369,68 @@ def runStepsWithCost (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State
   let r := runStepsCosting semanticsVariant Sigma n ExBudget.zero []
   (r.1, r.2.1 + builtinCallsCost semanticsVariant r.2.2)
 
+/-- Native costing loop. Charge each builtin before executing it, rather than
+    retaining its arguments in a call history until evaluation has finished.
+    The machine costs are selected once by the caller. -/
+def runStepsCostingEager (sv : BuiltinSemanticsVariant) (costs : CekMachineCosts)
+    (Sigma : State) (n : Nat) (cost : ExBudget) : State × ExBudget :=
+  match n, Sigma with
+  | _, State.Halt V => (State.Halt V, cost)
+  | _, State.Error => (State.Error, cost)
+  | 0, _ => (Sigma, cost)
+  | .succ n, _ =>
+      let cost := cost + calculateStepCostr costs Sigma
+      let cost := match saturatedBuiltin? Sigma with
+        | some (b, args) => cost + builtinCostSelected sv b args
+        | none => cost
+      runStepsCostingEager sv costs (step sv Sigma) n cost
+
+/-- Eager charging preserves both the complete final state and the exact cost,
+    including failed builtin applications and runs stopped by the fuel limit. -/
+theorem runStepsCostingEager_eq (sv : BuiltinSemanticsVariant) (Sigma : State) (n : Nat)
+    (stepCost : ExBudget) (calls : List (BuiltinFun × List CekValue)) :
+    runStepsCostingEager sv (semVarToCosts sv) Sigma n (stepCost + builtinCallsCost sv calls) =
+      let r := runStepsCosting sv Sigma n stepCost calls
+      (r.1, r.2.1 + builtinCallsCost sv r.2.2) := by
+  induction n generalizing Sigma stepCost calls with
+  | zero => cases Sigma <;> simp [runStepsCostingEager, runStepsCosting]
+  | succ n ih =>
+      cases Sigma with
+      | Halt V => simp [runStepsCostingEager, runStepsCosting]
+      | Error => simp [runStepsCostingEager, runStepsCosting]
+      | Eval st rho t =>
+          simp only [runStepsCostingEager, runStepsCosting]
+          rw [← ih]
+          congr 1
+          cases h : saturatedBuiltin? (State.Eval st rho t) with
+          | none =>
+              apply ExBudget.ext <;> simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+          | some call =>
+              rcases call with ⟨b, args⟩
+              simp only [builtinCallsCost]
+              apply ExBudget.ext <;> simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+      | Return st v =>
+          simp only [runStepsCostingEager, runStepsCosting]
+          rw [← ih]
+          congr 1
+          cases h : saturatedBuiltin? (State.Return st v) with
+          | none =>
+              apply ExBudget.ext <;> simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+          | some call =>
+              rcases call with ⟨b, args⟩
+              simp only [builtinCallsCost]
+              apply ExBudget.ext <;> simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+
+/-- Compiled entry point; the logical evaluator retains its call-history model. -/
+def runStepsWithCostEager (sv : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) : State × ExBudget :=
+  runStepsCostingEager sv (semVarToCosts sv) Sigma n ExBudget.zero
+
+@[csimp]
+theorem runStepsWithCost_eq_eager : runStepsWithCost = runStepsWithCostEager := by
+  funext sv Sigma n
+  simpa [runStepsWithCost, runStepsWithCostEager, builtinCallsCost] using
+    (runStepsCostingEager_eq sv Sigma n ExBudget.zero []).symm
+
 /-- The state a program reaches in at most `n` steps and what it cost, startup cost included. -/
 def cekExecuteProgramWithCost (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State × ExBudget :=
   match p with

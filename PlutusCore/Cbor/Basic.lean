@@ -740,6 +740,60 @@ theorem decodeCtag_consumes (s : List Char) :
   · -- Case: decodeHead fails or doesn't match pattern
     simp at h
 
+/-- List interface to the original bytestring decoder. Keep the unconsumed
+    suffix as a list when decoding scalar leaves inside a larger Data value. -/
+def decodeBytestringChars (s : List Char) : Option (List Char × String) :=
+  Prod.map String.data id <$> decodeBytestring (String.mk s)
+
+/-- Runtime implementation: only the decoded payload is converted to a String. -/
+def decodeBytestringCharsImpl (s : List Char) : Option (List Char × String) :=
+  match decodeBlock s with
+  | some (s', t) => some (s', String.mk t)
+  | none => do
+      let (s', n) ← decodeIndef s
+      if n = 2 then Prod.map id String.mk <$> decodeBlocks s' else none
+
+@[csimp]
+theorem decodeBytestringChars_eq_impl : decodeBytestringChars = decodeBytestringCharsImpl := by
+  funext s
+  simp only [decodeBytestringChars, decodeBytestring, decodeBytestringCharsImpl]
+  split
+  · simp [Prod.map]
+  · cases h : decodeIndef s with
+    | none => rfl
+    | some p =>
+      rcases p with ⟨s', n⟩
+      by_cases hn : n = 2
+      · cases hb : decodeBlocks s' <;> simp [hn, hb, Prod.map]
+      · simp [hn]
+
+/-- List interface to the original integer decoder. -/
+def decodeIntChars (s : List Char) : Option (List Char × Integer) :=
+  Prod.map String.data id <$> decodeInt (String.mk s)
+
+/-- Decode ordinary integers directly and bignums through the list bytestring
+    interface; neither path copies the unconsumed input. -/
+def decodeIntCharsImpl (s : List Char) : Option (List Char × Integer) :=
+  match decodeHead s with
+  | some (s', 0, n) => some (s', Int.ofNat n)
+  | some (s', 1, n) => some (s', -(Int.ofNat n) - 1)
+  | some (s', 6, 2) => (fun (s'', b) => (s'', Int.ofNat (stoi b))) <$> decodeBytestringChars s'
+  | some (s', 6, 3) => (fun (s'', b) => (s'', -(Int.ofNat (stoi b)) - 1)) <$> decodeBytestringChars s'
+  | _ => none
+
+@[csimp]
+theorem decodeIntChars_eq_impl : decodeIntChars = decodeIntCharsImpl := by
+  funext s
+  simp only [decodeIntChars, decodeInt, decodeIntCharsImpl]
+  split
+  · simp [Prod.map]
+  · simp [Prod.map]
+  · rename_i s' _
+    cases h : decodeBytestring (String.mk s') <;> simp [decodeBytestringChars, h, Prod.map]
+  · rename_i s' _
+    cases h : decodeBytestring (String.mk s') <;> simp [decodeBytestringChars, h, Prod.map]
+  · rfl
+
 -- Mutually recursive functions for decoding Data. These are defined at the top level
 -- to allow explicit signatures and mutual termination proofs.
 -- Note: These functions use `partial` because the mutual recursion termination proof
@@ -748,14 +802,14 @@ mutual
   -- Main decoder loop for Data values
   partial def decodeDataLoop (s : List Char) : Option (List Char × Data) :=
     match decodeAlternative decodeIndef decodeHead s with
-    | .some (_ , .inl 2     ) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
+    | .some (_ , .inl 2     ) => Prod.map id (.B ∘ ByteString.mk) <$> decodeBytestringChars s
     | .some (s', .inl 4     ) => Prod.map id          .List                <$> decodeListIndef s'
     | .some (s', .inl 5     ) => Prod.map id          .Map                 <$> decodePairListIndef s'
     | .some (_ , .inr (0, _))
     | .some (_ , .inr (1, _))
     | .some (_ , .inr (6, 2))
-    | .some (_ , .inr (6, 3)) => Prod.map String.data .I                   <$> decodeInt ⟨s⟩
-    | .some (_ , .inr (2, _)) => Prod.map String.data (.B ∘ ByteString.mk) <$> decodeBytestring ⟨s⟩
+    | .some (_ , .inr (6, 3)) => Prod.map id .I                            <$> decodeIntChars s
+    | .some (_ , .inr (2, _)) => Prod.map id (.B ∘ ByteString.mk) <$> decodeBytestringChars s
     | .some (s', .inr (4, n)) => Prod.map id          .List                <$> decodeList n s'
     | .some (s', .inr (5, n)) => Prod.map id          .Map                 <$> decodePairList n s'
     | .some (_ , .inr (6, _)) =>                                               decodeConstr s
