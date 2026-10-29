@@ -36,7 +36,7 @@
 
 static inline uint32_t load_le32_aligned(const uint8_t *p)
 {
-	return le32_to_cpu(*((uint32_t *) p));		
+	return le32_to_cpu(*((uint32_t *) p));
 }
 
 static inline void store_le32_aligned(uint8_t *dst, const uint32_t v)

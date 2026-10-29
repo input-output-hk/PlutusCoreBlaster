@@ -87,7 +87,7 @@ static void ripemd160_do_chunk(struct ripemd160_ctx *ctx, uint32_t *buf)
 	R(c1, d1, e1, a1, b1, f1, K1, 13, 7);
 	R(b1, c1, d1, e1, a1, f1, K1, 14, 9);
 	R(a1, b1, c1, d1, e1, f1, K1, 15, 8);
-	
+
 	R(e1, a1, b1, c1, d1, f2, K2, 7, 7);
 	R(d1, e1, a1, b1, c1, f2, K2, 4, 6);
 	R(c1, d1, e1, a1, b1, f2, K2, 13, 8);
