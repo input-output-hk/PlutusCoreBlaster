@@ -62,6 +62,20 @@ class NativeCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertNotIn("PVB_RESULT", result.stdout)
 
+    def test_failed_builtin_is_still_charged(self):
+        # divideInteger 1 0 saturates and fails. It pays the builtin cost as well
+        # as machine/startup costs; moving charging into the loop must retain it.
+        path = self.flat("divide-zero", "01000033706900124001")
+        result = run("check", path)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), VM + ",divide-zero,error,212441,601")
+        result = run("profile", path, 1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual((report["status"], report["cpu"], report["mem"]),
+                         ("error", 212441, 601))
+        self.assertEqual(report["eval"]["builtin_calls"], 1)
+
     def test_decode_failure_and_exhaustion_are_not_cek_errors(self):
         malformed = self.flat("malformed", "ff")
         constant = self.flat("constant", "010000480a81")

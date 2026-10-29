@@ -62,6 +62,21 @@ cap or outlier removal. Statistics use individual iteration times, a sample stan
 and the average of the two middle samples for an even-sized median. Derived statistics are
 rounded to integer nanoseconds when written, as the upstream report requires. CSV names are escaped.
 
+## Compiler replacements
+
+Kernel-checked `@[csimp]` equalities select two runtime implementations:
+
+- CBOR scalar decoding keeps the unconsumed `List Char` suffix instead of copying
+  it through `String` at every integer or bytestring leaf. The equivalence proofs
+  include rejected inputs, bignums and indefinite bytestrings.
+- `runStepsWithCost` compiles to an eager costing loop. It selects the machine
+  costs once and charges builtin calls before executing them, without retaining
+  a call history. Its equality preserves the complete state and both ExUnits for
+  every semantics variant, initial state and fuel limit, including failed builtins.
+
+The logical costing and CEK definitions remain available to Blaster and the
+existing proofs. These compiler replacements use neither `sorry` nor `native_decide`.
+
 ## Diagnostic profiling
 
 `profile` writes one JSON object (schema version 1), with ten measured runs by default. It is
@@ -95,8 +110,10 @@ JSON durations and counts are **totals across RUNS**; divide by `runs` for per-r
   argument dispatch and result construction. `builtins` splits this by builtin, with call counts.
 - `eval.builtin_cost_ns`: time inside the existing cost model, split by builtin as `cost_ns`.
   Calls remain retained and charged in reverse execution order after CEK execution, as in the
-  reference evaluator. `cost_pass_ns` is inclusive: it also contains cost accumulation, per-call
-  clocks, statistics and loop overhead. Do not add it to `builtin_cost_ns`.
+  logical evaluator. The compiled evaluator instead uses the eager loop described above;
+  the diagnostic loop retains its original structure, so its allocation costs and phase
+  timings do not describe that eager loop. `cost_pass_ns` is inclusive: it also contains cost
+  accumulation, per-call clocks, statistics and loop overhead. Do not add it to `builtin_cost_ns`.
 - `eval.total_ns`: inclusive instrumented evaluation. The difference from machine + builtin
   execution + cost pass is profiler dispatch, call recording and other bookkeeping.
 

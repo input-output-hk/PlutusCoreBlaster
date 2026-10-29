@@ -1,4 +1,5 @@
 import PlutusCore.UPLC.CekMachine.Lemmas
+import PlutusCore.UPLC.CekMachine.DecidableEq
 
 namespace PlutusCore.UPLC.CekMachine
 
@@ -81,6 +82,25 @@ example : runStepsWithCost testSemanticsVariant testStart 1
 -- Evaluating `error` is free.
 example : runStepsWithCost testSemanticsVariant (State.Eval [] [] .Error) 5
     = (State.Error, ExBudget.zero) := rfl
+
+-- Execute the compiler replacement at zero fuel, an intermediate Return, Halt,
+-- and beyond Halt under every cost variant. The examples above check the logical
+-- definition; these guards also exercise the compiled eager loop.
+#guard [PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariantA,
+    .defaultFunSemanticsVariantB, .defaultFunSemanticsVariantC,
+    .defaultFunSemanticsVariantD, .defaultFunSemanticsVariantE].all (fun sv =>
+  [0, 1, 2, 3].all (fun fuel =>
+    let cpu := match sv with
+      | .defaultFunSemanticsVariantA => 23000
+      | _ => 16000
+    let cost := testBudget cpu 100
+    decide (runStepsWithCost sv testStart fuel =
+      match fuel with
+      | 0 => (testStart, ExBudget.zero)
+      | 1 => (State.Return [] testResult, cost)
+      | _ => (State.Halt testResult, cost))) &&
+  decide (runStepsWithCost sv State.Error 10 = (State.Error, ExBudget.zero)) &&
+  decide (runStepsWithCost sv (State.Halt testResult) 10 = (State.Halt testResult, ExBudget.zero)))
 
 -- A program pays the startup cost on top.
 example : cekExecuteProgramWithCost testSemanticsVariant testProgram [] 2
