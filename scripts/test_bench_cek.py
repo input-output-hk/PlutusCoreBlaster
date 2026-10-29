@@ -81,11 +81,13 @@ class NativeCliTests(unittest.TestCase):
             for _, _, raw in rows:
                 row = dict(zip(TIME_FIELDS, next(csv.reader([raw]))))
                 self.assertEqual((row["vm"], row["script"]), (VM, "constant"))
-                values = {key: float(row[key]) for key in TIME_FIELDS[2:]}
+                # The upstream report calls int(), so decimal nanoseconds are incompatible.
+                values = {key: int(row[key]) for key in TIME_FIELDS[2:]}
                 self.assertTrue(all(math.isfinite(x) for x in values.values()))
                 self.assertGreater(values["mean_ns"], 0)
                 self.assertGreaterEqual(values["iterations"], 50)
-                self.assertGreaterEqual(values["mean_ns"] * values["iterations"], 999_999)
+                self.assertGreaterEqual(values["mean_ns"] * values["iterations"],
+                                        1_000_000 - values["iterations"] / 2 - 1)
                 self.assertLessEqual(values["min_ns"], values["median_ns"])
                 self.assertLessEqual(values["median_ns"], values["max_ns"])
                 self.assertGreaterEqual(values["stddev_ns"], 0)

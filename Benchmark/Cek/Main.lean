@@ -104,7 +104,10 @@ def Samples.csv (s : Samples) (name : String) : String := Id.run do
       (times[n / 2 - 1]!.toFloat + times[n / 2]!.toFloat) / 2
     else times[n / 2]!.toFloat
   let stddev := if n > 1 then Float.sqrt (max 0 (s.m2 / (n - 1).toFloat)) else 0
-  return s!"{vm},{csvField name},{s.mean},{median},{times[0]!},{times[n - 1]!},{stddev},{n}"
+  -- The common CSV/report loader requires integer nanoseconds. Round derived statistics
+  -- only at serialization; retain full precision while accumulating the samples.
+  let ns (value : Float) : UInt64 := (value + 0.5).toUInt64
+  return s!"{vm},{csvField name},{ns s.mean},{ns median},{times[0]!},{times[n - 1]!},{ns stddev},{n}"
 
 def time (path : System.FilePath) (loops : List String) (measureMs maxSteps : Nat) : IO Unit := do
   let bytes ← IO.FS.readBinFile path

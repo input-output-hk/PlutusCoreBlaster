@@ -58,7 +58,8 @@ cost accounting. Its success status and both costs must equal the initial evalua
 after stopping the timer. Each loop has five warm-up iterations, then at least 50 measured
 iterations and at least the requested total time in the measured operations. There is no sample
 cap or outlier removal. Statistics use individual iteration times, a sample standard deviation
-and the average of the two middle samples for an even-sized median. CSV names are escaped.
+and the average of the two middle samples for an even-sized median. Derived statistics are
+rounded to integer nanoseconds when written, as the upstream report requires. CSV names are escaped.
 
 ## Haskell gate
 
