@@ -57,7 +57,7 @@ jobs:
       - name: Configure native linker
         run: |
           if [[ -x scripts/lean-cc.sh ]]; then
-            echo "LEAN_CC=$GITHUB_WORKSPACE/scripts/lean-cc.sh" >> "$GITHUB_ENV"
+            echo "LEAN_CC=$PWD/scripts/lean-cc.sh" >> "$GITHUB_ENV"
           fi
 
       - name: Build and Validate PlutusCore
