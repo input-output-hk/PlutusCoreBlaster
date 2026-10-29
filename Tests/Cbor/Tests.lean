@@ -92,6 +92,17 @@ example : encode_example_11 := by simp [encode_example_11]; native_decide
 example : d₈ "deadbeef".toList = .some ([], 7234295460216005990) := by rfl
 example : d₁ "deadbeef".toList = .some ("eadbeef".toList, 100)   := by rfl
 
+-- Exercise the compiled list decoders without changing the 64-byte chunk limit.
+-- A suffix must survive unchanged, including after indefinite chunks and bignums.
+#guard decodeBytestringChars (("\x58\x40" ++ String.mk (List.replicate 64 'a')) ++ "tail").toList
+  == some ("tail".toList, String.mk (List.replicate 64 'a'))
+#guard decodeBytestringChars ("\x58\x41" ++ String.mk (List.replicate 65 'a')).toList == none
+#guard decodeBytestringChars "\x5f\x42ab\x41c\xfftail".toList == some ("tail".toList, "abc")
+#guard decodeBytestringChars "\x5f\x42ab".toList == none
+#guard decodeIntChars "\xc2\x42\x01\x00tail".toList == some ("tail".toList, 256)
+#guard decodeIntChars "\xc3\x42\x01\x00tail".toList == some ("tail".toList, -257)
+#guard decodeIntChars "\xc2\x42\x01".toList == none
+
 example : decodeBytestring ("\x58\x40" ++ "1234567890123456789012345678901234567890123456789012345678901234") =
   .some ("", "1234567890123456789012345678901234567890123456789012345678901234") := by native_decide
 
