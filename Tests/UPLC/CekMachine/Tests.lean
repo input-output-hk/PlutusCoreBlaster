@@ -179,6 +179,16 @@ private def historyReference (sv : BuiltinSemanticsVariant) (state : State) (fue
   let r := runStepsCosting sv state fuel ExBudget.zero []
   (r.1, r.2.1 + builtinCallsCost sv r.2.2)
 
+-- Deep input/output stacks must not overflow the native call stack during the
+-- conversion at a fuel boundary. Zero fuel also preserves the input directly.
+#guard
+  let stack := List.replicate 50000 Frame.ForceFrame
+  let state := State.Return stack (.VDelay (.Const .Unit) [])
+  let sv := PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariantE
+  decide (runStepsWithCost sv state 0 = (state, ExBudget.zero)) &&
+  decide (runStepsWithCost sv state 1 =
+    (State.Eval (List.replicate 49999 Frame.ForceFrame) [] (.Const .Unit), ExBudget.zero))
+
 #guard [PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariantA,
     .defaultFunSemanticsVariantB, .defaultFunSemanticsVariantC,
     .defaultFunSemanticsVariantD, .defaultFunSemanticsVariantE].all (fun sv =>

@@ -429,6 +429,98 @@ The logical evaluator and its proof interface are retained above.
 -/
 namespace Runtime
 
+/-- Each native continuation stores its tail in the frame itself. -/
+inductive Stack where
+  | empty
+  | ForceFrame : Stack → Stack
+  | LeftApplicationToTerm : Term → Environment → Stack → Stack
+  | LeftApplicationToValue : CekValue → Stack → Stack
+  | RightApplicationOfValue : CekValue → Stack → Stack
+  | ConstructorArgument : Nat → List CekValue → List Term → Environment → Stack → Stack
+  | CaseScrutinee : List Term → Environment → Stack → Stack
+
+def Stack.toList : Stack → PlutusCore.UPLC.CekMachine.Stack
+  | .empty => []
+  | .ForceFrame s => .ForceFrame :: s.toList
+  | .LeftApplicationToTerm t ρ s => .LeftApplicationToTerm t ρ :: s.toList
+  | .LeftApplicationToValue v s => .LeftApplicationToValue v :: s.toList
+  | .RightApplicationOfValue v s => .RightApplicationOfValue v :: s.toList
+  | .ConstructorArgument i vs ts ρ s => .ConstructorArgument i vs ts ρ :: s.toList
+  | .CaseScrutinee ts ρ s => .CaseScrutinee ts ρ :: s.toList
+
+def Stack.fromList : PlutusCore.UPLC.CekMachine.Stack → Stack
+  | [] => .empty
+  | .ForceFrame :: s => .ForceFrame (Stack.fromList s)
+  | .LeftApplicationToTerm t ρ :: s => .LeftApplicationToTerm t ρ (Stack.fromList s)
+  | .LeftApplicationToValue v :: s => .LeftApplicationToValue v (Stack.fromList s)
+  | .RightApplicationOfValue v :: s => .RightApplicationOfValue v (Stack.fromList s)
+  | .ConstructorArgument i vs ts ρ :: s => .ConstructorArgument i vs ts ρ (Stack.fromList s)
+  | .CaseScrutinee ts ρ :: s => .CaseScrutinee ts ρ (Stack.fromList s)
+
+@[simp] theorem Stack.toList_fromList (s : PlutusCore.UPLC.CekMachine.Stack) :
+    (Stack.fromList s).toList = s := by
+  induction s with
+  | nil => rfl
+  | cons f s ih => cases f <;> simp [Stack.fromList, Stack.toList, ih]
+
+@[simp] theorem Stack.fromList_toList (s : Stack) : Stack.fromList s.toList = s := by
+  induction s <;> simp [Stack.toList, Stack.fromList, *]
+
+/-- Tail-recursive reification also handles deep stacks at a fuel boundary. -/
+def Stack.toListRev : Stack → PlutusCore.UPLC.CekMachine.Stack → PlutusCore.UPLC.CekMachine.Stack
+  | .empty, acc => acc.reverse
+  | .ForceFrame s, acc => toListRev s (.ForceFrame :: acc)
+  | .LeftApplicationToTerm t ρ s, acc => toListRev s (.LeftApplicationToTerm t ρ :: acc)
+  | .LeftApplicationToValue v s, acc => toListRev s (.LeftApplicationToValue v :: acc)
+  | .RightApplicationOfValue v s, acc => toListRev s (.RightApplicationOfValue v :: acc)
+  | .ConstructorArgument i vs ts ρ s, acc => toListRev s (.ConstructorArgument i vs ts ρ :: acc)
+  | .CaseScrutinee ts ρ s, acc => toListRev s (.CaseScrutinee ts ρ :: acc)
+
+theorem Stack.toListRev_eq (s : Stack) (acc : PlutusCore.UPLC.CekMachine.Stack) :
+    toListRev s acc = acc.reverse ++ s.toList := by
+  induction s generalizing acc <;> simp [toListRev, Stack.toList, *, List.append_assoc]
+
+def Stack.toListFast (s : Stack) : PlutusCore.UPLC.CekMachine.Stack := s.toListRev []
+
+@[csimp] theorem Stack.toList_eq_fast : Stack.toList = Stack.toListFast := by
+  funext s
+  simp [Stack.toListFast, Stack.toListRev_eq]
+
+def Stack.fromListRev : PlutusCore.UPLC.CekMachine.Stack → Stack → Stack
+  | [], acc => acc
+  | .ForceFrame :: s, acc => fromListRev s (.ForceFrame acc)
+  | .LeftApplicationToTerm t ρ :: s, acc => fromListRev s (.LeftApplicationToTerm t ρ acc)
+  | .LeftApplicationToValue v :: s, acc => fromListRev s (.LeftApplicationToValue v acc)
+  | .RightApplicationOfValue v :: s, acc => fromListRev s (.RightApplicationOfValue v acc)
+  | .ConstructorArgument i vs ts ρ :: s, acc => fromListRev s (.ConstructorArgument i vs ts ρ acc)
+  | .CaseScrutinee ts ρ :: s, acc => fromListRev s (.CaseScrutinee ts ρ acc)
+
+theorem Stack.fromListRev_toList (s : PlutusCore.UPLC.CekMachine.Stack) (acc : Stack) :
+    (fromListRev s acc).toList = s.reverse ++ acc.toList := by
+  induction s generalizing acc with
+  | nil => rfl
+  | cons f s ih => cases f <;> simp [fromListRev, Stack.toList, ih, List.append_assoc]
+
+def Stack.fromListFast (s : PlutusCore.UPLC.CekMachine.Stack) : Stack := fromListRev s.reverse .empty
+
+@[csimp] theorem Stack.fromList_eq_fast : Stack.fromList = Stack.fromListFast := by
+  funext s
+  have h : (Stack.fromList s).toList = (Stack.fromListFast s).toList := by
+    simp [Stack.fromListFast, Stack.fromListRev_toList, Stack.toList]
+  simpa using congrArg Stack.fromList h
+
+def Stack.pushValues (xs : List CekValue) (s : Stack) : Stack :=
+  match xs with
+  | [] => s
+  | x :: xs => .LeftApplicationToValue x (pushValues xs s)
+
+@[simp] theorem Stack.toList_pushValues (xs : List CekValue) (s : Stack) :
+    (Stack.pushValues xs s).toList = step.folding xs s.toList := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih => simp [pushValues, Stack.toList, step.folding, ih]
+
+
 @[inline] def budget (cpu mem : Nat) : ExBudget := ⟨⟨cpu⟩, ⟨mem⟩⟩
 
 @[simp] theorem budget_add (cpu mem : Nat) (cost : ExBudget) :
@@ -460,13 +552,13 @@ namespace Runtime
   | Term.Term.Const c => onReturn s (CekValue.VCon c)
   | Term.Lam M => onReturn s (CekValue.VLam M ρ)
   | Term.Delay M => onReturn s (CekValue.VDelay M ρ)
-  | Term.Force M => onEval (Frame.ForceFrame :: s) ρ M
-  | Term.Apply M N => onEval (Frame.LeftApplicationToTerm N ρ :: s) ρ M
+  | Term.Force M => onEval (Stack.ForceFrame s) ρ M
+  | Term.Apply M N => onEval (Stack.LeftApplicationToTerm N ρ s) ρ M
   | Term.Constr i Ts =>
        match Ts with
-       | M :: Ms => onEval (Frame.ConstructorArgument i [] Ms ρ :: s) ρ M
+       | M :: Ms => onEval (Stack.ConstructorArgument i [] Ms ρ s) ρ M
        | [] => onReturn s (CekValue.VConstr i [])
-  | Term.Case N Ms => onEval (Frame.CaseScrutinee Ms ρ :: s) ρ N
+  | Term.Case N Ms => onEval (Stack.CaseScrutinee Ms ρ s) ρ N
   | Term.Builtin b => onReturn s (CekValue.VBuiltin b [] (α(b)))
   | Term.Error => onError ()
 
@@ -476,154 +568,152 @@ namespace Runtime
     (onHalt : CekValue → α) (onBuiltin : Stack → BuiltinFun → List CekValue → α)
     (stack : Stack) (Vr : CekValue) : α :=
   match stack with
-  | [] => onHalt Vr
-  | x :: s =>
-    match x with
-    | Frame.LeftApplicationToTerm M ρ =>
-           onEval (Frame.RightApplicationOfValue Vr :: s) ρ M
+  | .empty => onHalt Vr
+  | .LeftApplicationToTerm M ρ s =>
+         onEval (Stack.RightApplicationOfValue Vr s) ρ M
 
-    | Frame.LeftApplicationToValue V =>
-        match Vr with
-        | CekValue.VLam M ρ =>
-             onEval s (V :: ρ) M
-        | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgV ⊙ η) =>
-             onReturn s (CekValue.VBuiltin b (V :: Vs) η)
-        | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgV]) =>
-             onBuiltin s b (V :: Vs) -- considering args reversal when calling builtin
-        | _ => onError ()
+  | .LeftApplicationToValue V s =>
+      match Vr with
+      | CekValue.VLam M ρ =>
+           onEval s (V :: ρ) M
+      | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgV ⊙ η) =>
+           onReturn s (CekValue.VBuiltin b (V :: Vs) η)
+      | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgV]) =>
+           onBuiltin s b (V :: Vs) -- considering args reversal when calling builtin
+      | _ => onError ()
 
-    | Frame.RightApplicationOfValue Va =>
-        match Va with
-        | CekValue.VLam M ρ =>
-              onEval s (Vr :: ρ) M
-        | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgV ⊙ η) =>
-              onReturn s (CekValue.VBuiltin b (Vr :: Vs) η)
-        | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgV]) =>
-              onBuiltin s b (Vr :: Vs) -- considering args reversal when calling builtin
-        | _ => onError ()
+  | .RightApplicationOfValue Va s =>
+      match Va with
+      | CekValue.VLam M ρ =>
+            onEval s (Vr :: ρ) M
+      | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgV ⊙ η) =>
+            onReturn s (CekValue.VBuiltin b (Vr :: Vs) η)
+      | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgV]) =>
+            onBuiltin s b (Vr :: Vs) -- considering args reversal when calling builtin
+      | _ => onError ()
 
-    | Frame.ForceFrame =>
-        match Vr with
-        | CekValue.VDelay M ρ =>
-              onEval s ρ M
-        | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgQ ⊙ η) =>
-              onReturn s (CekValue.VBuiltin b Vs η)
-        | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgQ]) =>
-              onBuiltin s b Vs
-        | _ => onError ()
+  | .ForceFrame s =>
+      match Vr with
+      | CekValue.VDelay M ρ =>
+            onEval s ρ M
+      | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgQ ⊙ η) =>
+            onReturn s (CekValue.VBuiltin b Vs η)
+      | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgQ]) =>
+            onBuiltin s b Vs
+      | _ => onError ()
 
-    | Frame.ConstructorArgument i Vs Ts ρ =>
-        match Ts with
-        | M :: Ms => onEval (Frame.ConstructorArgument i (Vr :: Vs) Ms ρ :: s) ρ M
-        | [] => onReturn s (CekValue.VConstr i (List.reverse (Vr :: Vs)))
+  | .ConstructorArgument i Vs Ts ρ s =>
+      match Ts with
+      | M :: Ms => onEval (Stack.ConstructorArgument i (Vr :: Vs) Ms ρ s) ρ M
+      | [] => onReturn s (CekValue.VConstr i (List.reverse (Vr :: Vs)))
 
-    | Frame.CaseScrutinee Ms ρ =>
-        match Vr with
-        | CekValue.VConstr i Vs =>
-             match List.get?Internal Ms i with
-             | some mi => onEval (step.folding Vs s) ρ mi
+  | .CaseScrutinee Ms ρ s =>
+      match Vr with
+      | CekValue.VConstr i Vs =>
+           match List.get?Internal Ms i with
+           | some mi => onEval (Stack.pushValues Vs s) ρ mi
+           | none => onError ()
+
+      | CekValue.VCon (Const.Integer n) =>
+           if 0 ≤ n && n.toNat < Ms.length then
+             match Ms[n.toNat]? with
+             | some mi => onEval s ρ mi
              | none => onError ()
+           else onError ()
 
-        | CekValue.VCon (Const.Integer n) =>
-             if 0 ≤ n && n.toNat < Ms.length then
-               match Ms[n.toNat]? with
-               | some mi => onEval s ρ mi
-               | none => onError ()
-             else onError ()
+      | CekValue.VCon (Const.Bool false) =>
+           if Ms.length == 1 || Ms.length == 2 then
+             match List.get?Internal Ms 0 with
+             | some mi => onEval s ρ mi
+             | none => onError ()
+           else onError ()
 
-        | CekValue.VCon (Const.Bool false) =>
-             if Ms.length == 1 || Ms.length == 2 then
-               match List.get?Internal Ms 0 with
-               | some mi => onEval s ρ mi
-               | none => onError ()
-             else onError ()
+      | CekValue.VCon (Const.Bool true) =>
+           if Ms.length == 2 then
+             match List.get?Internal Ms 1 with
+             | some mi => onEval s ρ mi
+             | none => onError ()
+           else onError ()
 
-        | CekValue.VCon (Const.Bool true) =>
-             if Ms.length == 2 then
-               match List.get?Internal Ms 1 with
-               | some mi => onEval s ρ mi
-               | none => onError ()
-             else onError ()
+      | CekValue.VCon Const.Unit =>
+            if Ms.length == 1 then
+              match Ms[0]? with
+              | some mi => onEval s ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon Const.Unit =>
-              if Ms.length == 1 then
-                match Ms[0]? with
-                | some mi => onEval s ρ mi
-                | none => onError ()
-              else onError ()
+      | CekValue.VCon (Const.Pair p) =>
+            if Ms.length == 1 then
+              let Vs := [CekValue.VCon p.1, CekValue.VCon p.2]
+              match List.get?Internal Ms 0 with
+              | some mi => onEval (Stack.pushValues Vs s) ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon (Const.Pair p) =>
-              if Ms.length == 1 then
-                let Vs := [CekValue.VCon p.1, CekValue.VCon p.2]
-                match List.get?Internal Ms 0 with
-                | some mi => onEval (step.folding Vs s) ρ mi
-                | none => onError ()
-              else onError ()
+      | CekValue.VCon (Const.PairData p) =>
+            if Ms.length == 1 then
+              let Vs := [CekValue.VCon (Const.Data p.1), CekValue.VCon (Const.Data p.2)]
+              match List.get?Internal Ms 0 with
+              | some mi => onEval (Stack.pushValues Vs s) ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon (Const.PairData p) =>
-              if Ms.length == 1 then
-                let Vs := [CekValue.VCon (Const.Data p.1), CekValue.VCon (Const.Data p.2)]
-                match List.get?Internal Ms 0 with
-                | some mi => onEval (step.folding Vs s) ρ mi
-                | none => onError ()
-              else onError ()
+      | CekValue.VCon (Const.ConstList (c :: cs)) =>
+            if Ms.length == 1 || Ms.length == 2 then
+              let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
+              match List.get?Internal Ms 0 with
+              | some mi => onEval (Stack.pushValues Vs s) ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon (Const.ConstList (c :: cs)) =>
-              if Ms.length == 1 || Ms.length == 2 then
-                let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
-                match List.get?Internal Ms 0 with
-                | some mi => onEval (step.folding Vs s) ρ mi
-                | none => onError ()
-              else onError ()
+      | CekValue.VCon (Const.ConstList []) =>
+            if Ms.length == 2 then
+              match List.get?Internal Ms 1 with
+              | some mi => onEval s ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon (Const.ConstList []) =>
-              if Ms.length == 2 then
-                match List.get?Internal Ms 1 with
-                | some mi => onEval s ρ mi
-                | none => onError ()
-              else onError ()
+      | CekValue.VCon (Const.ConstDataList (c :: cs)) =>
+            if Ms.length == 1 || Ms.length == 2 then
+              let Vs := [CekValue.VCon (.Data c), CekValue.VCon (Const.ConstDataList cs)]
+              match Ms[0]? with
+              | some mi => onEval (Stack.pushValues Vs s) ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon (Const.ConstDataList (c :: cs)) =>
-              if Ms.length == 1 || Ms.length == 2 then
-                let Vs := [CekValue.VCon (.Data c), CekValue.VCon (Const.ConstDataList cs)]
-                match Ms[0]? with
-                | some mi => onEval (step.folding Vs s) ρ mi
-                | none => onError ()
-              else onError ()
+      | CekValue.VCon (Const.ConstDataList []) =>
+            if Ms.length == 2 then
+              match List.get?Internal Ms 1 with
+              | some mi => onEval s ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon (Const.ConstDataList []) =>
-              if Ms.length == 2 then
-                match List.get?Internal Ms 1 with
-                | some mi => onEval s ρ mi
-                | none => onError ()
-              else onError ()
+      | CekValue.VCon (Const.ConstPairDataList (c :: cs)) =>
+            if Ms.length == 1 || Ms.length == 2 then
+              let Vs := [CekValue.VCon (.PairData c), CekValue.VCon (Const.ConstPairDataList cs)]
+              match List.get?Internal Ms 0 with
+              | some mi => onEval (Stack.pushValues Vs s) ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon (Const.ConstPairDataList (c :: cs)) =>
-              if Ms.length == 1 || Ms.length == 2 then
-                let Vs := [CekValue.VCon (.PairData c), CekValue.VCon (Const.ConstPairDataList cs)]
-                match List.get?Internal Ms 0 with
-                | some mi => onEval (step.folding Vs s) ρ mi
-                | none => onError ()
-              else onError ()
+      | CekValue.VCon (Const.ConstPairDataList []) =>
+            if Ms.length == 2 then
+              match List.get?Internal Ms 1 with
+              | some mi => onEval s ρ mi
+              | none => onError ()
+            else onError ()
 
-        | CekValue.VCon (Const.ConstPairDataList []) =>
-              if Ms.length == 2 then
-                match List.get?Internal Ms 1 with
-                | some mi => onEval s ρ mi
-                | none => onError ()
-              else onError ()
-
-        | _ => onError ()
+      | _ => onError ()
 
 private def unusedValue : CekValue := .VCon .Unit
 
 /-- One tail-recursive loop with scalar state fields. The unused environment/term/value
-    slots contain shared constants; no State or ExBudget is allocated per transition. -/
+    slots contain shared constants. Ordinary transitions allocate neither State nor budget objects. -/
 def run (sv : BuiltinSemanticsVariant) (costs : CekMachineCosts) (fuel : Nat)
     (returning : Bool) (s : Stack) (ρ : Environment) (t : Term) (v : CekValue)
     (cpu mem : Nat) : State × ExBudget :=
   match fuel with
-  | 0 => (if returning then .Return s v else .Eval s ρ t, budget cpu mem)
+  | 0 => (if returning then .Return s.toList v else .Eval s.toList ρ t, budget cpu mem)
   | fuel + 1 =>
     if returning then
       dispatchReturn
@@ -654,7 +744,7 @@ theorem run_eq (sv : BuiltinSemanticsVariant) (costs : CekMachineCosts) (fuel : 
     (returning : Bool) (s : Stack) (ρ : Environment) (t : Term) (v : CekValue)
     (cpu mem : Nat) :
     run sv costs fuel returning s ρ t v cpu mem =
-      runStepsCostingEager sv costs (if returning then .Return s v else .Eval s ρ t)
+      runStepsCostingEager sv costs (if returning then .Return s.toList v else .Eval s.toList ρ t)
         fuel (budget cpu mem) := by
   induction fuel generalizing returning s ρ t v cpu mem with
   | zero => cases returning <;> rfl
@@ -663,24 +753,21 @@ theorem run_eq (sv : BuiltinSemanticsVariant) (costs : CekMachineCosts) (fuel : 
       | false =>
           cases t <;>
             simp [run, dispatchEval, termCost, step, saturatedBuiltin?,
-              runStepsCostingEager, ih]
+              runStepsCostingEager, Stack.toList, ih]
           all_goals repeat' (first | rfl | (split <;> try simp_all [runStepsCostingEager]))
       | true =>
-          cases s with
-          | nil => simp [run, dispatchReturn, runStepsCostingEager, step, saturatedBuiltin?,
-              calculateStepCostr]
-          | cons f s =>
-              cases f <;>
-                simp [run, dispatchReturn, runStepsCostingEager, step, saturatedBuiltin?,
-                  calculateStepCostr, evalBuiltin, ih]
-              all_goals repeat' (first | rfl | (split <;> try simp_all [runStepsCostingEager]))
+          cases s <;>
+            simp [run, dispatchReturn, runStepsCostingEager, step, saturatedBuiltin?,
+              calculateStepCostr, evalBuiltin, Stack.toList, ih]
+          all_goals repeat' (first | rfl | (split <;> try simp_all [runStepsCostingEager]))
 
 def fromState (sv : BuiltinSemanticsVariant) (costs : CekMachineCosts) (state : State)
     (fuel : Nat) (cost : ExBudget) : State × ExBudget :=
+  if fuel == 0 then (state, cost) else
   match state with
-  | .Eval s ρ t => run sv costs fuel false s ρ t unusedValue
+  | .Eval s ρ t => run sv costs fuel false (Stack.fromList s) ρ t unusedValue
       cost.exBudgetCPU.unExCPU cost.exBudgetMemory.unExMemory
-  | .Return s v => run sv costs fuel true s [] .Error v
+  | .Return s v => run sv costs fuel true (Stack.fromList s) [] .Error v
       cost.exBudgetCPU.unExCPU cost.exBudgetMemory.unExMemory
   | .Error => (.Error, cost)
   | .Halt v => (.Halt v, cost)
@@ -690,7 +777,8 @@ end Runtime
 @[csimp]
 theorem runStepsCostingEager_eq_runtime : runStepsCostingEager = Runtime.fromState := by
   funext sv costs state fuel cost
-  cases state <;> simp [Runtime.fromState, Runtime.run_eq, Runtime.budget, runStepsCostingEager]
+  cases fuel <;> cases state <;>
+    simp [Runtime.fromState, Runtime.run_eq, Runtime.Stack.toList_fromList, Runtime.budget, runStepsCostingEager]
 
 /-- Compiled entry point; the logical evaluator retains its call-history model. -/
 def runStepsWithCostEager (sv : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) : State × ExBudget :=
