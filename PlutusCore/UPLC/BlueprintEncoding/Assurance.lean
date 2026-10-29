@@ -720,7 +720,11 @@ private unsafe def checkSource (ns : Name) (validators : List BlueprintValidator
       | .Falsified model =>
         if capture then do
           let json ← model.toJson
-          let replay ← PlutusCore.UPLC.BlueprintEncoding.Counterexample.replay expr model
+          let targets := (functions.map fun id => Name.mkStr ns
+            (PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName id)) ++
+            (validators.flatMap fun v => [v.title, v.id.getD v.title] |>.map fun id =>
+              Name.mkStr ns (PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName id))
+          let replay ← PlutusCore.UPLC.BlueprintEncoding.Counterexample.replay expr model targets.toArray
           pure (Json.mkObj [("model", json), ("replay", replay)])
         else pure Json.null
       | _ => pure Json.null

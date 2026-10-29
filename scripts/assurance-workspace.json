@@ -2,7 +2,7 @@
   "format": "assurance-workspace-v1",
   "lean": "4.24.0",
   "ghc": "9.6.7",
-  "blasterCommit": "fcc20105180ca5e931f445ef00ced2b460fa934e",
+  "blasterCommit": "1cb5a63e0416f336caa3104c2654718e6f971bc9",
   "z3Version": "5.1.0",
   "z3SourceBaseline": "ca39e58c525c5b03c2484f118ade2b92fae31215",
   "z3RequiredSimplifier": "recfun-finder",

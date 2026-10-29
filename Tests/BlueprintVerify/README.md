@@ -267,9 +267,13 @@ helper returning a different Bool from the claim. Outputs include a copyable
 the local VS Code demo. Open the generated `FormalSpec.hs` to see the result;
 the original source keeps its correct property.
 
-This prototype covers the separately compiled helper. Scenario-to-ScriptContext
-replay recipes and general Haskell constructor/source mappings are not yet
-implemented. Function-valued, indexed and proof-bearing model values are
+The coordinated Ledger runner also covers an Auction ScriptContext: see
+`CardanoLedgerApiBlaster/Tests/BlueprintVerify/README.md`. Replay discovers scoped
+script calls through specification helpers, records source arguments before
+encoding, and substitutes their exact terminal CEK states into the original
+proposition. Codec source hints are independent of display names. The source
+renderer supports primitives, containers and registered V3 Plutus Data codecs;
+unknown Haskell constructors or codecs require an explicit mapping. Function-valued, indexed and proof-bearing model values are
 unsupported. Missing or ambiguous original binders make replay unavailable;
 values are never guessed. SMT verdict, reconstruction, and replay status are
 separate; none is a reconstructed Lean kernel proof or ledger-validity claim.

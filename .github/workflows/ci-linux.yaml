@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: input-output-hk/Lean-blaster
-          ref: fcc20105180ca5e931f445ef00ced2b460fa934e
+          ref: 1cb5a63e0416f336caa3104c2654718e6f971bc9
           path: Lean-blaster
       - name: Setup Lean
         run: |

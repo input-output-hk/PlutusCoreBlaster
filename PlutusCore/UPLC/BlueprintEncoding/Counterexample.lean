@@ -1,5 +1,5 @@
 import Blaster.Counterexample
-import PlutusCore.UPLC.BlueprintEncoding.Basic
+import PlutusCore.UPLC.BlueprintEncoding.CounterexampleObserve
 
 namespace PlutusCore.UPLC.BlueprintEncoding.Counterexample
 open Lean Meta
@@ -7,7 +7,7 @@ open Lean Meta
 /-- Confirm a model on the original, closed proposition. Name matching is only
     accepted for unique binders of matching types; erased/shadowed/unsupported
     binders are reported, never assigned guessed values. -/
-unsafe def replay (original : Expr) (model : Blaster.Counterexample.Model) : MetaM Json := do
+unsafe def replay (original : Expr) (model : Blaster.Counterexample.Model) (targets : Array Name := #[]) : MetaM Json := do
   try
     let mut proposition := original
     let mut used : List Name := []
@@ -38,12 +38,10 @@ unsafe def replay (original : Expr) (model : Blaster.Counterexample.Model) : Met
           observation := Json.mkObj [("call", toJson (← ppExpr call).pretty),
             ("state", toJson "Halt"), ("actual", toJson actual),
             ("expected", toJson (← evalExpr Bool (mkConst ``Bool) args.back!))]
-    let decision ← try mkDecide proposition catch e =>
-      if e.isInterrupt then throw e
-      mkDecide (← withTransparency .all (whnf proposition))
-    let holds ← evalExpr Bool (mkConst ``Bool) decision
+    let (instantiated, calls) ← observe proposition targets
+    let holds ← decideClosed instantiated
     return Json.mkObj [("status", toJson (if holds then "not-reproduced" else "confirmed")),
-      ("propertyHolds", toJson holds), ("inputs", toJson inputs), ("execution", observation),
+      ("propertyHolds", toJson holds), ("inputs", toJson inputs), ("execution", observation), ("calls", toJson calls),
       ("method", toJson "Evaluate the instantiated original Lean proposition over the imported compiled UPLC")]
   catch e =>
     if e.isInterrupt then throw e

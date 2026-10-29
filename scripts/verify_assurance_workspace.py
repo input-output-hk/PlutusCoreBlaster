@@ -59,7 +59,7 @@ compiler='--with-compiler='+a.ghc
 names=['game','parameters','auction','recursive']
 if not a.skip_build:
     run('build-core',['lake','build','Blaster:shared','PlutusCore.UPLC.BlueprintEncoding.Assurance'])
-    run('build-ledger',['lake','build','CardanoLedgerApi.V3','PlutusCore.UPLC.BlueprintEncoding.Assurance'],ledger)
+    run('build-ledger',['lake','build','CardanoLedgerApi.V3','CardanoLedgerApi.Counterexample.V3','PlutusCore.UPLC.BlueprintEncoding.Assurance'],ledger)
     run('build-plutus',['cabal','build',project,compiler,*[f'docusaurus-examples:exe:example-ual-{n}' for n in names],'plutus-tx:test:plutus-tx-test'],a.plutus,timeout=7200)
 generators={n:capture(['cabal','list-bin',project,compiler,f'docusaurus-examples:exe:example-ual-{n}'],a.plutus) for n in names}
 base=core/'Tests/BlueprintVerify'
@@ -69,11 +69,19 @@ def example(n):
     if n=='game':return run(n,['lake','env',sys.executable,base/'run_generated.py','--generator',generators[n],'--plutus',a.plutus,'--output',a.output/n])
     return run(n,['lake','env',sys.executable,base/f'run_{n}.py',generators[n],a.output/n])
 with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(example,names))
+run('helper-counterexample',['lake','env',sys.executable,base/'run_counterexample.py',
+    '--generator',generators['auction'],'--source',a.plutus/'doc/docusaurus/static/code/Example/Ual/Auction/FormalSpec.hs',
+    '--z3',a.z3.resolve(),'--output',a.output/'helper-counterexample'])
+run('auction-counterexample',['lake','env',sys.executable,ledger/'Tests/BlueprintVerify/run_counterexample.py',
+    '--generator',generators['auction'],'--plutus',a.plutus,
+    '--source',a.plutus/'doc/docusaurus/static/code/Example/Ual/Auction/FormalSpec.hs',
+    '--z3',a.z3.resolve(),'--ghc',a.ghc,'--output',a.output/'auction-counterexample'],ledger)
+run('source-renderer-tests',[sys.executable,'-m','unittest','discover','-s',base,'-p','test_counterexample_source.py'])
 run('generated-artifacts',[sys.executable,base/'validate_outputs.py','--cips',a.cips,'--require-evidence',*[a.output/n for n in names]])
 run('cip-schemas',[sys.executable,'-m','unittest','discover','-s','CIP-XXXX/tests','-v'],a.cips)
 run('legacy-regressions',['lake','env',sys.executable,base/'regression.py'])
 run('interface-regressions',['lake','env',sys.executable,base/'interface_regression.py',a.output/'game'])
-for name in ['RecursiveSchema','NativeEncoding','BooleanCase']:
+for name in ['RecursiveSchema','NativeEncoding','BooleanCase','Counterexample']:
     run(name,['lake','env','lean',base/(name+'.lean')])
 testbin=capture(['cabal','list-bin',project,compiler,'plutus-tx:test:plutus-tx-test'],a.plutus)
 run('ual-tests',[testbin,'-p','UAL'],a.plutus/'plutus-tx')
