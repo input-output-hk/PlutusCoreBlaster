@@ -50,8 +50,8 @@ vm,script,mean_ns,median_ns,min_ns,max_ns,stddev_ns,iterations
 File I/O, process startup and the initial evaluation are outside timing. The initial evaluation
 must succeed. A process runs the selected loops for one script:
 
-- **D3:** convert raw bytes into the decoder's byte-string representation, Flat decode, and
-  costed evaluation on each iteration. There is no decoded-program cache.
+- **D3:** Flat decode directly from the raw `ByteArray`, followed by costed evaluation on
+  each iteration. There is no decoded-program cache or expanded list of bits.
 - **Eval:** decode once before timing, then costed evaluation on every iteration.
 
 Both operations use non-inlined IO boundaries. Every iteration has fresh evaluation state and
@@ -64,18 +64,39 @@ rounded to integer nanoseconds when written, as the upstream report requires. CS
 
 ## Compiler replacements
 
-Kernel-checked `@[csimp]` equalities select two runtime implementations:
+Kernel-checked `@[csimp]` equalities select runtime implementations:
 
+- The list decoder's fixed-width integer reader uses a tail accumulator, avoiding
+  powers and intermediate pairs at each bit.
 - CBOR scalar decoding keeps the unconsumed `List Char` suffix instead of copying
   it through `String` at every integer or bytestring leaf. The equivalence proofs
   include rejected inputs, bignums and indefinite bytestrings.
-- `runStepsWithCost` compiles to an eager costing loop. It selects the machine
-  costs once and charges builtin calls before executing them, without retaining
-  a call history. Its equality preserves the complete state and both ExUnits for
+- `runStepsWithCost` compiles to a fused loop. It passes state fields and CPU/memory
+  counters directly between iterations, constructing a `State` and `ExBudget` only
+  when stopping. It selects machine costs once and charges builtins before executing
+  them. Its equality preserves the complete state and both ExUnits for
   every semantics variant, initial state and fuel limit, including failed builtins.
 
 The logical costing and CEK definitions remain available to Blaster and the
 existing proofs. These compiler replacements use neither `sorry` nor `native_decide`.
+
+## Raw byte decoding
+
+`PlutusCore.UPLC.FlatEncoding.decodeProgramFromBytes` reads with a bit offset into a
+`ByteArray`. It handles unaligned fields and copies aligned bytestring chunks directly.
+Version gates, unbounded naturals, constant types, UTF-8 validation, permissive padding
+and CBOR decoding follow the list decoder. The legacy entry points remain available.
+
+The byte parser is checked by differential tests, rather than a whole-decoder kernel
+equivalence theorem. The checks compare complete ASTs and rejection decisions without
+evaluating generated programs:
+
+```sh
+make check_flat_decode BENCHMARK_ROOT=/path/to/plutus-vm-benchmark
+```
+
+CI includes all 89 reference scripts, generated programs, malformed inputs and mutations.
+Native bit-reader guards also check every byte value, all bit offsets and EOF boundaries.
 
 ## Diagnostic profiling
 
@@ -102,8 +123,10 @@ JSON durations and counts are **totals across RUNS**; divide by `runs` for per-r
 - `baseline.decode_ns`, `baseline.eval_ns`: uninstrumented operations in the same process.
   Baseline/profile order alternates each run to reduce order bias. Their ratios to profiled
   totals show measurement perturbation; use the existing `time` command for benchmark results.
-- `decode`: bytes to the decoder's string representation, string to bits (including `String.data`),
-  and Flat parsing (version, term, constants/CBOR, padding), plus their inclusive `total_ns`.
+- `decode`: the legacy diagnostic path: bytes to string, string to bits (including
+  `String.data`), and list-based Flat parsing, plus their inclusive `total_ns`. The
+  uninstrumented baseline uses the direct byte decoder. The complete decoded ASTs are
+  compared on every profiled run; these phase timings describe the legacy decoder.
 - `eval.machine_ns`: ordinary CEK transitions **including step costing**, timed in pure blocks
   between saturated builtin calls. `machine_steps` includes uncharged Return transitions.
 - `eval.builtin_eval_ns`: saturated builtin transitions through the existing `step`, including

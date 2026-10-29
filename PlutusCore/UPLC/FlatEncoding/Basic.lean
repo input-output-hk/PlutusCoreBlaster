@@ -42,6 +42,35 @@ def decodeFixedNat : Nat → List Bool → Option (List Bool × Nat)
   | .succ p, true  :: s => Prod.map id (2 ^ p + ·) <$> decodeFixedNat p s
   | _      , _          => .none
 
+/-- Runtime fixed-width reader: accumulate bits from left to right, allocating
+    an Option/pair only once and avoiding a power and mapped closure per set bit. -/
+def decodeFixedNatAcc : Nat → List Bool → Nat → Option (List Bool × Nat)
+  | 0, s, acc => some (s, acc)
+  | n + 1, b :: s, acc => decodeFixedNatAcc n s (acc * 2 + if b then 1 else 0)
+  | _, [], _ => none
+
+theorem decodeFixedNatAcc_eq (n : Nat) (s : List Bool) (acc : Nat) :
+    decodeFixedNatAcc n s acc =
+      (fun (rest, value) => (rest, acc * 2 ^ n + value)) <$> decodeFixedNat n s := by
+  induction n generalizing s acc with
+  | zero => simp [decodeFixedNatAcc, decodeFixedNat]
+  | succ n ih =>
+      cases s with
+      | nil => rfl
+      | cons b s =>
+          cases b <;>
+            simp [decodeFixedNatAcc, decodeFixedNat, ih, Nat.pow_succ,
+              Nat.add_mul, Nat.mul_assoc, Nat.mul_comm,
+              Nat.add_assoc, Function.comp_def, Prod.map]
+
+def decodeFixedNatFast (n : Nat) (s : List Bool) : Option (List Bool × Nat) :=
+  decodeFixedNatAcc n s 0
+
+@[csimp]
+theorem decodeFixedNat_eq_fast : decodeFixedNat = decodeFixedNatFast := by
+  funext n s
+  simp [decodeFixedNatFast, decodeFixedNatAcc_eq]
+
 /- Decodes a list. -/
 -- Spec C.2.2. Lists
 partial def decodeList {α : Type} (f : List Bool → Option (List Bool × α)) : List Bool -> Option (List Bool × List α)

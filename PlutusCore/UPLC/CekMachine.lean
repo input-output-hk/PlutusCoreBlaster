@@ -421,6 +421,277 @@ theorem runStepsCostingEager_eq (sv : BuiltinSemanticsVariant) (Sigma : State) (
               simp only [builtinCallsCost]
               apply ExBudget.ext <;> simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
 
+/-! ### Fused compiled evaluator
+
+The continuations below let the compiler dispatch directly to the next loop iteration.
+Only stopping constructs a State; ordinary transitions pass its fields as loop arguments.
+The logical evaluator and its proof interface are retained above.
+-/
+namespace Runtime
+
+@[inline] def budget (cpu mem : Nat) : ExBudget := ⟨⟨cpu⟩, ⟨mem⟩⟩
+
+@[simp] theorem budget_add (cpu mem : Nat) (cost : ExBudget) :
+    budget cpu mem + cost = budget (cpu + cost.exBudgetCPU.unExCPU)
+      (mem + cost.exBudgetMemory.unExMemory) := rfl
+
+@[inline] def termCost (costs : CekMachineCosts) (t : Term) : ExBudget :=
+  match t with
+  | .Var _ => costs.stepCostVar
+  | .Const _ => costs.stepCostConst
+  | .Lam _ => costs.stepCostLam
+  | .Delay _ => costs.stepCostDelay
+  | .Force _ => costs.stepCostForce
+  | .Apply _ _ => costs.stepCostApply
+  | .Builtin _ => costs.stepCostBuiltin
+  | .Constr _ _ => costs.stepCostConstr
+  | .Case _ _ => costs.stepCostCase
+  | .Error => .zero
+
+@[inline] def dispatchEval {α : Type}
+    (onEval : Stack → Environment → Term → α)
+    (onReturn : Stack → CekValue → α) (onError : Unit → α)
+    (s : Stack) (ρ : Environment) (Tr : Term) : α :=
+  match Tr with
+  | Term.Var i =>
+       match List.get?Internal ρ i with
+       | some V => onReturn s V
+       | none => onError ()
+  | Term.Term.Const c => onReturn s (CekValue.VCon c)
+  | Term.Lam M => onReturn s (CekValue.VLam M ρ)
+  | Term.Delay M => onReturn s (CekValue.VDelay M ρ)
+  | Term.Force M => onEval (Frame.ForceFrame :: s) ρ M
+  | Term.Apply M N => onEval (Frame.LeftApplicationToTerm N ρ :: s) ρ M
+  | Term.Constr i Ts =>
+       match Ts with
+       | M :: Ms => onEval (Frame.ConstructorArgument i [] Ms ρ :: s) ρ M
+       | [] => onReturn s (CekValue.VConstr i [])
+  | Term.Case N Ms => onEval (Frame.CaseScrutinee Ms ρ :: s) ρ N
+  | Term.Builtin b => onReturn s (CekValue.VBuiltin b [] (α(b)))
+  | Term.Error => onError ()
+
+@[inline] def dispatchReturn {α : Type}
+    (onEval : Stack → Environment → Term → α)
+    (onReturn : Stack → CekValue → α) (onError : Unit → α)
+    (onHalt : CekValue → α) (onBuiltin : Stack → BuiltinFun → List CekValue → α)
+    (stack : Stack) (Vr : CekValue) : α :=
+  match stack with
+  | [] => onHalt Vr
+  | x :: s =>
+    match x with
+    | Frame.LeftApplicationToTerm M ρ =>
+           onEval (Frame.RightApplicationOfValue Vr :: s) ρ M
+
+    | Frame.LeftApplicationToValue V =>
+        match Vr with
+        | CekValue.VLam M ρ =>
+             onEval s (V :: ρ) M
+        | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgV ⊙ η) =>
+             onReturn s (CekValue.VBuiltin b (V :: Vs) η)
+        | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgV]) =>
+             onBuiltin s b (V :: Vs) -- considering args reversal when calling builtin
+        | _ => onError ()
+
+    | Frame.RightApplicationOfValue Va =>
+        match Va with
+        | CekValue.VLam M ρ =>
+              onEval s (Vr :: ρ) M
+        | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgV ⊙ η) =>
+              onReturn s (CekValue.VBuiltin b (Vr :: Vs) η)
+        | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgV]) =>
+              onBuiltin s b (Vr :: Vs) -- considering args reversal when calling builtin
+        | _ => onError ()
+
+    | Frame.ForceFrame =>
+        match Vr with
+        | CekValue.VDelay M ρ =>
+              onEval s ρ M
+        | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgQ ⊙ η) =>
+              onReturn s (CekValue.VBuiltin b Vs η)
+        | CekValue.VBuiltin b Vs (a[ExpectedBuiltinArg.ArgQ]) =>
+              onBuiltin s b Vs
+        | _ => onError ()
+
+    | Frame.ConstructorArgument i Vs Ts ρ =>
+        match Ts with
+        | M :: Ms => onEval (Frame.ConstructorArgument i (Vr :: Vs) Ms ρ :: s) ρ M
+        | [] => onReturn s (CekValue.VConstr i (List.reverse (Vr :: Vs)))
+
+    | Frame.CaseScrutinee Ms ρ =>
+        match Vr with
+        | CekValue.VConstr i Vs =>
+             match List.get?Internal Ms i with
+             | some mi => onEval (step.folding Vs s) ρ mi
+             | none => onError ()
+
+        | CekValue.VCon (Const.Integer n) =>
+             if 0 ≤ n && n.toNat < Ms.length then
+               match Ms[n.toNat]? with
+               | some mi => onEval s ρ mi
+               | none => onError ()
+             else onError ()
+
+        | CekValue.VCon (Const.Bool false) =>
+             if Ms.length == 1 || Ms.length == 2 then
+               match List.get?Internal Ms 0 with
+               | some mi => onEval s ρ mi
+               | none => onError ()
+             else onError ()
+
+        | CekValue.VCon (Const.Bool true) =>
+             if Ms.length == 2 then
+               match List.get?Internal Ms 1 with
+               | some mi => onEval s ρ mi
+               | none => onError ()
+             else onError ()
+
+        | CekValue.VCon Const.Unit =>
+              if Ms.length == 1 then
+                match Ms[0]? with
+                | some mi => onEval s ρ mi
+                | none => onError ()
+              else onError ()
+
+        | CekValue.VCon (Const.Pair p) =>
+              if Ms.length == 1 then
+                let Vs := [CekValue.VCon p.1, CekValue.VCon p.2]
+                match List.get?Internal Ms 0 with
+                | some mi => onEval (step.folding Vs s) ρ mi
+                | none => onError ()
+              else onError ()
+
+        | CekValue.VCon (Const.PairData p) =>
+              if Ms.length == 1 then
+                let Vs := [CekValue.VCon (Const.Data p.1), CekValue.VCon (Const.Data p.2)]
+                match List.get?Internal Ms 0 with
+                | some mi => onEval (step.folding Vs s) ρ mi
+                | none => onError ()
+              else onError ()
+
+        | CekValue.VCon (Const.ConstList (c :: cs)) =>
+              if Ms.length == 1 || Ms.length == 2 then
+                let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
+                match List.get?Internal Ms 0 with
+                | some mi => onEval (step.folding Vs s) ρ mi
+                | none => onError ()
+              else onError ()
+
+        | CekValue.VCon (Const.ConstList []) =>
+              if Ms.length == 2 then
+                match List.get?Internal Ms 1 with
+                | some mi => onEval s ρ mi
+                | none => onError ()
+              else onError ()
+
+        | CekValue.VCon (Const.ConstDataList (c :: cs)) =>
+              if Ms.length == 1 || Ms.length == 2 then
+                let Vs := [CekValue.VCon (.Data c), CekValue.VCon (Const.ConstDataList cs)]
+                match Ms[0]? with
+                | some mi => onEval (step.folding Vs s) ρ mi
+                | none => onError ()
+              else onError ()
+
+        | CekValue.VCon (Const.ConstDataList []) =>
+              if Ms.length == 2 then
+                match List.get?Internal Ms 1 with
+                | some mi => onEval s ρ mi
+                | none => onError ()
+              else onError ()
+
+        | CekValue.VCon (Const.ConstPairDataList (c :: cs)) =>
+              if Ms.length == 1 || Ms.length == 2 then
+                let Vs := [CekValue.VCon (.PairData c), CekValue.VCon (Const.ConstPairDataList cs)]
+                match List.get?Internal Ms 0 with
+                | some mi => onEval (step.folding Vs s) ρ mi
+                | none => onError ()
+              else onError ()
+
+        | CekValue.VCon (Const.ConstPairDataList []) =>
+              if Ms.length == 2 then
+                match List.get?Internal Ms 1 with
+                | some mi => onEval s ρ mi
+                | none => onError ()
+              else onError ()
+
+        | _ => onError ()
+
+private def unusedValue : CekValue := .VCon .Unit
+
+/-- One tail-recursive loop with scalar state fields. The unused environment/term/value
+    slots contain shared constants; no State or ExBudget is allocated per transition. -/
+def run (sv : BuiltinSemanticsVariant) (costs : CekMachineCosts) (fuel : Nat)
+    (returning : Bool) (s : Stack) (ρ : Environment) (t : Term) (v : CekValue)
+    (cpu mem : Nat) : State × ExBudget :=
+  match fuel with
+  | 0 => (if returning then .Return s v else .Eval s ρ t, budget cpu mem)
+  | fuel + 1 =>
+    if returning then
+      dispatchReturn
+        (fun s ρ t => run sv costs fuel false s ρ t unusedValue cpu mem)
+        (fun s v => run sv costs fuel true s [] .Error v cpu mem)
+        (fun _ => (.Error, budget cpu mem))
+        (fun v => (.Halt v, budget cpu mem))
+        (fun s b args =>
+          let charge := builtinCostSelected sv b args
+          let cpu := cpu + charge.exBudgetCPU.unExCPU
+          let mem := mem + charge.exBudgetMemory.unExMemory
+          match evaluateBuiltinFunction sv b args with
+          | some v => run sv costs fuel true s [] .Error v cpu mem
+          | none => (.Error, budget cpu mem))
+        s v
+    else
+      let charge := termCost costs t
+      let cpu := cpu + charge.exBudgetCPU.unExCPU
+      let mem := mem + charge.exBudgetMemory.unExMemory
+      dispatchEval
+        (fun s ρ t => run sv costs fuel false s ρ t unusedValue cpu mem)
+        (fun s v => run sv costs fuel true s [] .Error v cpu mem)
+        (fun _ => (.Error, budget cpu mem)) s ρ t
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 2000000 in
+theorem run_eq (sv : BuiltinSemanticsVariant) (costs : CekMachineCosts) (fuel : Nat)
+    (returning : Bool) (s : Stack) (ρ : Environment) (t : Term) (v : CekValue)
+    (cpu mem : Nat) :
+    run sv costs fuel returning s ρ t v cpu mem =
+      runStepsCostingEager sv costs (if returning then .Return s v else .Eval s ρ t)
+        fuel (budget cpu mem) := by
+  induction fuel generalizing returning s ρ t v cpu mem with
+  | zero => cases returning <;> rfl
+  | succ fuel ih =>
+      cases returning with
+      | false =>
+          cases t <;>
+            simp [run, dispatchEval, termCost, step, saturatedBuiltin?,
+              runStepsCostingEager, ih]
+          all_goals repeat' (first | rfl | (split <;> try simp_all [runStepsCostingEager]))
+      | true =>
+          cases s with
+          | nil => simp [run, dispatchReturn, runStepsCostingEager, step, saturatedBuiltin?,
+              calculateStepCostr]
+          | cons f s =>
+              cases f <;>
+                simp [run, dispatchReturn, runStepsCostingEager, step, saturatedBuiltin?,
+                  calculateStepCostr, evalBuiltin, ih]
+              all_goals repeat' (first | rfl | (split <;> try simp_all [runStepsCostingEager]))
+
+def fromState (sv : BuiltinSemanticsVariant) (costs : CekMachineCosts) (state : State)
+    (fuel : Nat) (cost : ExBudget) : State × ExBudget :=
+  match state with
+  | .Eval s ρ t => run sv costs fuel false s ρ t unusedValue
+      cost.exBudgetCPU.unExCPU cost.exBudgetMemory.unExMemory
+  | .Return s v => run sv costs fuel true s [] .Error v
+      cost.exBudgetCPU.unExCPU cost.exBudgetMemory.unExMemory
+  | .Error => (.Error, cost)
+  | .Halt v => (.Halt v, cost)
+
+end Runtime
+
+@[csimp]
+theorem runStepsCostingEager_eq_runtime : runStepsCostingEager = Runtime.fromState := by
+  funext sv costs state fuel cost
+  cases state <;> simp [Runtime.fromState, Runtime.run_eq, Runtime.budget, runStepsCostingEager]
+
 /-- Compiled entry point; the logical evaluator retains its call-history model. -/
 def runStepsWithCostEager (sv : BuiltinSemanticsVariant) (Sigma : State) (n : Nat) : State × ExBudget :=
   runStepsCostingEager sv (semVarToCosts sv) Sigma n ExBudget.zero

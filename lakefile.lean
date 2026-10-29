@@ -70,3 +70,8 @@ lean_exe «bench_cek» where
 lean_exe «test_crypto_ffi» where
   root := `Benchmark.Cek.CryptoProbe
   moreLeancArgs := #["-O3"]
+
+-- Differential parser checks compare ASTs without running generated programs.
+lean_exe «test_flat_decode» where
+  root := `Benchmark.Cek.DecodeProbe
+  moreLeancArgs := #["-O3"]

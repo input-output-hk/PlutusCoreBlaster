@@ -144,4 +144,47 @@ def testProgramOf (t : PlutusCore.UPLC.Term.Term) : PlutusCore.UPLC.Term.Program
     (testProgramOf (.Force (.Apply (.Builtin .AddInteger) (.Const (.Integer 1))))) [] 100).2
   == testBudget 64100 500
 
+
+/-! Differential checks of the compiled loop against the independent call-history
+implementation. Cover every frame, constant-case shape and builtin argument signature,
+including malformed states and intermediate states exposed by a small fuel limit. -/
+private def runtimeValues : List CekValue :=
+  [.VCon (.Integer 0), .VCon (.Integer (-1)), .VCon (.Bool false), .VCon (.Bool true),
+   .VCon .Unit, .VCon (.Pair (.Integer 1, .Integer 2)),
+   .VCon (.PairData (.I 1, .I 2)), .VCon (.ConstList []),
+   .VCon (.ConstList [.Integer 1]), .VCon (.ConstDataList []),
+   .VCon (.ConstDataList [.I 1]), .VCon (.ConstPairDataList []),
+   .VCon (.ConstPairDataList [(.I 1, .I 2)]),
+   .VCon (.Data (.I 1)), .VConstr 0 [.VCon (.Integer 1)], .VConstr 5 [],
+   .VLam (.Var 0) [.VCon (.Integer 99)], .VDelay (.Var 0) [.VCon (.Integer 42)],
+   .VBuiltin .AddInteger [.VCon (.Integer 1)] (.One .ArgV),
+   .VBuiltin .AddInteger [] (.More .ArgV (.One .ArgV)),
+   .VBuiltin .IfThenElse [] (.One .ArgQ),
+   .VBuiltin .IfThenElse [] (.More .ArgQ (.One .ArgV))]
+
+private def runtimeFrames : List Frame :=
+  [.ForceFrame, .LeftApplicationToTerm (.Var 0) [.VCon (.Integer 7)],
+   .LeftApplicationToValue (.VCon (.Integer 7)),
+   .RightApplicationOfValue (.VLam (.Var 0) []),
+   .RightApplicationOfValue (.VBuiltin .AddInteger [.VCon (.Integer 7)] (.One .ArgV)),
+   .RightApplicationOfValue (.VBuiltin .AddInteger [] (.More .ArgV (.One .ArgV))),
+   .RightApplicationOfValue (.VCon .Unit),
+   .ConstructorArgument 0 [] [] [],
+   .ConstructorArgument 1 [] [.Var 0] [.VCon (.Integer 7)],
+   .CaseScrutinee [] [], .CaseScrutinee [.Var 0] [.VCon (.Integer 9)],
+   .CaseScrutinee [.Var 0, .Const .Unit] [.VCon (.Integer 9)]]
+
+private def historyReference (sv : BuiltinSemanticsVariant) (state : State) (fuel : Nat) :
+    State × ExBudget :=
+  let r := runStepsCosting sv state fuel ExBudget.zero []
+  (r.1, r.2.1 + builtinCallsCost sv r.2.2)
+
+#guard [PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariantA,
+    .defaultFunSemanticsVariantB, .defaultFunSemanticsVariantC,
+    .defaultFunSemanticsVariantD, .defaultFunSemanticsVariantE].all (fun sv =>
+  runtimeFrames.all (fun frame => runtimeValues.all (fun value =>
+    [0, 1, 2, 3, 10].all (fun fuel =>
+      let state := State.Return [frame] value
+      decide (runStepsWithCost sv state fuel = historyReference sv state fuel)))))
+
 end PlutusCore.UPLC.CekMachine
