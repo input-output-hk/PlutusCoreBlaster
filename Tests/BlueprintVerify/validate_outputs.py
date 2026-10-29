@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import zipfile
 from pathlib import Path
 
 from jsonschema import Draft202012Validator, RefResolver
@@ -90,7 +91,13 @@ def main():
                     report_path = artifact(folder, evidence['artifact'])
                     if args.require_evidence:
                         assert evidence['outcome'] == 'verified' and evidence['method'] == 'smt-check'
-                        sources = load(report_path)['provenance']['sources']
+                        if zipfile.is_zipfile(report_path):
+                            with zipfile.ZipFile(report_path) as archive:
+                                report_bytes = archive.read('run-report.json')
+                            assert report_bytes == (folder/'run-report.json').read_bytes(), 'Report differs from bound archive'
+                        else:
+                            report_bytes = report_path.read_bytes()
+                        sources = json.loads(report_bytes)['provenance']['sources']
                         assert any(Path(p).suffix == '.hs' for p in sources), 'Missing Haskell source provenance'
                         for source, expected in sources.items():
                             assert expected['alg'] == 'sha256'
