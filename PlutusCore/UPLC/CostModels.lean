@@ -126,7 +126,8 @@ def constSize (c : Const) : Nat :=
   | Const.ConstList cs => cs.foldl (fun acc c => acc + constSize c) 0
   | Const.ConstDataList ds => ds.foldl (fun acc d => acc + dataSize d) 0
   | Const.ConstPairDataList ps => ps.foldl (fun acc (d1, d2) => acc + dataSize d1 + dataSize d2) 0
-  | Const.ConstArray cs => cs.foldl (fun acc c => acc + constSize c) 0
+  -- Haskell measures an array by its length, not its contents (`ExMemoryUsage (Vector a)`).
+  | Const.ConstArray cs => cs.length
   | Const.Pair (c1, c2) => constSize c1 + constSize c2
   | Const.PairData (d1, d2) => dataSize d1 + dataSize d2
   | Const.Data d => dataSize d
@@ -147,6 +148,18 @@ def argListLen (args : List CekValue) (i : Nat) : Nat :=
   if h : i < args.length then
     match args.get ⟨i, h⟩ with
     | .VCon (.ConstList cs) => cs.length
+    | _ => 0
+  else 0
+
+/-- Length of the list constant at position i in the CEK args, for any of the
+    list representations. Haskell measures a polymorphic list argument by its
+    spine length, not by the size of its elements (`ExMemoryUsage [a]`). -/
+def argAnyListLen (args : List CekValue) (i : Nat) : Nat :=
+  if h : i < args.length then
+    match args.get ⟨i, h⟩ with
+    | .VCon (.ConstList cs)         => cs.length
+    | .VCon (.ConstDataList ds)     => ds.length
+    | .VCon (.ConstPairDataList ps) => ps.length
     | _ => 0
   else 0
 
@@ -416,7 +429,7 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.LengthOfArray =>
     ⟨⟨231883⟩, ⟨10⟩⟩
   | BuiltinFun.ListToArray =>
-    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
 
@@ -671,7 +684,7 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.LengthOfArray =>
     ⟨⟨231883⟩, ⟨10⟩⟩
   | BuiltinFun.ListToArray =>
-    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
 
@@ -930,7 +943,7 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.LengthOfArray =>
     ⟨⟨231883⟩, ⟨10⟩⟩
   | BuiltinFun.ListToArray =>
-    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
 
@@ -1151,7 +1164,7 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.LengthOfArray =>
     ⟨⟨231883⟩, ⟨10⟩⟩
   | BuiltinFun.ListToArray =>
-    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
 
@@ -1375,7 +1388,7 @@ def builtinCostsE (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.LengthOfArray =>
     ⟨⟨231883⟩, ⟨10⟩⟩
   | BuiltinFun.ListToArray =>
-    ⟨⟨1000 + 24838 * argSize args 0⟩, ⟨7 + 1 * argSize args 0⟩⟩
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
 

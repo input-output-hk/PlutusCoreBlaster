@@ -18,6 +18,7 @@ import Tests.UPLC.TextEncoding.Tests
 import Tests.CekRuns
 import Tests.DataComparison
 import Tests.DecidableEq
+import Tests.UPLC.ArrayCosting
 
 import Tests.BlasterProofs
 
