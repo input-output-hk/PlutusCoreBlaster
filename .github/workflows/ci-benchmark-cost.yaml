@@ -263,6 +263,12 @@ jobs:
 
       # The conformance cases are read from the generated tests, which must match the plutus
       # checkout: regenerate them, as ci-conformance does.
+      - name: Configure native linker
+        run: |
+          if [[ -x scripts/lean-cc.sh ]]; then
+            echo "LEAN_CC=$GITHUB_WORKSPACE/scripts/lean-cc.sh" >> "$GITHUB_ENV"
+          fi
+
       - name: Generate conformance test suite
         working-directory: PlutusCoreBlaster
         run: make gen_conformance_tests excludeNotImplemented=1

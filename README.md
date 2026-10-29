@@ -28,6 +28,8 @@ Compiled crypto also requires a C toolchain, `pkg-config` and libsodium developm
 [native crypto](Cryptograph/FFI/README.md) for the supported primitives, reference APIs and
 conformity tests.
 
+On Linux, use `export LEAN_CC="$PWD/scripts/lean-cc.sh"` before invoking Lake directly. The Makefile and CI set these automatically to link against the system libc.
+
 ```sh
 lake build          # build the default PlutusCore target
 lake build Lemmas   # build the proof library

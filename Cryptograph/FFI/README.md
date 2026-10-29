@@ -19,6 +19,7 @@ Install a native C toolchain, `pkg-config`, and libsodium development files:
 ```sh
 # Debian/Ubuntu
 sudo apt-get install libsodium-dev pkg-config
+export LEAN_CC="$PWD/scripts/lean-cc.sh"
 # macOS
 brew install libsodium pkg-config
 
@@ -28,7 +29,10 @@ python3 scripts/test_bench_cek.py --benchmark-root /path/to/plutus-vm-benchmark 
 ```
 
 `pkg-config` supplies the include and link flags. It must select the target architecture's
-installation. When changing prefixes, rerun `lake -R` and clean old native artifacts. On Apple
+installation. On Linux, `scripts/lean-cc.sh` uses the system compiler with Lean's bundled
+C++/uv runtime libraries: system libsodium can require a newer libc than Lean's downloaded
+compiler sysroot provides. The Makefile and CI configure this automatically. When changing
+compiler or library prefixes, rerun `lake -R` and clean old native artifacts. On Apple
 Silicon with both Intel and ARM Homebrew installations, for example:
 
 ```sh

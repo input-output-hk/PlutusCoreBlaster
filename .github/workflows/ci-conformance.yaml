@@ -222,6 +222,12 @@ jobs:
           ln -s "${GITHUB_WORKSPACE}/plutus" "${GITHUB_WORKSPACE}/PlutusCoreBlaster/.plutus-conformance"
           ls -la "${GITHUB_WORKSPACE}/PlutusCoreBlaster/.plutus-conformance/plutus-conformance/test-cases" | head
 
+      - name: Configure native linker
+        run: |
+          if [[ -x scripts/lean-cc.sh ]]; then
+            echo "LEAN_CC=$GITHUB_WORKSPACE/scripts/lean-cc.sh" >> "$GITHUB_ENV"
+          fi
+
       - name: Build PlutusCore
         working-directory: PlutusCoreBlaster
         run: make build_plutus_core

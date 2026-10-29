@@ -1,3 +1,8 @@
+# Link Linux system crypto with the host libc and Lean's bundled C++/uv libraries.
+ifeq ($(shell uname -s),Linux)
+export LEAN_CC ?= $(CURDIR)/scripts/lean-cc.sh
+endif
+
 .PHONY: usage
 
 usage:
