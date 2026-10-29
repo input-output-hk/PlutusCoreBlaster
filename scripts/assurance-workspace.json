@@ -13,7 +13,7 @@
   "repositories": {
     "plutus": {
       "repository": "RSoulatIOHK/plutus",
-      "commit": "a85d229bcd046944973f6bce2f43e774561203c4"
+      "commit": "f39439265c603d379bf5836596dccee8311b5189"
     },
     "cips": {
       "repository": "RSoulatIOHK/CIPs",
