@@ -19,7 +19,7 @@ namespace Benchmark.Cek
 open PlutusCore.UPLC.Term (Program)
 open PlutusCore.UPLC.CekMachine
 open PlutusCore.UPLC.ExBudget (ExBudget)
-open PlutusCore.UPLC.FlatEncoding (decodeProgramFromByteString)
+open PlutusCore.UPLC.FlatEncoding (decodeProgramFromBytes)
 
 def vm : String := "plutuscore-lean"
 def defaultMaxSteps : Nat := 100_000_000
@@ -33,11 +33,9 @@ def csvField (s : String) : String :=
 def scriptName (path : System.FilePath) : String :=
   path.fileStem.getD path.toString
 
-/-- Each raw byte is one character of the decoder's byte-string representation. UTF-8
-decoding would replace or reject arbitrary Flat bytes. This conversion belongs to D3. -/
+/-- Raw Flat decoding is included in D3; file I/O is outside the timer. -/
 def decode (bytes : ByteArray) : Except String Program :=
-  let input := String.mk (bytes.data.toList.map Char.ofUInt8)
-  match decodeProgramFromByteString input with
+  match decodeProgramFromBytes bytes with
   | some program => .ok program
   | none => .error "Flat decode failed"
 

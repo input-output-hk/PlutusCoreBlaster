@@ -81,7 +81,7 @@ jobs:
           path: build.log
 
       - name: Build native CEK benchmark
-        run: lake build bench_cek test_crypto_ffi
+        run: lake build bench_cek test_crypto_ffi test_flat_decode
 
       - name: Check native and Lean crypto against independent vectors
         run: python3 scripts/test_crypto_ffi.py
@@ -97,6 +97,9 @@ jobs:
             data/plutus_use_cases
             check/reference
 
+      - name: Compare raw Flat decoding with the complete reference ASTs
+        run: python3 scripts/test_flat_decode.py --benchmark-root .benchmark-reference
+
       - name: Check native CLI, reference scripts and profiler equivalence
         run: python3 scripts/test_bench_cek.py --benchmark-root .benchmark-reference --profile-corpus
 
@@ -105,5 +108,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: native-cek-check
-          path: Benchmark/results/cek/
+          path: |
+            Benchmark/results/cek/
+            Benchmark/results/flat-decode/
           if-no-files-found: ignore
