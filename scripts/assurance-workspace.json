@@ -13,19 +13,19 @@
   "repositories": {
     "plutus": {
       "repository": "RSoulatIOHK/plutus",
-      "commit": "b68057cb058cfc3cc83f4be296a0fbec79e1790d"
+      "commit": "a85d229bcd046944973f6bce2f43e774561203c4"
     },
     "cips": {
       "repository": "RSoulatIOHK/CIPs",
-      "commit": "7724d1ea9ce03e7f666b27d80fdb6ee541801756"
+      "commit": "b12d4b0cd38757778fa8963e8bbbbbefeab9eea8"
     },
     "ual": {
       "repository": "input-output-hk/UniversalAnnotationLanguage",
-      "commit": "bc6e9c52022b26b288e2a672b3d0309036d7ccc0"
+      "commit": "1f7ab847736e5fa53cadc2099300cdaf3c720c6b"
     },
     "ledger": {
       "repository": "input-output-hk/CardanoLedgerApiBlaster",
-      "commit": "8141e913bef4d31ad8580b888100701b7407132a"
+      "commit": "a7a980ca2ab89adbdbdc931c7d1b835498426033"
     }
   }
 }

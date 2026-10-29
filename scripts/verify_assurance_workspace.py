@@ -30,6 +30,9 @@ def require(ok,message):
     if not ok:raise SystemExit(message)
 def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 require(capture(['git','rev-parse','HEAD'],blaster)==lock['blasterCommit'],'Blaster revision differs from assurance-workspace.json')
+for name, repo in [('plutus',a.plutus),('cips',a.cips),('ledger',ledger),('ual',a.ual)]:
+    if repo is not None:
+        require(capture(['git','rev-parse','HEAD'],repo)==lock['repositories'][name]['commit'],name+' revision differs from assurance-workspace.json')
 for repo in [core,ledger,blaster]:
     require(capture(['lake','env','lean','--version'],repo).startswith('Lean (version '+lock['lean']+',') or
             ('version '+lock['lean']+' ') in capture(['lake','env','lean','--version'],repo),'Lean version mismatch: '+str(repo))
