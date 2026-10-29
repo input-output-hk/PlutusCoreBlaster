@@ -70,3 +70,28 @@ jobs:
         with:
           name: tests-build
           path: build.log
+
+      - name: Build native CEK benchmark
+        run: lake build bench_cek
+
+      - name: Checkout pinned Plutus VM Benchmark reference
+        uses: actions/checkout@v6
+        with:
+          repository: lantr-io/plutus-vm-benchmark
+          ref: fc252e35531ba5b2d76c564869a1121c9edb6e2f
+          path: .benchmark-reference
+          persist-credentials: false
+          sparse-checkout: |
+            data/plutus_use_cases
+            check/reference
+
+      - name: Check native CLI, reference scripts and profiler equivalence
+        run: python3 scripts/test_bench_cek.py --benchmark-root .benchmark-reference --profile-corpus
+
+      - name: Upload native CEK check CSV and diagnostic profiles
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-cek-check
+          path: Benchmark/results/cek/
+          if-no-files-found: ignore

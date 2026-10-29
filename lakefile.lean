@@ -31,3 +31,8 @@ lean_lib «Benchmark»
 
 lean_exe «bench_prep_uplc» where
   root := `Benchmark.PrepUplc.Driver.Main
+
+-- Standalone native evaluator: no elaboration or #prep_uplc in the timed operation.
+lean_exe «bench_cek» where
+  root := `Benchmark.Cek.Main
+  moreLeancArgs := #["-O3"]

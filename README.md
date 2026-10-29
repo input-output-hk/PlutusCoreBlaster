@@ -114,6 +114,15 @@ The [conformance workflow](.github/workflows/ci-conformance.yaml) runs separatel
 
 ## Benchmarks
 
+The standalone native CEK runner measures Flat decoding and costed evaluation for integration
+with the [Plutus VM Benchmark](https://github.com/lantr-io/plutus-vm-benchmark). It also emits the
+status and ExUnits checked against the Haskell reference. See
+[`Benchmark/Cek/README.md`](Benchmark/Cek/README.md) for its CLI, timing boundaries and gate.
+
+```sh
+make check_cek_benchmark
+```
+
 The `#prep_uplc` benchmark suite measures preprocessing time and memory and can compare two runs. See [`Benchmark/README.md`](Benchmark/README.md) for requirements, case selection, commands, and result fields.
 
 ```sh
