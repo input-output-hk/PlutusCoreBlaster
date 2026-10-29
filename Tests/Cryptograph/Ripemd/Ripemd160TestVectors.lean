@@ -25,7 +25,7 @@ namespace Cryptograph.Ripemd.Ripemd160TestVectors
 #eval Ripemd160.ripemd160_hash "abcdefghijklmnopqrstuvwxyz"
 
 -- "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
-/-- info: "99681e20a62fa20f58234fc749e41d1084d455b4" -/
+/-- info: "12a053384a9c0c88e405a06c27dcf49ada62eb2b" -/
 #guard_msgs in
 #eval Ripemd160.ripemd160_hash "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
 
