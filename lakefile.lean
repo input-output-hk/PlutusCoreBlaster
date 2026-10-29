@@ -1,14 +1,20 @@
 import Lake
 open Lake DSL
 
-def sodiumFlags (mode : String) : IO (Array String) := do
+def sodiumQuery (mode : String) : IO String := do
   let output ← IO.Process.output { cmd := "pkg-config", args := #[mode, "libsodium"] }
   unless output.exitCode == 0 do
     throw (IO.userError "Native crypto requires pkg-config and libsodium development files (brew install libsodium pkg-config / apt install libsodium-dev pkg-config).")
-  return (output.stdout.trim.splitOn " ").filter (· != "") |>.toArray
+  return output.stdout.trim
 
-def sodiumLinkFlags : Array String := run_io sodiumFlags "--libs"
-def sodiumCompileFlags : Array String := run_io sodiumFlags "--cflags"
+-- pkg-config omits default system -L paths. Lean's bundled clang uses its own sysroot,
+-- so pass the exact shared library rather than searching host directories globally.
+def sodiumLinkFlags : Array String := run_io do
+  let dir := System.FilePath.mk (← sodiumQuery "--variable=libdir")
+  return #[(dir / nameToSharedLib "sodium").toString]
+
+def sodiumCompileFlags : Array String := run_io do
+  return ((← sodiumQuery "--cflags").splitOn " ").filter (· != "") |>.toArray
 
 package «PlutusCore» where
   moreLinkArgs := sodiumLinkFlags
