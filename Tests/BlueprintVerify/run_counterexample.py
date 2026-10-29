@@ -46,6 +46,10 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     args.generator = args.generator.resolve(strict=True)
     args.source = args.source.resolve(strict=True)
+    if (args.output / 'FormalSpec.hs').resolve() == args.source:
+        parser.error('The output directory must differ from the original source directory')
+    for filename in ['counterexample.json', 'property-result.json', 'counterexample.hs']:
+        (args.output / filename).unlink(missing_ok=True)
     os.environ['PATH'] = str(args.z3.resolve(strict=True).parent) + os.pathsep + os.environ['PATH']
     core = Path(__file__).resolve().parents[2]
     lean = lean_command()
