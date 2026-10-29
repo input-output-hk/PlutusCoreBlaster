@@ -9,3 +9,5 @@ import Cryptograph.Secp256k1
 import Cryptograph.Sha2
 import Cryptograph.Sha3
 import Cryptograph.String
+
+import Cryptograph.FFI.Native

@@ -227,6 +227,9 @@ jobs:
           unzip -q z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
           echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
 
+      - name: Install native crypto dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsodium-dev pkg-config
+
       - name: Tools version
         run: |
           elan --version
@@ -256,6 +259,13 @@ jobs:
 
       # The conformance cases are read from the generated tests, which must match the plutus
       # checkout: regenerate them, as ci-conformance does.
+      - name: Configure native linker
+        working-directory: PlutusCoreBlaster
+        run: |
+          if [[ -x scripts/lean-cc.sh ]]; then
+            echo "LEAN_CC=$PWD/scripts/lean-cc.sh" >> "$GITHUB_ENV"
+          fi
+
       - name: Generate conformance test suite
         working-directory: PlutusCoreBlaster
         run: make gen_conformance_tests excludeNotImplemented=1

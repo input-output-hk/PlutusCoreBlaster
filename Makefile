@@ -1,3 +1,8 @@
+# Link Linux system crypto with the host libc and Lean's bundled C++/uv libraries.
+ifeq ($(shell uname -s),Linux)
+export LEAN_CC ?= $(CURDIR)/scripts/lean-cc.sh
+endif
+
 .PHONY: usage
 
 usage:
@@ -106,6 +111,11 @@ build_cek_benchmark:
 
 check_cek_benchmark: build_cek_benchmark
 	python3 scripts/test_bench_cek.py $(if $(BENCHMARK_ROOT),--benchmark-root "$(BENCHMARK_ROOT)")
+
+.PHONY: check_crypto_ffi
+check_crypto_ffi:
+	lake build test_crypto_ffi
+	python3 scripts/test_crypto_ffi.py
 
 .PHONY: bench_prep_uplc
 bench_prep_uplc:
