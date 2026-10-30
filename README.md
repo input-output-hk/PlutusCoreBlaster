@@ -145,3 +145,9 @@ make bench_prep_uplc BENCH_ARGS="--suite repo,symbolic"
 Bug reports, documentation improvements, tests, and code changes are welcome. Open an [issue](https://github.com/input-output-hk/PlutusCoreBlaster/issues) to discuss a problem or submit a pull request. Before submitting code, run `make check_all`; changes affecting reference behavior may also need a conformance run.
 
 Maintainers: [Jean-Frédéric Etienne](https://github.com/etiennejf), [Romain Soulat](https://github.com/RSoulatIOHK), and [Mark Petruska](https://github.com/mpetruska).
+
+The coordinated assurance runner revision-checks the sibling repositories, then
+selects them using ignored `.lake/package-overrides.json` files. Normal consumers
+use the Git dependency pinned in `lakefile.lean` and `lake-manifest.json` and need
+no sibling checkout. Remove local overrides to return to the published pins.
+The runner rejects existing conflicting overrides instead of replacing them.

@@ -33,6 +33,21 @@ require(capture(['git','rev-parse','HEAD'],blaster)==lock['blasterCommit'],'Blas
 for name, repo in [('plutus',a.plutus),('cips',a.cips),('ledger',ledger),('ual',a.ual)]:
     if repo is not None:
         require(capture(['git','rev-parse','HEAD'],repo)==lock['repositories'][name]['commit'],name+' revision differs from assurance-workspace.json')
+# Lake's per-workspace overrides select the already revision-checked clones.
+# The published lakefile and manifest remain pinned Git dependencies.
+for repo, packages in [(core, [('Blaster', blaster)]),
+                       (ledger, [('Blaster', blaster), ('PlutusCore', core)])]:
+    entries = [{'type':'path','name':name,'scope':'','inherited':False,
+                'dir':str(path),'configFile':'lakefile.lean','manifestFile':'lake-manifest.json'}
+               for name, path in packages]
+    override = repo/'.lake/package-overrides.json'
+    override.parent.mkdir(exist_ok=True)
+    desired = {'version':'1.1.0','packages':entries}
+    if override.exists():
+        existing = json.loads(override.read_text())
+        require(existing == desired, 'Existing Lake overrides differ from the coordinated workspace: '+str(override))
+    else:
+        override.write_text(json.dumps(desired,indent=2)+'\n')
 for repo in [core,ledger,blaster]:
     require(capture(['lake','env','lean','--version'],repo).startswith('Lean (version '+lock['lean']+',') or
             ('version '+lock['lean']+' ') in capture(['lake','env','lean','--version'],repo),'Lean version mismatch: '+str(repo))
@@ -40,10 +55,16 @@ require(capture([a.ghc,'--numeric-version'],a.plutus)==lock['ghc'],'GHC version 
 require(lock['z3Version'] in capture([str(a.z3.resolve()),'--version']),'Z3 version mismatch')
 probe=subprocess.run([str(a.z3.resolve()),'-in'],input='(set-simplifier recfun-finder)\n(check-sat)\n',text=True,capture_output=True,timeout=15)
 require(probe.returncode==0 and probe.stdout.strip()=='sat','Z3 lacks the required recfun-finder simplifier: '+probe.stdout+probe.stderr)
+manifest=json.loads((core/'lake-manifest.json').read_text())
+dep=next(x for x in manifest['packages'] if x['name']=='Blaster')
+require(dep['type']=='git' and dep['rev']==lock['blasterCommit'] and
+        dep['inputRev']==lock['blasterCommit'], 'Published Blaster pin differs from assurance-workspace.json')
+require((' @ "'+lock['blasterCommit']+'"') in (core/'lakefile.lean').read_text(),
+        'Lake declaration differs from assurance-workspace.json')
 for repo in [core,ledger]:
-    manifest=json.loads((repo/'lake-manifest.json').read_text())
-    dep=next(x for x in manifest['packages'] if x['name']=='Blaster')
-    require(dep['type']=='path' and (repo/dep['dir']).resolve()==blaster,'Consumers do not resolve the same Blaster checkout')
+    paths=capture(['lake','env',sys.executable,'-c','import os; print(os.environ["LEAN_PATH"])'],repo).split(os.pathsep)
+    require(blaster/'.lake/build/lib/lean' in [Path(p).resolve() for p in paths],
+            'Consumers do not resolve the same Blaster checkout')
 import jsonschema  # fail early with the pinned CIP test dependency missing
 print('PASS workspace revisions, toolchains, shared dependency and solver capability',flush=True)
 if a.preflight_only:sys.exit(0)
@@ -81,7 +102,7 @@ run('generated-artifacts',[sys.executable,base/'validate_outputs.py','--cips',a.
 run('cip-schemas',[sys.executable,'-m','unittest','discover','-s','CIP-XXXX/tests','-v'],a.cips)
 run('legacy-regressions',['lake','env',sys.executable,base/'regression.py'])
 run('interface-regressions',['lake','env',sys.executable,base/'interface_regression.py',a.output/'game'])
-for name in ['RecursiveSchema','NativeEncoding','BooleanCase','Counterexample']:
+for name in ['Regression','RecursiveSchema','NativeEncoding','BooleanCase','Counterexample']:
     run(name,['lake','env','lean',base/(name+'.lean')])
 testbin=capture(['cabal','list-bin',project,compiler,'plutus-tx:test:plutus-tx-test'],a.plutus)
 run('ual-tests',[testbin,'-p','UAL'],a.plutus/'plutus-tx')

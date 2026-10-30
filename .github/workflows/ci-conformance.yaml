@@ -190,12 +190,23 @@ jobs:
           path: PlutusCoreBlaster
           persist-credentials: false
 
+      # workflow_dispatch can write the default-branch cache. Keep the executed
+      # dependency literal here; PR-controlled pin data only checks consistency.
+      - name: Check coordinated Blaster pin
+        working-directory: PlutusCoreBlaster
+        run: |
+          python3 - <<'PYCODE'
+          import json
+          rev = json.load(open('scripts/assurance-workspace.json'))['blasterCommit']
+          assert rev == "1cb5a63e0416f336caa3104c2654718e6f971bc9", "conformance Blaster pin differs from the coordinated workspace"
+          PYCODE
       - name: Checkout coordinated Blaster
         uses: actions/checkout@v6
         with:
           repository: input-output-hk/Lean-blaster
-          ref: 7a2f4f0547cce56ec3db3f4f39a8b3bb541c85b9
+          ref: 1cb5a63e0416f336caa3104c2654718e6f971bc9
           path: Lean-blaster
+          persist-credentials: false
       - uses: actions/cache@v4
         id: solver
         with:

@@ -27,11 +27,22 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: PlutusCoreBlaster
+      - name: Read pinned Blaster revision
+        id: blaster
+        working-directory: PlutusCoreBlaster
+        run: |
+          python3 - <<'PYCODE'
+          import json, os, re
+          rev = json.load(open('scripts/assurance-workspace.json'))['blasterCommit']
+          assert re.fullmatch('[0-9a-f]{40}', rev)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              print('ref=' + rev, file=out)
+          PYCODE
       - name: Checkout coordinated Blaster
         uses: actions/checkout@v6
         with:
           repository: input-output-hk/Lean-blaster
-          ref: 1cb5a63e0416f336caa3104c2654718e6f971bc9
+          ref: ${{ steps.blaster.outputs.ref }}
           path: Lean-blaster
       - name: Setup Lean
         run: |
