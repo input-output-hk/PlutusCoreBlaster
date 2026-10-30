@@ -35,6 +35,8 @@ def run_case(name, modify, expected=None):
                           f'#verify_blueprint Check {json.dumps(str(path))}\n')
         proc = subprocess.run(lean_args + [str(driver)], cwd=repo, text=True, capture_output=True, timeout=120)
         output = proc.stdout + proc.stderr
+        if (root/'elaborator-ran').exists():
+            raise AssertionError(name+': elaborator executed IO before rejection')
         good = (proc.returncode == 0 and 'verified (Blaster SMT' in output) if expected is None else (proc.returncode != 0 and expected.lower() in output.lower())
         if expected is not None and ': verified (Blaster SMT' in output:
             good = False
@@ -82,8 +84,30 @@ for modifier in ['@[instance]', '@[macro Lean.Parser.Term.num]', '@[term_elab Le
                  '@[command_elab Lean.Parser.Command.declaration]', '@[implemented_by id]',
                  'unsafe', 'partial', 'private', 'noncomputable']:
     run_case('fragment modifier '+modifier, fragment(modifier+' def unused := 1'), 'do not allow declaration modifiers')
-run_case('fragment sorry', fragment('def admitted : False := by sorry'), 'sorry declaration')
+run_case('fragment sorry', fragment('def admitted : False := by sorry'), 'outside the definitional profile')
 run_case('nested fragment modifier', fragment('def f : Nat := g where\n  @[inline] g := 0'), 'do not allow declaration modifiers')
+
+for name, source in [
+    ('by_elab', 'def bad : Nat := by_elab do return Lean.mkNatLit 0'),
+    ('run_tac', 'def bad : Nat := by run_tac do pure (); exact 0'),
+    ('nested by_elab', 'def f : Nat :=\n  let bad : Nat := by_elab do return Lean.mkNatLit 0\n  bad'),
+    ('quoted syntax', 'def bad := `(term| 0)')]:
+    run_case('fragment '+name, fragment(source), 'outside the definitional profile')
+run_case('proposition elaborator program', lambda d,p: d['properties'][0]['statement']['formal'].update(
+    source='by_elab do return Lean.mkConst ``True'), 'outside the definitional profile')
+def meta_io(kind):
+    def change(d,p):
+        marker=json.dumps(str(p/'elaborator-ran'))
+        if kind=='by_elab':
+            source='def bad : Nat := by_elab do\n  IO.FS.writeFile '+marker+' "ran"\n  return Lean.mkNatLit 0'
+        else:
+            source='def bad : Nat := by\n  run_tac IO.FS.writeFile '+marker+' "ran"\n  exact 0'
+        fragment(source)(d,p)
+    return change
+for kind in ['by_elab','run_tac']:
+    run_case('elaboration IO is blocked: '+kind,meta_io(kind),'outside the definitional profile')
+run_case('plain pattern matching fragment', fragment('def f (xs : List Nat) : Nat := match xs with | [] => 0 | x :: rest => x + rest.length'))
+run_case('plain lambda fragment', fragment('abbrev f := fun (x : Nat) => x + 1'))
 
 def exhaust(d,p):
     d['properties'][0]['statement']['formal']['source'] = d['properties'][0]['statement']['formal']['source'].replace('2500','0')

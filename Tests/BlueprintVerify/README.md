@@ -60,7 +60,11 @@ reproducing evidence. Rebuild in a clean, pinned environment. The runner bounds
 Lean processes; the solver has a 60-second timeout, distinct from preprocessing.
 File SHA-256 checks use `sha256sum` or `shasum` from the trusted PATH, with a
 pure Lean fallback. Pin these utilities as well as Z3 in a reproducible environment.
-Third-party Lean sources require an OS sandbox since elaborators can execute code.
+The checker accepts a closed subset of ordinary Lean expression syntax. It rejects
+tactics, elaborator programs and unknown syntax before elaboration, in both
+fragments and propositions. Imported syntax implementations, Lean, native code,
+the solver and hashing utilities are trusted inputs recorded in provenance.
+An OS sandbox alone does not make arbitrary Lean programs trustworthy.
 
 ## Checking contract
 
@@ -73,18 +77,28 @@ reported non-executable claims alongside executable ones.
 
 UAL 0.5 requires stable ids, explicit argument schemas, supported encodings, and
 `budget: {"steps": n, "semantics": "A" | "B" | "C" | "D" | "E"}`.
-A zero or insufficient step count is unfinished execution, not script rejection.
+Legacy step-only budgets default to post-Conway semantics D for V1/V2 and E for
+V3. Explicit variants must belong to the selected language: A/B/D for V1/V2,
+C/E for V3. UAL 0.5 and compiled-interface checking still require an explicit
+variant. A zero or insufficient step count is unfinished execution, not rejection.
 The current implementation supports `asData` and step budgets. It rejects Scott
 encoding, ledger execution budgets, and unresolved or unguarded cyclic schemas.
 The step bound is not a ledger execution-cost proof. Interpreter termination alone
 is not a complete ledger-acceptance claim.
 
-Only plain `def`/`abbrev` predicate fragments (with optional documentation
-comments) are accepted. Attributes and declaration modifiers are rejected,
-including inside local definitions. Elaboration is audited for new unsafe,
-partial, opaque, admitted or axiom declarations and changes to checker
-registrations. Per-property dependency closures are isolated, and claims
-must reference every scoped compiled program. This last check catches disconnected
+Only plain `def`/`abbrev` predicate fragments in a closed definitional syntax
+profile are accepted, with optional documentation comments. The profile supports
+applications, binders, lambdas, records, lists, `let`, `if` and pattern matching;
+it is not the full Lean language. Attributes and declaration modifiers are rejected,
+including inside local definitions. `by`, `by_elab`, `run_tac` and unknown macros
+are rejected before elaboration. The audit additionally rejects unsafe, partial,
+opaque, admitted or axiom declarations and changes to the selected parsing,
+elaboration, instance and native-code registries. It does not claim to inspect
+every environment extension or process-global state. Per-property dependency closures are isolated, and claims
+must reference every scoped compiled program. Compiled-interface claims must use
+the generated execution wrappers. Dependency traversal stops at those wrappers;
+a raw script reference reached through another path is rejected, so direct calls
+cannot silently replace the context's budget or semantics. This last check catches disconnected
 specifications but cannot establish semantic relevance or rule out vacuity.
 Assumptions must appear in the proposition; documentary assumptions are not axioms.
 
@@ -115,7 +129,9 @@ solver options; the run artifact separately records source revisions and patches
 It is not a hermetic container/image description.
 
 `#verify_blueprint` validates bundled schemas, exact context/environment digests,
-target coverage, interface roles and language conventions. It constructs wrappers
+target coverage, interface roles and language conventions. Titles and ids resolve
+to the same stable validator id before coverage, invocation and applied-script
+checks; unknown or duplicate targets are errors. It constructs wrappers
 independently for each property's selected context. Data and native encodings are
 distinct; runtime inputs stay raw Data so malformed-input claims remain expressible.
 Native `#list` and `#pair` bind raw Data elements; any narrower schema-domain

@@ -20,7 +20,7 @@ lean = os.environ.get('LEAN', 'lean')
 def h(path): return {'alg':'sha256','digest':hashlib.sha256(path.read_bytes()).hexdigest()}
 def write(path, obj): path.write_text(json.dumps(obj,indent=2)+'\n')
 
-def run(name, change, expected, rebind=True):
+def run(name, change, expected=None, rebind=True):
     with tempfile.TemporaryDirectory(prefix='interface-') as td:
         root=Path(td)
         for path in source.glob('*.json'):
@@ -42,8 +42,10 @@ def run(name, change, expected, rebind=True):
             f'#verify_blueprint Check {json.dumps(str(root/"assurance.json"))}\n')
         p=subprocess.run(lean_args + [str(root/'Check.lean')],cwd=repo,text=True,capture_output=True,timeout=300)
         log=p.stdout+p.stderr
-        if p.returncode == 0 or expected.lower() not in log.lower():
-            raise AssertionError(f'{name}: expected rejection containing {expected!r}, exit={p.returncode}\n{log}')
+        good = (p.returncode == 0 and ': verified (Blaster SMT' in log) if expected is None else (
+            p.returncode != 0 and expected.lower() in log.lower() and ': verified (Blaster SMT' not in log)
+        if not good:
+            raise AssertionError(f'{name}: expected {expected or "verification"!r}, exit={p.returncode}\n{log}')
         print('PASS',name,flush=True)
 
 def nothing(d,b,c,r): pass
@@ -51,9 +53,44 @@ run('altered context bytes',nothing,'checking artifact digest mismatch',False)
 run('missing context',lambda d,b,c,r:d['properties'][0].pop('checkingContext'),'requires a checkingContext')
 run('unknown context',lambda d,b,c,r:d['properties'][0].update(checkingContext='missing'),'unknown checking context')
 run('unsupported profile',lambda d,b,c,r:c.update(profile='unknown'),'unsupported checking profile')
-run('incomplete target coverage',lambda d,b,c,r:c['targets'][0].update(validator='elsewhere'),'exactly cover')
+run('incomplete target coverage',lambda d,b,c,r:c['targets'][0].update(validator='elsewhere'),'no validator')
 run('duplicate targets',lambda d,b,c,r:c['targets'].append(copy.deepcopy(c['targets'][0])),'duplicate checking target')
 run('unknown invocation',lambda d,b,c,r:c['targets'][0].update(purpose='mint'),'unknown invocation')
+def title_target(d,b,c,r,scope_title=True,target_title=True):
+    b['validators'][0]['title']='game'
+    if scope_title: d['properties'][0]['scope']['validators']=['game']
+    if target_title: c['targets'][0]['validator']='game'
+run('scope and target by title',title_target)
+run('id scope and title target',lambda d,b,c,r:title_target(d,b,c,r,False,True))
+run('title scope and id target',lambda d,b,c,r:title_target(d,b,c,r,True,False))
+run('title target still checks invocation',lambda d,b,c,r:(title_target(d,b,c,r),c['targets'][0].update(purpose='mint')),'unknown invocation')
+run('title target still applies zero fuel',lambda d,b,c,r:(title_target(d,b,c,r),c['execution']['budget'].update(steps=0)),'falsified')
+def duplicate_alias(d,b,c,r):
+    title_target(d,b,c,r)
+    other=copy.deepcopy(c['targets'][0]);other['validator']=b['validators'][0]['id'];c['targets'].append(other)
+run('duplicate id/title aliases',duplicate_alias,'duplicate checking target')
+run('incompatible validator semantics',lambda d,b,c,r:c['execution'].update(semanticsVariant='C'),'incompatible with Plutus v2')
+def function_semantics(d,b,c,r):
+    code=b['validators'][0]['compiledCode']
+    f={'serialization':'cbor-flat','plutusVersion':'v3','compiledCode':code,
+       'hash':{'alg':'sha256','digest':hashlib.sha256(bytes.fromhex(code)).hexdigest()},'arguments':[], 'result':{}}
+    d['functions']={'helper':f}
+    d.setdefault('definitions', {})
+    d['properties'][0]['scope']={'functions':['helper']}
+    c['targets']=[{'function':'helper','functionHash':f['hash'],
+        'functionInterface':{k:f[k] for k in ['serialization','plutusVersion','arguments','result']}}]
+    c['targets'][0]['functionInterface']['definitions']=d['definitions']
+    c['execution']['semanticsVariant']='D'
+run('incompatible function semantics',function_semantics,'incompatible with Plutus v3')
+def bare_script(d,b,c,r,mixed=False):
+    import re
+    raw=re.sub(r'[^a-zA-Z0-9_]', '_', b['validators'][0]['title'])+'_script'
+    claim=f'{raw} = {raw}'
+    if mixed: claim='('+d['properties'][0]['statement']['formal']['source']+') ∧ ('+claim+')'
+    d['properties'][0]['statement']['formal']['source']=claim
+    c['execution']['budget']['steps']=0
+run('raw script does not bind execution settings',bare_script,'does not depend')
+run('wrapper reference cannot conceal a raw script bypass',lambda d,b,c,r:bare_script(d,b,c,r,True),'bypasses the checking-context wrapper')
 run('applied parameters',lambda d,b,c,r:c['targets'][0].update(parameters={'mode':'applied','values':[{'parameter':'/parameters/0','term':{'uri':'unused.flat','hash':{'alg':'sha256','digest':'00'*32}}}],'appliedScriptHash':'00'*28}),'expected exactly one schema alternative')
 run('missing semantics',lambda d,b,c,r:c['execution'].pop('semanticsVariant'),"missing 'semanticsVariant'")
 run('step exhaustion is not success',lambda d,b,c,r:c['execution']['budget'].update(steps=0),'falsified')

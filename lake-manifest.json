@@ -1,12 +1,20 @@
-{"version": "1.1.0",
- "packagesDir": ".lake/packages",
- "packages":
- [{"type": "path",
-   "scope": "",
-   "name": "Blaster",
-   "manifestFile": "lake-manifest.json",
-   "inherited": false,
-   "dir": "../Lean-blaster",
-   "configFile": "lakefile.lean"}],
- "name": "PlutusCore",
- "lakeDir": ".lake"}
+{
+  "version": "1.1.0",
+  "packagesDir": ".lake/packages",
+  "packages": [
+    {
+      "type": "git",
+      "scope": "",
+      "name": "Blaster",
+      "manifestFile": "lake-manifest.json",
+      "inherited": false,
+      "url": "https://github.com/input-output-hk/Lean-blaster",
+      "rev": "bc03bb402ce702984875bbf8ba51216bd6f843d7",
+      "inputRev": "bc03bb402ce702984875bbf8ba51216bd6f843d7",
+      "subDir": null,
+      "configFile": "lakefile.lean"
+    }
+  ],
+  "name": "PlutusCore",
+  "lakeDir": ".lake"
+}

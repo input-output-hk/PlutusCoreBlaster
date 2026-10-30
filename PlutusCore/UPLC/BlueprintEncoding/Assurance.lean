@@ -20,9 +20,10 @@ open PlutusCore.UPLC.BlueprintEncoding.Internal
 bundled CIP meta-schema and cross-references, checks the blueprint digest and
 actual script hashes, imports generated types/wrappers, and runs Blaster on each
 available Lean/UAL proposition. Historical evidence is reported independently.
-Only def/abbrev fragments are accepted; each proposition gets its declared closure
-in an isolated elaboration environment. Third-party sources still require an OS
-sandbox: Lean elaboration is executable code. Solver success is SMT verification,
+Only def/abbrev fragments in a closed definitional syntax profile are accepted;
+each proposition gets its declared closure in an isolated elaboration environment.
+Tactics and elaborator programs are rejected before elaboration, including in the
+proposition. Imported syntax implementations and native code remain trusted. Solver success is SMT verification,
 not a reconstructed Lean proof. Unsupported sources are explicitly not checked.
 -/
 
@@ -326,22 +327,8 @@ def resolveLocalUri (assurancePath uri : String) : String :=
     let dir := (System.FilePath.mk assurancePath).parent.getD ⟨"."⟩
     (dir / path).toString
 
-/-- Find the blueprint validator a scope entry refers to: by `id` first, then
-    by exact `title`. Ambiguity and unknown references are errors, per the CIP. -/
-def resolveValidator (validators : Array BlueprintValidator) (ref : String) :
-    Except String BlueprintValidator :=
-  let byId := validators.filter (·.id == some ref)
-  if h : byId.size = 1 then .ok byId[0]
-  else if byId.size > 1 then
-    .error s!"validator id '{ref}' is ambiguous in the blueprint"
-  else
-    let byTitle := validators.filter (·.title == ref)
-    if h : byTitle.size = 1 then .ok byTitle[0]
-    else if byTitle.size > 1 then
-      .error s!"validator title '{ref}' is ambiguous in the blueprint; \
-give validators unique 'id' fields"
-    else
-      .error s!"no validator with id or title '{ref}' in the blueprint"
+/-- Shared id/title resolution for scopes, context targets and application. -/
+abbrev resolveValidator := PlutusCore.UPLC.BlueprintEncoding.Internal.resolveValidator
 
 /-- Does the formal statement's language resolve to something this command can
     elaborate? The registry entry's `name` decides, falling back to the raw
@@ -577,7 +564,13 @@ private def loadContext (assurancePath bpPath : String) (doc : Document) (p : Pr
   let mut ids : List String := []
   let mut selections := []
   let mut applications := []
-  let bp ← ofExcept (Json.parse (← liftM (IO.FS.readFile bpPath)))
+  let bpText ← liftM (IO.FS.readFile bpPath)
+  let bp ← ofExcept (Json.parse bpText)
+  let parsed ← ofExcept (PlutusCore.UPLC.BlueprintEncoding.Internal.parseBlueprint bpText)
+  let scopedIds ← p.scopeValidators.mapM fun ref => do
+    let v ← ofExcept (resolveValidator parsed.validators ref)
+    let some id := v.id | throwError "checking targets require stable validator ids"
+    pure id
   for t in targets do
     let (id, purpose) ← match getOptStr t "function" with
       | some id => do
@@ -590,9 +583,14 @@ private def loadContext (assurancePath bpPath : String) (doc : Document) (p : Pr
             throwError "checking function interface mismatch: {key}"
         unless (iface.getObjVal? "definitions").toOption.getD (Json.mkObj []) == doc.definitions do
           throwError "checking function definitions mismatch"
+        ofExcept (PlutusCore.UPLC.BlueprintEncoding.Internal.validateSemantics
+          (← ofExcept (getStr f "plutusVersion")) sem)
         pure (id, "function")
       | none => do
-        let id ← ofExcept (getStr t "validator")
+        let ref ← ofExcept (getStr t "validator")
+        let v ← ofExcept (resolveValidator parsed.validators ref)
+        let some id := v.id | throwError "checking targets require stable validator ids"
+        ofExcept (PlutusCore.UPLC.BlueprintEncoding.Internal.validateSemantics parsed.preamble.plutusVersion sem)
         let purpose ← ofExcept (getStr t "purpose")
         let params ← ofExcept (t.getObjVal? "parameters")
         match getOptStr params "mode" with
@@ -603,9 +601,9 @@ private def loadContext (assurancePath bpPath : String) (doc : Document) (p : Pr
     if ids.contains id then throwError "duplicate checking target"
     ids := id :: ids
     selections := selections ++ [(id, purpose, BudgetInfo.semanticSteps steps sem)]
-  let expected := p.scopeValidators ++ p.scopeFunctions
-  unless ids.length == expected.length && ids.all expected.contains &&
-      selections.all (fun (id, purpose, _) => if purpose == "function" then p.scopeFunctions.contains id else p.scopeValidators.contains id) do
+  let expected := scopedIds ++ p.scopeFunctions
+  unless expected.length == expected.eraseDups.length && ids.length == expected.length && ids.all expected.contains &&
+      selections.all (fun (id, purpose, _) => if purpose == "function" then p.scopeFunctions.contains id else scopedIds.contains id) do
     throwError "checking targets do not exactly cover property scope"
   let envRef ← ofExcept (parseArtifact (← ofExcept (ctx.getObjVal? "environment")))
   let (_, envText) ← liftM (checkedArtifact path envRef)
@@ -619,6 +617,99 @@ PlutusCore.UPLC.Term PlutusCore.UPLC.PlutusScript"
 /-!
 ### `#verify_blueprint` command
 -/
+
+/-- A closed syntactic profile of ordinary definitional expressions. Unknown
+macros, tactics and elaborator programs are rejected *before* elaboration. The
+imported implementations of the allowed syntax still belong to the trusted,
+pinned checking environment. Extend this list deliberately, with regression tests. -/
+private def profileSyntaxKinds : List Name :=
+  ["null",
+   "hygieneInfo",
+   "num",
+   "str",
+   "Lean.binderIdent",
+   "Lean.bracketedExplicitBinders",
+   "Lean.explicitBinders",
+   "Lean.Parser.Command.declId",
+   "Lean.Parser.Command.declModifiers",
+   "Lean.Parser.Command.declValSimple",
+   "Lean.Parser.Command.declaration",
+   "Lean.Parser.Command.definition",
+   "Lean.Parser.Command.abbrev",
+   "Lean.Parser.Command.optDeclSig",
+   "Lean.Parser.Command.docComment",
+   "Lean.Parser.Term.anonymousCtor",
+   "Lean.Parser.Term.app",
+   "Lean.Parser.Term.arrow",
+   "Lean.Parser.Term.basicFun",
+   "Lean.Parser.Term.fun",
+   "Lean.Parser.Term.dotIdent",
+   "Lean.Parser.Term.explicitBinder",
+   "Lean.Parser.Term.implicitBinder",
+   "Lean.Parser.Term.strictImplicitBinder",
+   "Lean.Parser.Term.instBinder",
+   "Lean.Parser.Term.forall",
+   "Lean.Parser.Term.hygienicLParen",
+   "Lean.Parser.Term.let",
+   "Lean.Parser.Term.letConfig",
+   "Lean.Parser.Term.letDecl",
+   "Lean.Parser.Term.letId",
+   "Lean.Parser.Term.letIdDecl",
+   "Lean.Parser.Term.letRecDecl",
+   "Lean.Parser.Term.optEllipsis",
+   "Lean.Parser.Term.paren",
+   "Lean.Parser.Term.prop",
+   "Lean.Parser.Term.structInst",
+   "Lean.Parser.Term.structInstField",
+   "Lean.Parser.Term.structInstFieldDef",
+   "Lean.Parser.Term.structInstFields",
+   "Lean.Parser.Term.structInstLVal",
+   "Lean.Parser.Term.tuple",
+   "Lean.Parser.Term.typeSpec",
+   "Lean.Parser.Term.typeAscription",
+   "Lean.Parser.Term.match",
+   "Lean.Parser.Term.matchAlt",
+   "Lean.Parser.Term.matchAlts",
+   "Lean.Parser.Term.matchDiscr",
+   "Lean.Parser.Term.whereDecls",
+   "Lean.Parser.Term.hole",
+   "Lean.Parser.Term.type",
+   "Lean.Parser.Term.sort",
+   "Lean.Parser.Term.universe",
+   "Lean.Parser.Term.proj",
+   "Lean.Parser.Termination.suffix",
+   "termIfThenElse",
+   "termDepIfThenElse",
+   "term[_]",
+   "term_+_",
+   "term_-_",
+   "term_*_",
+   "term_/_",
+   "term_%_",
+   "term_-",
+   "term-_",
+   "term_::_",
+   "term_++_",
+   "term_<_",
+   "term_=_",
+   "term_>_",
+   "term_×_",
+   "term_↔_",
+   "term_∧_",
+   "term_≤_",
+   "term_≥_",
+   "term_∨_",
+   "term_≠_",
+   "term¬_",
+   "term∃_,_"] |>.map (fun kind => if kind.startsWith "Lean." then kind.toName else Name.mkSimple kind)
+
+private partial def checkProfileSyntax (stx : Syntax) : CommandElabM Unit := do
+  match stx with
+  | .node _ kind children =>
+    unless profileSyntaxKinds.contains kind do
+      throwError "formal source syntax '{kind}' is outside the definitional profile (tactics and elaborator programs are not allowed)"
+    for child in children do checkProfileSyntax child
+  | _ => pure ()
 
 /-- Check nested declaration modifiers as well as the outer command. Documentation
 is harmless; attributes/unsafe/partial and the other modifiers are outside this
@@ -638,10 +729,13 @@ private def checkFragmentCommand (stx : Syntax) : CommandElabM Unit := do
   unless decl.getKind == ``Lean.Parser.Command.definition || decl.getKind == ``Lean.Parser.Command.abbrev do
     throwError "formal fragments may contain only def/abbrev declarations"
   checkFragmentSyntax stx
+  checkProfileSyntax stx
 
 /-- Audit the elaborated result too: syntax alone does not bound what elaborators
 can do. Reject new axioms, opaque/unsafe/partial definitions, sorry, and changes
-to the registries that control parsing, elaboration, instances or native code.
+to the selected registries below (parsing, elaboration, instances and native code).
+This audit is a backstop for the closed syntax profile, not a complete environment
+or process sandbox.
 Equation theorems generated by ordinary definitions are permitted. Pointer
 identity is a conservative check on persistent registry states; it is only used
 in this elaborator, never as a logical equality or proof premise. -/
@@ -672,38 +766,47 @@ private unsafe def auditFragment (before : Environment) : CommandElabM Unit := d
 /-- Follow local definitions before simplification to detect disconnected claims.
 This is a dependency check, not a proof of semantic relevance. -/
 private partial def dependencies (env : Environment) (todo : List Name)
-    (seen : NameSet := {}) : NameSet :=
+    (seen : NameSet := {}) (stop : NameSet := {}) : NameSet :=
   match todo with
   | [] => seen
   | n :: rest =>
-    if seen.contains n then dependencies env rest seen
+    if seen.contains n then dependencies env rest seen stop
     else
-      let next := match env.find? n with
+      let next := if stop.contains n then [] else match env.find? n with
         | some (.defnInfo info) =>
             if env.isImportedConst n then [] else info.value.getUsedConstants.toList
         | _ => []
-      dependencies env (next ++ rest) (seen.insert n)
+      dependencies env (next ++ rest) (seen.insert n) stop
 
 private def checkSource (ns : Name) (validators : List BlueprintValidator)
-    (functions : List String) (src : String) : CommandElabM Blaster.Smt.Result := do
+    (functions : List String) (src : String) (contextBound : Bool) : CommandElabM Blaster.Smt.Result := do
   let env ← getEnv
   let stx ← match Parser.runParserCategory env `term src with
     | .ok stx => pure stx
     | .error e => throwError m!"Invalid formal proposition: {e}"
+  checkProfileSyntax stx
   liftTermElabM do
     let expr ← instantiateMVars (← Term.elabTermAndSynthesize stx (some (mkSort .zero)))
     if expr.hasSorry then throwError "formal proposition contains sorry"
-    let used := dependencies (← getEnv) expr.getUsedConstants.toList
+    let wrapperNames := (validators.map fun v => Name.mkStr ns
+      (PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName v.title)) ++
+      (functions.map fun id => Name.mkStr ns (PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName id))
+    let stop := if contextBound then wrapperNames.foldl (fun acc n => acc.insert n) ({} : NameSet) else {}
+    let used := dependencies (← getEnv) expr.getUsedConstants.toList {} stop
     for v in validators do
       let title := PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName v.title
-      let raw := if v.arguments.isSome && (PlutusCore.UPLC.BlueprintEncoding.Internal.wrapperBlocker
+      let raw := if !contextBound && v.arguments.isSome && (PlutusCore.UPLC.BlueprintEncoding.Internal.wrapperBlocker
                        (v.arguments.getD #[]) v.budget).isNone then title ++ "_script" else title
       unless used.contains (Name.mkStr ns raw) do
         throwError m!"formal proposition does not depend on scoped validator '{v.id.getD v.title}'"
+      if contextBound && used.contains (Name.mkStr ns (title ++ "_script")) then
+        throwError "formal proposition bypasses the checking-context wrapper"
     for id in functions do
-      let raw := PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName id ++ "_script"
-      unless used.contains (Name.mkStr ns raw) do
+      let name := PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName id
+      unless used.contains (Name.mkStr ns name) do
         throwError "formal proposition does not depend on scoped function '{id}'"
+      if used.contains (Name.mkStr ns (name ++ "_script")) then
+        throwError "formal proposition bypasses the checking-context wrapper"
     unless (← Blaster.Optimize.findLocalAxioms).isEmpty do
       throwError "assurance checking does not accept local axioms"
     for n in expr.getUsedConstants do
@@ -871,7 +974,7 @@ unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
             logInfo m!"Property '{p.id}': checking fresh proposition"
             if (← get).messages.toList.countP (fun m => m.severity == .error) > previousErrors then
               throwError "generated interface or formal fragments failed to elaborate"
-            checkSource ns scopedBound p.scopeFunctions src
+            checkSource ns scopedBound p.scopeFunctions src blueprint.extended
         finally
           setEnv savedEnv
         checked := checked + 1

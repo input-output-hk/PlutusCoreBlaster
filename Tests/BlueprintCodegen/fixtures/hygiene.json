@@ -1,0 +1,208 @@
+{
+  "preamble": {
+    "title": "code generation hygiene",
+    "version": "1",
+    "plutusVersion": "v3"
+  },
+  "validators": [],
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "String": {
+      "title": "String",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "n",
+          "dataType": "integer"
+        }
+      ]
+    },
+    "Option": {
+      "title": "Option",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "List": {
+      "title": "List",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "Integer": {
+      "title": "Integer",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "ByteString": {
+      "title": "ByteString",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "Data": {
+      "title": "Data",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "IsData": {
+      "title": "IsData",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "Repr": {
+      "title": "Repr",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "Unit": {
+      "title": "Unit",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "PlutusCore": {
+      "title": "PlutusCore",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "True": {
+      "title": "True",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "False": {
+      "title": "False",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "_f0": {
+      "title": "_f0",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "Consumer": {
+      "title": "Consumer",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "_v1",
+          "schema": {}
+        },
+        {
+          "title": "b",
+          "dataType": "integer"
+        },
+        {
+          "title": "some",
+          "dataType": "integer"
+        },
+        {
+          "title": "none",
+          "dataType": "integer"
+        },
+        {
+          "title": "text",
+          "dataType": "#string"
+        },
+        {
+          "title": "flag",
+          "anyOf": [
+            {
+              "dataType": "constructor",
+              "index": 0,
+              "fields": []
+            },
+            {
+              "dataType": "constructor",
+              "index": 1,
+              "fields": []
+            }
+          ]
+        },
+        {
+          "title": "named0",
+          "$ref": "#/definitions/Bool"
+        },
+        {
+          "title": "named1",
+          "$ref": "#/definitions/String"
+        },
+        {
+          "title": "named2",
+          "$ref": "#/definitions/Option"
+        },
+        {
+          "title": "named3",
+          "$ref": "#/definitions/List"
+        },
+        {
+          "title": "named4",
+          "$ref": "#/definitions/Integer"
+        },
+        {
+          "title": "named5",
+          "$ref": "#/definitions/ByteString"
+        },
+        {
+          "title": "named6",
+          "$ref": "#/definitions/Data"
+        },
+        {
+          "title": "named7",
+          "$ref": "#/definitions/IsData"
+        },
+        {
+          "title": "named8",
+          "$ref": "#/definitions/Repr"
+        },
+        {
+          "title": "named9",
+          "$ref": "#/definitions/Unit"
+        },
+        {
+          "title": "named10",
+          "$ref": "#/definitions/PlutusCore"
+        },
+        {
+          "title": "named11",
+          "$ref": "#/definitions/True"
+        },
+        {
+          "title": "named12",
+          "$ref": "#/definitions/False"
+        },
+        {
+          "title": "named13",
+          "$ref": "#/definitions/_f0"
+        }
+      ]
+    }
+  }
+}

@@ -190,6 +190,23 @@ structure Blueprint where
   namedTypes : List (String × PlutusType) := []
   droppedTypes : List String := []
 
+/-- Find the blueprint validator a scope entry refers to: by `id` first, then
+    by exact `title`. Ambiguity and unknown references are errors, per the CIP. -/
+def resolveValidator (validators : Array BlueprintValidator) (ref : String) :
+    Except String BlueprintValidator :=
+  let byId := validators.filter (·.id == some ref)
+  if h : byId.size = 1 then .ok byId[0]
+  else if byId.size > 1 then
+    .error s!"validator id '{ref}' is ambiguous in the blueprint"
+  else
+    let byTitle := validators.filter (·.title == ref)
+    if h : byTitle.size = 1 then .ok byTitle[0]
+    else if byTitle.size > 1 then
+      .error s!"validator title '{ref}' is ambiguous in the blueprint; \
+give validators unique 'id' fields"
+    else
+      .error s!"no validator with id or title '{ref}' in the blueprint"
+
 /-- The type shapes for which code generation produces a named declaration.
     Used by the declaration planner and the emitter; all other shapes are
     builtin types or raw-Data fallbacks. -/
@@ -213,6 +230,53 @@ def getOptStr (j : Lean.Json) (key : String) : Option String :=
   | .ok (.str s) => .some s
   | _            => .none
 
+/-- A non-negative integer JSON field, rejecting fractional/exponent forms. -/
+private def getNatField (j : Lean.Json) (key : String) : Option Nat :=
+  match j.getObjVal? key with
+  | .ok (.num n) => if n.exponent == 0 && n.mantissa ≥ 0 then some n.mantissa.toNat else none
+  | _            => none
+
+/-- Check constructor tags before type recognition/lowering can discard malformed
+schemas. Walk the finite JSON document, not its potentially recursive references. -/
+private partial def validateConstructorIndices (j : Json) : Except String Unit := do
+  match j with
+  | .obj fields =>
+    if getOptStr j "dataType" == some "constructor" && (getNatField j "index").isNone then
+      throw "constructor index must be a non-negative integer without a decimal exponent"
+    for key in ["anyOf", "oneOf"] do
+      if let .ok (.arr variants) := j.getObjVal? key then
+        let mut seen : List Nat := []
+        for v in variants do
+          if getOptStr v "dataType" == some "constructor" then
+            let some index := getNatField v "index"
+              | throw "constructor index must be a non-negative integer without a decimal exponent"
+            if seen.contains index then throw s!"duplicate constructor index {index} in {key}"
+            seen := index :: seen
+    for (_, child) in fields.toArray do validateConstructorIndices child
+  | .arr values => for child in values do validateConstructorIndices child
+  | _ => pure ()
+
+/-- Reject a builtin variant that the selected ledger language cannot use. -/
+def validateSemantics (version sem : String) : Except String Unit := do
+  let allowed ← match version with
+    | "v1" | "v2" => pure ["A", "B", "D"]
+    | "v3" => pure ["C", "E"]
+    | _ => throw s!"unsupported Plutus language '{version}'"
+  unless allowed.contains sem do
+    throw s!"semantics variant '{sem}' is incompatible with Plutus {version}"
+
+/-- Legacy step-only budgets use the post-Conway default for their language. -/
+def defaultSemantics (version : String) : Except String String := do
+  let language ← match version with
+    | "v1" => pure _root_.PlutusCore.Default.Internal.PlutusVersion.plutusV1
+    | "v2" => pure _root_.PlutusCore.Default.Internal.PlutusVersion.plutusV2
+    | "v3" => pure _root_.PlutusCore.Default.Internal.PlutusVersion.plutusV3
+    | _ => throw s!"unsupported Plutus language '{version}'"
+  return match _root_.PlutusCore.Default.Internal.PlutusVersion.toSemanticsVariant language .postConway with
+    | .defaultFunSemanticsVariantA => "A" | .defaultFunSemanticsVariantB => "B"
+    | .defaultFunSemanticsVariantC => "C" | .defaultFunSemanticsVariantD => "D"
+    | .defaultFunSemanticsVariantE => "E"
+
 /-- Decode JSON Pointer token escapes: `~1` → `/`, then `~0` → `~`. -/
 private def decodeJsonPointer (s : String) : String :=
   String.intercalate "~" (String.intercalate "/" (s.splitOn "~1") |>.splitOn "~0")
@@ -234,7 +298,7 @@ private def isBoolShapeDef (defn : Lean.Json) : Bool :=
     let isCtor (v : Lean.Json) (i : Nat) : Bool :=
       (match v.getObjVal? "dataType" with | .ok (.str "constructor") => true | _ => false) &&
       (getOptStr v "title").isNone &&
-      (match v.getObjVal? "index" with | .ok (.num n) => n.mantissa.toNat == i | _ => false) &&
+      getNatField v "index" == some i &&
       (match v.getObjVal? "fields" with | .ok (.arr f) => f.isEmpty | .error _ => true | _ => false)
     isCtor v0 0 && isCtor v1 1
   | _ => false
@@ -249,7 +313,7 @@ private partial def isUnitShapeDef (defn : Lean.Json) : Bool :=
   | some _ => false
   | none =>
     getOptStr defn "dataType" == some "constructor" &&
-    (defn.getObjValAs? Nat "index").toOption == some 0 &&
+    getNatField defn "index" == some 0 &&
     (match defn.getObjVal? "fields" with | .ok (.arr fs) => fs.isEmpty | .error _ => true | _ => false)
 
 /-- Recognize candidate names before resolving recursive references. The final
@@ -350,9 +414,7 @@ private partial def parseSchemaType (defs : Lean.Json) (j : Lean.Json) (depth : 
       .pair left right
     | "constructor" =>
       let title  := getOptStr j "title"
-      let index  := match j.getObjVal? "index" with
-        | .ok (.num n) => n.mantissa.toNat
-        | _            => 0
+      let index  := (getNatField j "index").getD 0 -- validated before lowering
       let fields := match j.getObjVal? "fields" with
         | .ok (.arr arr) =>
           arr.toList.map fun f =>
@@ -441,21 +503,17 @@ private def parseArgument (defs : Lean.Json) (names : List (String × String)) (
   validateArgumentSchema defs schema
   return { encoding, ptype := parseSchemaType defs schema 20 false names }
 
-/-- A non-negative integer JSON field, rejecting fractional/exponent forms. -/
-private def getNatField (j : Lean.Json) (key : String) : Option Nat :=
-  match j.getObjVal? key with
-  | .ok (.num n) => if n.exponent == 0 && n.mantissa ≥ 0 then some n.mantissa.toNat else none
-  | _            => none
-
-private def parseBudget (j : Lean.Json) : Except String BudgetInfo :=
+private def parseBudget (version : String) (j : Lean.Json) : Except String BudgetInfo :=
   match getNatField j "steps" with
   | some n =>
     if (j.getObjVal? "exCPU").isOk || (j.getObjVal? "exMem").isOk then
       .error "steps and ledger execution units are mutually exclusive"
-    else match getOptStr j "semantics" with
-    | none => .ok (.steps n)
-    | some sem => if ["A", "B", "C", "D", "E"].contains sem then .ok (.semanticSteps n sem)
-                  else .error "semantics must be A, B, C, D, or E"
+    else match j.getObjVal? "semantics" with
+    | .error _ => .ok (.steps n)
+    | .ok (.str sem) => do
+      validateSemantics version sem
+      pure (.semanticSteps n sem)
+    | .ok _ => .error "budget semantics must be a string"
   | none   =>
     match getNatField j "exCPU", getNatField j "exMem" with
     | some c, some m => .ok (.exUnits c m)
@@ -528,6 +586,8 @@ private partial def recursiveSchema (defs schema : Json) (seen : List String := 
 /-- Standalone assurance functions use the same wire schema vocabulary. Data
 ADTs stay raw Data at this boundary, so no decoder silently narrows their domain. -/
 def parseFunctionWire (schema : Json) (defs : Json := Json.mkObj []) : Except String ArgumentInfo := do
+  validateConstructorIndices schema
+  validateConstructorIndices defs
   let encoding ← schemaEncoding defs schema
   validateArgumentSchema defs schema
   let ptype := match encoding with
@@ -619,7 +679,7 @@ private def parseValidator (defs : Lean.Json) (names : List (String × String)) 
     | .ok _    => .error s!"validator '{title}': 'arguments' must be an array"
     | .error _ => pure none
   let budget ← match j.getObjVal? "budget" with
-    | .ok b    => some <$> (parseBudget b).mapError (s!"validator '{title}': {·}")
+    | .ok b    => some <$> (parseBudget version b).mapError (s!"validator '{title}': {·}")
     | .error _ => pure none
   return {
     title
@@ -702,6 +762,7 @@ private def lowerValidatorRefs (available : List String) (v : BlueprintValidator
 
 def parseBlueprint (s : String) : Except String Blueprint := do
   let json ← Lean.Json.parse s
+  validateConstructorIndices json
   let uri := getOptStr json "$schema"
   let extended := uri == some interfaceSchemaUri
   if extended then AssuranceSchema.validateDocument json
@@ -844,62 +905,72 @@ def buildBlueprintInfoExpr (pre : BlueprintPreamble) (viExprs : Array Expr) : Ex
 def openDecl : String :=
   "open PlutusCore.Data PlutusCore.Integer PlutusCore.ByteString PlutusCore.IsData"
 
-/-- Map a `PlutusType` to a Lean type name string using the short names
-    brought into scope by `openDecl`. Falls back to `Data` for complex types. -/
-private partial def plutusTypeToTypeStr : PlutusType → String
-  | .integer    => "Integer"
-  | .bytestring => "ByteString"
-  | .bool       => "Bool"
-  | .unit       => "Unit"
-  | .data       => "Data"
-  | .string     => "String"
-  | .list t     => "(List " ++ plutusTypeToTypeStr t ++ ")"
-  | .pair a b   => "(" ++ plutusTypeToTypeStr a ++ " × " ++ plutusTypeToTypeStr b ++ ")"
-  | .map k v    => "(List (" ++ plutusTypeToTypeStr k ++ " × " ++ plutusTypeToTypeStr v ++ "))"
-  | .named n    => escapeIdent (sanitizeName n)
-  | _           => "Data"
+/-- Absolute references cannot be captured by generated declarations or binders.
+Resolve exported aliases through name quotations before printing constructor paths. -/
+private def absoluteIdent (name : Name) : String :=
+  "_root_." ++ name.toStringWithToken true (fun _ => true)
+
+private def qualifiedIdent (ns : Name) (shortName : String) : String :=
+  absoluteIdent (Name.mkStr ns shortName)
+
+private def dataTypeName : String := absoluteIdent ``PlutusCore.Data.Data
+private def byteStringTypeName : String := absoluteIdent ``PlutusCore.ByteString.ByteString
+
+/-- Resolve builtins absolutely and named schemas in their generated namespace. -/
+private partial def plutusTypeToTypeStr (ns : Name) : PlutusType → String
+  | .integer    => "_root_.PlutusCore.Integer.Integer"
+  | .bytestring => byteStringTypeName
+  | .bool       => "_root_.Bool"
+  | .unit       => "_root_.Unit"
+  | .data       => dataTypeName
+  | .string     => "_root_.String"
+  | .list t     => "(_root_.List " ++ plutusTypeToTypeStr ns t ++ ")"
+  | .pair a b   => "(" ++ plutusTypeToTypeStr ns a ++ " × " ++ plutusTypeToTypeStr ns b ++ ")"
+  | .map k v    => "(_root_.List (" ++ plutusTypeToTypeStr ns k ++ " × " ++ plutusTypeToTypeStr ns v ++ "))"
+  | .named n    => qualifiedIdent ns (sanitizeName n)
+  | _           => dataTypeName
 
 /-- Generate a Lean expression string that encodes `fieldExpr` as `Data`.
     Recurses through `list`/`map`/`pair` so a `map` at any depth targets the
     dedicated `Data.Map` shape rather than the generic `List`-of-`Constr`. -/
 private partial def encodeFieldStr (fieldExpr : String) : PlutusType → String
-  | .integer    => "Data.I (" ++ fieldExpr ++ ")"
-  | .bytestring => "Data.B (" ++ fieldExpr ++ ")"
-  | .string     => "IsData.toData (" ++ fieldExpr ++ ")"
-  | .bool       => "if (" ++ fieldExpr ++ ") then Data.Constr 1 [] else Data.Constr 0 []"
-  | .unit       => "Data.Constr 0 []"
+  | .integer    => dataTypeName ++ ".I (" ++ fieldExpr ++ ")"
+  | .bytestring => dataTypeName ++ ".B (" ++ fieldExpr ++ ")"
+  | .string     => "_root_.PlutusCore.IsData.IsData.toData (" ++ fieldExpr ++ ")"
+  | .bool       => "if (" ++ fieldExpr ++ ") then " ++ dataTypeName ++ ".Constr 1 [] else " ++ dataTypeName ++ ".Constr 0 []"
+  | .unit       => dataTypeName ++ ".Constr 0 []"
   | .data       => "(" ++ fieldExpr ++ ")"
   | .list t     =>
-      "Data.List ((" ++ fieldExpr ++ ").map (fun _x => " ++ encodeFieldStr "_x" t ++ "))"
+      dataTypeName ++ ".List ((" ++ fieldExpr ++ ").map (fun _x => " ++ encodeFieldStr "_x" t ++ "))"
   | .map k v    =>
-      "Data.Map ((" ++ fieldExpr ++ ").map (fun (_a, _b) => (" ++
+      dataTypeName ++ ".Map ((" ++ fieldExpr ++ ").map (fun (_a, _b) => (" ++
         encodeFieldStr "_a" k ++ ", " ++ encodeFieldStr "_b" v ++ ")))"
   | .pair a b   =>
-      "Data.Constr 0 [" ++ encodeFieldStr ("(" ++ fieldExpr ++ ").1") a ++ ", " ++
+      dataTypeName ++ ".Constr 0 [" ++ encodeFieldStr ("(" ++ fieldExpr ++ ").1") a ++ ", " ++
         encodeFieldStr ("(" ++ fieldExpr ++ ").2") b ++ "]"
-  | _           => "IsData.toData (" ++ fieldExpr ++ ")"
+  | _           => "_root_.PlutusCore.IsData.IsData.toData (" ++ fieldExpr ++ ")"
 
 /-- Generate a Lean expression string that decodes a `Data` value.
-    Produces `Option T` where `T = plutusTypeToTypeStr ftype`. -/
-private partial def decodeFieldStr (dataExpr : String) : PlutusType → String
-  | .integer    => "(match " ++ dataExpr ++ " with | Data.I _x => some _x | _ => none)"
-  | .bytestring => "(match " ++ dataExpr ++ " with | Data.B _x => some _x | _ => none)"
-  | .string     => "(IsData.fromData " ++ dataExpr ++ " : Option String)"
-  | .bool       => "(match " ++ dataExpr ++ " with | Data.Constr 0 [] => some false | Data.Constr 1 [] => some true | _ => none)"
-  | .unit       => "(match " ++ dataExpr ++ " with | Data.Constr 0 [] => some () | _ => none)"
-  | .data       => "(some " ++ dataExpr ++ ")"
+    Produces `Option T` where `T = plutusTypeToTypeStr ns ftype`. -/
+private partial def decodeFieldStr (ns : Name) (dataExpr : String) : PlutusType → String
+  | .integer    => "(match " ++ dataExpr ++ " with | " ++ dataTypeName ++ ".I _x => _root_.Option.some _x | _ => _root_.Option.none)"
+  | .bytestring => "(match " ++ dataExpr ++ " with | " ++ dataTypeName ++ ".B _x => _root_.Option.some _x | _ => _root_.Option.none)"
+  | .string     => "(_root_.PlutusCore.IsData.IsData.fromData " ++ dataExpr ++ " : _root_.Option _root_.String)"
+  | .bool       => "(match " ++ dataExpr ++ " with | " ++ dataTypeName ++ ".Constr 0 [] => _root_.Option.some _root_.Bool.false | " ++ dataTypeName ++ ".Constr 1 [] => _root_.Option.some _root_.Bool.true | _ => _root_.Option.none)"
+  | .unit       => "(match " ++ dataExpr ++ " with | " ++ dataTypeName ++ ".Constr 0 [] => _root_.Option.some () | _ => _root_.Option.none)"
+  | .data       => "(_root_.Option.some " ++ dataExpr ++ ")"
   | .list t     =>
-      "(match " ++ dataExpr ++ " with | Data.List _xs => _xs.mapM (fun _x => " ++
-        decodeFieldStr "_x" t ++ ") | _ => none)"
+      "(match " ++ dataExpr ++ " with | " ++ dataTypeName ++ ".List _xs => _xs.mapM (fun _x => " ++
+        decodeFieldStr ns "_x" t ++ ") | _ => _root_.Option.none)"
   | .map k v    =>
-      "(match " ++ dataExpr ++ " with | Data.Map _m => _m.mapM (fun (_a, _b) => (" ++
-        decodeFieldStr "_a" k ++ ").bind (fun _k => (" ++ decodeFieldStr "_b" v ++
-        ").bind (fun _v => some (_k, _v)))) | _ => none)"
+      "(match " ++ dataExpr ++ " with | " ++ dataTypeName ++ ".Map _m => _m.mapM (fun (_a, _b) => (" ++
+        decodeFieldStr ns "_a" k ++ ").bind (fun _k => (" ++ decodeFieldStr ns "_b" v ++
+        ").bind (fun _v => _root_.Option.some (_k, _v)))) | _ => _root_.Option.none)"
   | .pair a b   =>
-      "(match " ++ dataExpr ++ " with | Data.Constr 0 [_a, _b] => (" ++
-        decodeFieldStr "_a" a ++ ").bind (fun _x => (" ++ decodeFieldStr "_b" b ++
-        ").bind (fun _y => some (_x, _y))) | _ => none)"
-  | t           => "(IsData.fromData " ++ dataExpr ++ " : Option " ++ plutusTypeToTypeStr t ++ ")"
+      "(match " ++ dataExpr ++ " with | " ++ dataTypeName ++ ".Constr 0 [_a, _b] => (" ++
+        decodeFieldStr ns "_a" a ++ ").bind (fun _x => (" ++ decodeFieldStr ns "_b" b ++
+        ").bind (fun _y => _root_.Option.some (_x, _y))) | _ => _root_.Option.none)"
+  | t           => "(_root_.PlutusCore.IsData.IsData.fromData " ++ dataExpr ++ " : _root_.Option " ++ plutusTypeToTypeStr ns t ++ ")"
 
 /-- Parse a Lean command from a generated string (for code gen). -/
 def parseCommand (s : String) : CommandElabM Syntax := do
@@ -980,42 +1051,42 @@ sum-of-products / nested record not yet emitted; typed as Data."
 
   let esc := escapeIdent shortName
   let fieldLines := namedFields.foldl (fun acc (fname, ftype) =>
-    acc ++ "  " ++ escapeIdent (sanitizeName fname) ++ " : " ++ plutusTypeToTypeStr ftype ++ "\n") ""
+    acc ++ "  " ++ escapeIdent (sanitizeName fname) ++ " : " ++ plutusTypeToTypeStr ns ftype ++ "\n") ""
 
   -- toData body using short names from openDecl
   let encLines := namedFields.map fun (fname, ftype) =>
     encodeFieldStr ("d." ++ escapeIdent (sanitizeName fname)) ftype
   let toDataBody :=
-    "Data.Constr " ++ toString idx ++
+    dataTypeName ++ ".Constr " ++ toString idx ++
     " [" ++ String.intercalate ", " encLines ++ "]"
 
   -- fromData: pattern match on Constr idx [_v0, _v1, ...]
   let varNames := (List.range namedFields.length).map fun i => "_v" ++ toString i
   let patVarList := "[" ++ String.intercalate ", " varNames ++ "]"
-  let pat := "Data.Constr " ++ toString idx ++ " " ++ patVarList
+  let pat := dataTypeName ++ ".Constr " ++ toString idx ++ " " ++ patVarList
 
   -- Build bind chain from right (innermost) to left (outermost)
   let fieldsWithIdx := (List.range namedFields.length).zip namedFields
   let innermost :=
-    "some (" ++ esc ++ ".mk " ++
-    String.intercalate " " (namedFields.map (escapeIdent ∘ sanitizeName ∘ Prod.fst)) ++ ")"
+    "_root_.Option.some (" ++ qualifiedIdent ns shortName ++ ".mk " ++
+    String.intercalate " " ((List.range namedFields.length).map fun i => "_f" ++ toString i) ++ ")"
   let chain := fieldsWithIdx.reverse.foldl
-    (fun acc (i, fname, ftype) =>
-      "(" ++ decodeFieldStr ("_v" ++ toString i) ftype ++ ").bind (fun " ++ escapeIdent (sanitizeName fname) ++ " => " ++ acc ++ ")")
+    (fun acc (i, _, ftype) =>
+      "(" ++ decodeFieldStr ns ("_v" ++ toString i) ftype ++ ").bind (fun _f" ++ toString i ++ " => " ++ acc ++ ")")
     innermost
 
   let fromDataBody :=
     "| " ++ pat ++ " => " ++ chain ++ "\n" ++
-    "        | _ => none"
+    "        | _ => _root_.Option.none"
 
   withTempNamespace ns do
     -- Bring PlutusCore short names into scope for the declarations below
     elabCommand (← parseCommand openDecl)
     elabCommand (← parseCommand "set_option autoImplicit false")
     elabCommand (← parseCommand (
-      "structure " ++ esc ++ " where\n" ++ fieldLines ++ "  deriving Repr"))
+      "structure " ++ esc ++ " where\n" ++ fieldLines ++ "  deriving _root_.Repr"))
     elabCommand (← parseCommand (
-      "instance : IsData " ++ esc ++ " where\n" ++
+      "instance : _root_.PlutusCore.IsData.IsData " ++ esc ++ " where\n" ++
       "  toData d := " ++ toDataBody ++ "\n" ++
       "  fromData x := match x with\n" ++
       "        " ++ fromDataBody))
@@ -1051,33 +1122,33 @@ private def emitSopType (ns : Name) (typeName : String)
   -- Per-constructor: field binders, encode list, decode bind-chain.
   let ctorDecls := ctors.foldl (fun acc (cname, _, ftypes) =>
     let binders := (List.range ftypes.length).foldl (fun b j =>
-      b ++ " (_f" ++ toString j ++ " : " ++ plutusTypeToTypeStr ftypes[j]! ++ ")") ""
+      b ++ " (_f" ++ toString j ++ " : " ++ plutusTypeToTypeStr ns ftypes[j]! ++ ")") ""
     acc ++ "  | " ++ escapeIdent cname ++ binders ++ "\n") ""
   let toArms := ctors.foldl (fun acc (cname, idx, ftypes) =>
     let vars := (List.range ftypes.length).foldl (fun b j => b ++ " _f" ++ toString j) ""
     let encs := (List.range ftypes.length).map fun j => encodeFieldStr ("_f" ++ toString j) ftypes[j]!
-    acc ++ "    | ." ++ escapeIdent cname ++ vars ++ " => Data.Constr " ++ toString idx ++
+    acc ++ "    | ." ++ escapeIdent cname ++ vars ++ " => " ++ dataTypeName ++ ".Constr " ++ toString idx ++
       " [" ++ String.intercalate ", " encs ++ "]\n") ""
   let fromArms := ctors.foldl (fun acc (cname, idx, ftypes) =>
     let n := ftypes.length
     let patVars := "[" ++ String.intercalate ", " ((List.range n).map (fun j => "_v" ++ toString j)) ++ "]"
-    let ctorApp := "some (." ++ escapeIdent cname ++
+    let ctorApp := "_root_.Option.some (." ++ escapeIdent cname ++
       (List.range n).foldl (fun b j => b ++ " _f" ++ toString j) "" ++ ")"
     let chain := (List.range n).reverse.foldl (fun inner j =>
-      "(" ++ decodeFieldStr ("_v" ++ toString j) ftypes[j]! ++ ").bind (fun _f" ++ toString j ++ " => " ++ inner ++ ")")
+      "(" ++ decodeFieldStr ns ("_v" ++ toString j) ftypes[j]! ++ ").bind (fun _f" ++ toString j ++ " => " ++ inner ++ ")")
       ctorApp
-    acc ++ "    | Data.Constr " ++ toString idx ++ " " ++ patVars ++ " => " ++ chain ++ "\n") ""
+    acc ++ "    | " ++ dataTypeName ++ ".Constr " ++ toString idx ++ " " ++ patVars ++ " => " ++ chain ++ "\n") ""
 
   withTempNamespace ns do
     elabCommand (← parseCommand openDecl)
     elabCommand (← parseCommand "set_option autoImplicit false")
     elabCommand (← parseCommand (
-      "inductive " ++ esc ++ " where\n" ++ ctorDecls ++ "  deriving Repr"))
+      "inductive " ++ esc ++ " where\n" ++ ctorDecls ++ "  deriving _root_.Repr"))
     elabCommand (← parseCommand (
-      "instance : IsData " ++ esc ++ " where\n" ++
+      "instance : _root_.PlutusCore.IsData.IsData " ++ esc ++ " where\n" ++
       "  toData x := match x with\n" ++ toArms ++
       "  fromData x := match x with\n" ++ fromArms ++
-      "    | _ => none"))
+      "    | _ => _root_.Option.none"))
 
 -- ---------------------------------------------------------------------------
 -- Dispatch: choose which generator to call for a given type / schema slot.
@@ -1137,7 +1208,7 @@ is no conversion from execution units to the CEK step count `cekExecuteProgram` 
     directly rather than through `IsData.toData`, so the emitted term is
     syntactically the one hand-written CEK properties pass. -/
 private def argToTermStr (varName : String) (ptype : PlutusType) : String :=
-  "PlutusCore.UPLC.Term.Term.Const (PlutusCore.UPLC.Term.Const.Data (" ++
+  "_root_.PlutusCore.UPLC.Term.Term.Const (_root_.PlutusCore.UPLC.Term.Const.Data (" ++
     encodeFieldStr varName ptype ++ "))"
 
 /-- Emit `<ns>.<wrapperName> : … → State`, applying the program of the
@@ -1147,10 +1218,10 @@ private def argToTermStr (varName : String) (ptype : PlutusType) : String :=
     Callers must have checked `wrapperBlocker` first. Data arguments use schema-directed codecs;
     native arguments use their declared builtin constant representation. -/
 def emitAppliedWrapper (ns : Name) (wrapperName scriptName : String)
-    (args : Array ArgumentInfo) (steps : Nat) (semantics : String := "E") : CommandElabM Unit := do
+    (args : Array ArgumentInfo) (steps : Nat) (semantics : String) : CommandElabM Unit := do
   let idxs := List.range args.size
   let binders := String.join <| idxs.map fun i =>
-    " (a" ++ toString i ++ " : " ++ plutusTypeToTypeStr args[i]!.ptype ++ ")"
+    " (a" ++ toString i ++ " : " ++ plutusTypeToTypeStr ns args[i]!.ptype ++ ")"
   let terms := String.intercalate ", " <| idxs.map fun i =>
     let varName := "a" ++ toString i
     match args[i]!.encoding with
@@ -1159,14 +1230,14 @@ def emitAppliedWrapper (ns : Name) (wrapperName scriptName : String)
         | "#integer" => "Integer" | "#bytes" => "ByteString" | "#string" => "String"
         | "#boolean" => "Bool" | "#list" => "ConstDataList" | "#pair" => "PairData" | _ => "Unit"
       let payload := if kind == "#unit" then "" else " " ++ varName
-      "PlutusCore.UPLC.Term.Term.Const (PlutusCore.UPLC.Term.Const." ++ ctor ++ payload ++ ")"
+      "_root_.PlutusCore.UPLC.Term.Term.Const (_root_.PlutusCore.UPLC.Term.Const." ++ ctor ++ payload ++ ")"
     | _ => argToTermStr varName args[i]!.ptype
   let src :=
     "/-- Applied `" ++ wrapperName ++ "`: the compiled program from the blueprint, applied \
 to its declared `arguments` and run on the CEK machine for " ++ toString steps ++ " steps. -/\n" ++
-    "def " ++ escapeIdent wrapperName ++ binders ++ " : PlutusCore.UPLC.CekMachine.State :=\n" ++
-    "  PlutusCore.UPLC.CekMachine.cekExecuteProgramWithSemanticVariant " ++
-      "PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariant" ++ semantics ++ " " ++ escapeIdent scriptName ++
+    "def " ++ escapeIdent wrapperName ++ binders ++ " : _root_.PlutusCore.UPLC.CekMachine.State :=\n" ++
+    "  _root_.PlutusCore.UPLC.CekMachine.cekExecuteProgramWithSemanticVariant " ++
+      "_root_.PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariant" ++ semantics ++ " " ++ escapeIdent scriptName ++
       ".script [" ++ terms ++ "] " ++ toString steps
   withTempNamespace ns do
     -- Bring `IsData` / `Data` / `Integer` / `ByteString` short names into scope
@@ -1179,6 +1250,7 @@ exposing an exact return-value predicate (including its wire representation). -/
 def emitAssuranceFunction (ns : Name) (id code version : String)
     (args : Array ArgumentInfo) (result : ArgumentInfo) (steps : Nat) (sem : String)
     : CommandElabM Unit := do
+  ofExcept (validateSemantics version sem)
   let someId := sanitizeName id
   let raw := someId ++ "_script"
   for name in [someId, raw, someId ++ "_returns"] do
@@ -1190,19 +1262,19 @@ def emitAssuranceFunction (ns : Name) (id code version : String)
   emitAppliedWrapper ns someId raw args steps sem
   let indices := List.range args.size
   let binders := String.join <| indices.map fun i =>
-    s!" (a{i} : {plutusTypeToTypeStr args[i]!.ptype})"
+    s!" (a{i} : {plutusTypeToTypeStr ns args[i]!.ptype})"
   let call := String.join <| indices.map fun i => s!" a{i}"
   let value := match result.encoding with
     | .asNative kind =>
       let ctor := match kind with
         | "#integer" => "Integer" | "#bytes" => "ByteString" | "#string" => "String"
         | "#boolean" => "Bool" | "#list" => "ConstDataList" | "#pair" => "PairData" | _ => "Unit"
-      "PlutusCore.UPLC.Term.Const." ++ ctor ++ (if kind == "#unit" then "" else " actual")
-    | _ => "PlutusCore.UPLC.Term.Const.Data actual"
+      "_root_.PlutusCore.UPLC.Term.Const." ++ ctor ++ (if kind == "#unit" then "" else " actual")
+    | _ => "_root_.PlutusCore.UPLC.Term.Const.Data actual"
   withTempNamespace ns do
     elabCommand (← parseCommand openDecl)
-    let equal := if result.encoding == .asNative "#unit" then "True" else "actual = expected"
-    elabCommand (← parseCommand s!"def {escapeIdent (someId ++ "_returns")}{binders} (expected : {plutusTypeToTypeStr result.ptype}) : Prop :=\n  match {escapeIdent someId}{call} with\n  | PlutusCore.UPLC.CekMachine.State.Halt (PlutusCore.UPLC.CekValue.CekValue.VCon ({value})) => {equal}\n  | _ => False")
+    let equal := if result.encoding == .asNative "#unit" then "_root_.True" else "actual = expected"
+    elabCommand (← parseCommand s!"def {escapeIdent (someId ++ "_returns")}{binders} (expected : {plutusTypeToTypeStr ns result.ptype}) : Prop :=\n  match {escapeIdent someId}{call} with\n  | _root_.PlutusCore.UPLC.CekMachine.State.Halt (_root_.PlutusCore.UPLC.CekValue.CekValue.VCon ({value})) => {equal}\n  | _ => _root_.False")
 
 /-- Recompute the CIP-57 script hash from the single-CBOR bytes and language tag. -/
 def actualScriptHash (version code : String) : Except String String := do
@@ -1249,6 +1321,14 @@ def elabBlueprintImport (ns : Name) (filepath : String)
 
   let blueprint ← if selections.isEmpty then pure blueprint else do
     unless blueprint.extended do throwError "checking context requires compiled-interface dialect"
+    let selections ← selections.mapM fun (ref, purpose, budget) => do
+      let v ← ofExcept (resolveValidator blueprint.validators ref)
+      let some id := v.id | throwError "checking targets require stable validator ids"
+      let .semanticSteps _ sem := budget | throwError "checking targets require explicit semantics"
+      ofExcept (validateSemantics blueprint.preamble.plutusVersion sem)
+      pure (id, purpose, budget)
+    let ids := selections.map (·.1)
+    unless ids.length == ids.eraseDups.length do throwError "duplicate checking target"
     let validators ← blueprint.validators.mapM fun v => do
       match selections.find? (fun (id, _, _) => v.id == some id) with
       | none => pure v
@@ -1322,7 +1402,7 @@ unapplied PlutusScript."
               pure none
             | none =>
               match validator.budget with
-              | some (.steps n) => pure (some (args, n, "E"))
+              | some (.steps n) => pure (some (args, n, ← ofExcept (defaultSemantics blueprint.preamble.plutusVersion)))
               | some (.semanticSteps n sem) => pure (some (args, n, sem))
               | _               => pure none   -- unreachable: ruled out by wrapperBlocker
         let scriptShort := if wrapper.isSome then sanitized ++ "_script" else sanitized
