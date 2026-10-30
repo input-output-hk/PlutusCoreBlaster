@@ -25,7 +25,7 @@
     },
     "ledger": {
       "repository": "input-output-hk/CardanoLedgerApiBlaster",
-      "commit": "a7a980ca2ab89adbdbdc931c7d1b835498426033"
+      "commit": "997b9caafb3f72f45d866929c2f561945d036e10"
     }
   }
 }
