@@ -1,10 +1,13 @@
+import Blaster
 import PlutusCore.UPLC.PreProcess
+import PlutusCore.UPLC.ScriptEncoding.Basic
 
 namespace PlutusCore.UPLC.PreProcess
 
 open PlutusCore.UPLC.CekMachine (State)
 open PlutusCore.UPLC.CekValue (CekValue)
 open PlutusCore.UPLC.PlutusScript (PlutusScript)
+open PlutusCore.UPLC.ExBudget (ExBudget)
 
 /-! ## `#prep_uplc` without an input conversion function
 
@@ -25,5 +28,44 @@ example : preProcessTestNoInputs.prop
     = State.Halt (CekValue.VCon (PlutusCore.UPLC.Term.Const.Integer 42)) := rfl
 example : preProcessTestNoInputs.exec
     = State.Halt (CekValue.VCon (PlutusCore.UPLC.Term.Const.Integer 42)) := rfl
+
+/-! ## `#prep_uplc_with_cost`
+
+The constant costs the startup cost and one step under the PlutusV3 cost model: 16100 CPU and 200 memory. -/
+
+#prep_uplc_with_cost preProcessTestCost preProcessTestScript 10
+
+example : preProcessTestCost.prop
+    = (State.Halt (CekValue.VCon (PlutusCore.UPLC.Term.Const.Integer 42)), ⟨⟨16100⟩, ⟨200⟩⟩) := rfl
+example : preProcessTestCost.exec
+    = (State.Halt (CekValue.VCon (PlutusCore.UPLC.Term.Const.Integer 42)), ⟨⟨16100⟩, ⟨200⟩⟩) := rfl
+
+/-! `saturate x = x * (x + 1)` by a loop that runs `x` times, `60 + 72 * x` steps. The cost of each
+`subtractInteger`, `addInteger` and `multiplyInteger` depends on the size of the symbolic `x`.
+150 steps cover `x ≤ 1`. -/
+
+#import_uplc preProcessSaturate PlutusV3 textual "Benchmark/PrepUplc/Scripts/saturate.uplc"
+
+def preProcessIntegerArg (x : PlutusCore.Integer.Integer) : List PlutusCore.UPLC.Term.Term :=
+  [.Const (.Integer x)]
+
+#prep_uplc_with_cost preProcessSaturateCost preProcessSaturate preProcessIntegerArg 150
+
+#guard match preProcessSaturateCost.exec 1 with
+  | (State.Halt (CekValue.VCon (PlutusCore.UPLC.Term.Const.Integer 2)), ⟨⟨1701241⟩, ⟨7410⟩⟩) => true
+  | _ => false
+-- Out of steps at `x = 2`: the run stops unfinished, having cost what its 150 steps cost.
+#guard match preProcessSaturateCost.exec 2 with
+  | (State.Eval .., ⟨⟨1978449⟩, ⟨8512⟩⟩) => true
+  | _ => false
+
+-- The optimized `prop` agrees with the native run, state and cost. It is not computable, so
+-- Blaster checks it.
+#blaster [preProcessSaturateCost.prop 0
+  = (State.Halt (CekValue.VCon (PlutusCore.UPLC.Term.Const.Integer 0)), ⟨⟨663986⟩, ⟨3502⟩⟩)]
+#blaster [preProcessSaturateCost.prop 1
+  = (State.Halt (CekValue.VCon (PlutusCore.UPLC.Term.Const.Integer 2)), ⟨⟨1701241⟩, ⟨7410⟩⟩)]
+#blaster [(preProcessSaturateCost.prop 2).2 = ⟨⟨1978449⟩, ⟨8512⟩⟩]
+#blaster [match (preProcessSaturateCost.prop 2).1 with | .Eval .. => True | _ => False]
 
 end PlutusCore.UPLC.PreProcess
