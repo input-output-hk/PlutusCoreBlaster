@@ -64,7 +64,9 @@ The checker accepts a closed subset of ordinary Lean expression syntax. It rejec
 tactics, elaborator programs and unknown syntax before elaboration, in both
 fragments and propositions. Imported syntax implementations, Lean, native code,
 the solver and hashing utilities are trusted inputs recorded in provenance.
-An OS sandbox alone does not make arbitrary Lean programs trustworthy.
+Formal fragments remain trusted specification inputs requiring source review.
+The restricted syntax profile is not an OS sandbox, and a sandbox alone does not
+make arbitrary Lean programs trustworthy.
 
 ## Checking contract
 
