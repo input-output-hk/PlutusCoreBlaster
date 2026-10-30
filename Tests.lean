@@ -6,6 +6,7 @@ import Tests.BlueprintCodegen.SchemaCodecs
 import Tests.BlueprintCodegen.Hygiene
 import Tests.BlueprintCodegen.Validation
 import Tests.BlueprintVerify.Tests
+import Tests.BlueprintVerify.Hashing
 
 -- Self-contained encoding tests; generated Game templates run in compiled-assurance.
 import Tests.BlueprintVerify.NativeEncoding
