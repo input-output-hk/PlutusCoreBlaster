@@ -4,6 +4,7 @@ import Blaster.Command.Syntax
 import Cryptograph.Sha2
 import PlutusCore.UPLC.BlueprintEncoding.Schema
 import PlutusCore.UPLC.BlueprintEncoding.Basic
+import PlutusCore.UPLC.BlueprintEncoding.Counterexample
 import PlutusCore.UPLC.BlueprintEncoding.Applied
 import PlutusCore.UPLC.Utils
 
@@ -778,8 +779,8 @@ private partial def dependencies (env : Environment) (todo : List Name)
         | _ => []
       dependencies env (next ++ rest) (seen.insert n) stop
 
-private def checkSource (ns : Name) (validators : List BlueprintValidator)
-    (functions : List String) (src : String) (contextBound : Bool) : CommandElabM Blaster.Smt.Result := do
+private unsafe def checkSource (ns : Name) (validators : List BlueprintValidator)
+    (functions : List String) (src : String) (contextBound capture : Bool) : CommandElabM (Blaster.Smt.Result × Json) := do
   let env ← getEnv
   let stx ← match Parser.runParserCategory env `term src with
     | .ok stx => pure stx
@@ -818,15 +819,29 @@ private def checkSource (ns : Name) (validators : List BlueprintValidator)
     let ((result, _), _) ←
       withTheReader Core.Context (fun c => { c with maxHeartbeats := 0, maxRecDepth := 100000 }) do
         Blaster.Smt.Translate.main expr |>.run solver
-    return result
+    let details ← match result with
+      | .Falsified model =>
+        if capture then do
+          let json ← model.toJson
+          let targets := (functions.map fun id => Name.mkStr ns
+            (PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName id)) ++
+            (validators.flatMap fun v => [v.title, v.id.getD v.title] |>.map fun id =>
+              Name.mkStr ns (PlutusCore.UPLC.BlueprintEncoding.Internal.sanitizeName id))
+          let replay ← PlutusCore.UPLC.BlueprintEncoding.Counterexample.replay expr model targets.toArray
+          pure (Json.mkObj [("model", json), ("replay", replay)])
+        else pure Json.null
+      | _ => pure Json.null
+    return (result, details)
 
-syntax (name := verify_blueprint) "#verify_blueprint" ident str (str)? : command
+syntax (name := verify_blueprint) "#verify_blueprint" ident str (str)? ("cex_report" str)? : command
 
 @[command_elab verify_blueprint]
 unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
   let some assurancePath := stx[2].isStrLit? | throwError "string literal expected"
   let overridePath := if stx[3].getNumArgs == 0 then none else stx[3][0].isStrLit?
   let ns := stx[1].getId
+  let reportPath := if stx[4].getNumArgs == 0 then none else stx[4][1].isStrLit?
+  let mut results : Array Json := #[]
   let content ← liftM (IO.FS.readFile (System.FilePath.mk assurancePath))
   let doc ← match parseDocument content with
     | .ok d => pure d | .error e => throwError m!"Invalid assurance document: {e}"
@@ -974,10 +989,15 @@ unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
             logInfo m!"Property '{p.id}': checking fresh proposition"
             if (← get).messages.toList.countP (fun m => m.severity == .error) > previousErrors then
               throwError "generated interface or formal fragments failed to elaborate"
-            checkSource ns scopedBound p.scopeFunctions src blueprint.extended
+            checkSource ns scopedBound p.scopeFunctions src blueprint.extended reportPath.isSome
         finally
           setEnv savedEnv
         checked := checked + 1
+        let (result, counterexample) := result
+        results := results.push (Json.mkObj [("property", toJson p.id),
+          ("outcome", toJson (match result with | .Valid => "verified" | .Falsified _ => "falsified" | .Undetermined => "inconclusive")),
+          ("formalSource", toJson src), ("checkingContext", toJson p.checkingContext),
+          ("counterexample", counterexample)])
         match result with
         | .Valid => logInfo m!"Property '{p.id}': verified (Blaster SMT; no reconstructed Lean proof)"
         | .Falsified _ =>
@@ -986,6 +1006,15 @@ unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
         | .Undetermined =>
           logError m!"Property '{p.id}': inconclusive"
           failed := failed + 1
+  if let some path := reportPath then
+    let report := Json.mkObj [("format", toJson "plinth-counterexample-report-v1"),
+      ("assuranceSha256", toJson (← liftM (sha256File assurancePath))),
+      ("blueprintSha256", toJson (← liftM (sha256File bpPath))),
+      ("functions", toJson (doc.functions.map fun (id, f) => Json.mkObj [
+        ("id", toJson id), ("hash", (f.getObjVal? "hash").toOption.getD Json.null),
+        ("arguments", (f.getObjVal? "arguments").toOption.getD Json.null)])),
+      ("results", toJson results)]
+    liftM (IO.FS.writeFile path (report.pretty ++ "\n"))
   logInfo m!"Assurance '{doc.title}': {checked} checked, {skipped} not checked, {failed} failed/inconclusive"
 
 end PlutusCore.UPLC.BlueprintEncoding.Assurance

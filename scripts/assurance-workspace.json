@@ -2,7 +2,7 @@
   "format": "assurance-workspace-v1",
   "lean": "4.24.0",
   "ghc": "9.6.7",
-  "blasterCommit": "bc03bb402ce702984875bbf8ba51216bd6f843d7",
+  "blasterCommit": "1cb5a63e0416f336caa3104c2654718e6f971bc9",
   "z3Version": "5.1.0",
   "z3SourceBaseline": "ca39e58c525c5b03c2484f118ade2b92fae31215",
   "z3RequiredSimplifier": "recfun-finder",
@@ -25,7 +25,7 @@
     },
     "ledger": {
       "repository": "input-output-hk/CardanoLedgerApiBlaster",
-      "commit": "997b9caafb3f72f45d866929c2f561945d036e10"
+      "commit": "5492bb0d8e5ee01587303c153440636e5f8ee933"
     }
   }
 }
