@@ -93,6 +93,7 @@ with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(example,names))
 run('generated-artifacts',[sys.executable,base/'validate_outputs.py','--cips',a.cips,'--require-evidence',*[a.output/n for n in names]])
 run('cip-schemas',[sys.executable,'-m','unittest','discover','-s','CIP-XXXX/tests','-v'],a.cips)
 run('legacy-regressions',['lake','env',sys.executable,base/'regression.py'])
+run('report-regressions',['lake','env',sys.executable,base/'report_regression.py'])
 run('interface-regressions',['lake','env',sys.executable,base/'interface_regression.py',a.output/'game'])
 for name in ['Regression','RecursiveSchema','NativeEncoding','BooleanCase']:
     run(name,['lake','env','lean',base/(name+'.lean')])

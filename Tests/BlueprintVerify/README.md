@@ -77,6 +77,15 @@ sources, and informal properties as not checked. The generated-example runner
 requires all expected properties to verify; the general command permits clearly
 reported non-executable claims alongside executable ones.
 
+`#verify_blueprint Ns "assurance.json" (report := "report.json")` additionally
+writes a machine-readable verdict report, described by
+`PlutusCore/UPLC/BlueprintEncoding/verification-report.schema.json`; log output
+is unchanged. Each property is `verified`, `falsified` (with Blaster's
+counterexample), `inconclusive`, `not_checked` or `error`. A run that aborts
+reports `status: "error"`, and properties it did not reach are `not_checked`.
+The runners read verdicts from this report rather than from the log;
+`lake env python3 Tests/BlueprintVerify/report_regression.py` covers each verdict.
+
 UAL 0.5 requires stable ids, explicit argument schemas, supported encodings, and
 `budget: {"steps": n, "semantics": "A" | "B" | "C" | "D" | "E"}`.
 Legacy step-only budgets default to post-Conway semantics D for V1/V2 and E for

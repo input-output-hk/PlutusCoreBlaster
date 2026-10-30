@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import zipfile
 import shutil
 import subprocess
@@ -20,7 +19,7 @@ p.add_argument('--plutus', required=True, type=Path)
 p.add_argument('--output', required=True, type=Path)
 a = p.parse_args()
 from evidence import provenance
-from runtime import lean_command
+from runtime import lean_command, verdicts
 lean_args = lean_command()
 
 repo = Path(__file__).resolve().parents[2]
@@ -47,7 +46,7 @@ report_path = out/'run-report.json'
 report_path.unlink(missing_ok=True)
 (out/'verified-assurance.json').unlink(missing_ok=True)
 (out/'verification-artifact.zip').unlink(missing_ok=True)
-for name in ['plutus.json', 'assurance.json']:
+for name in ['plutus.json', 'assurance.json', 'verification-report.json']:
     (out/name).unlink(missing_ok=True)
 env_driver = out/'Environment.lean'
 env_driver.write_text('import PlutusCore.UPLC.BlueprintEncoding.Assurance\n'
@@ -61,12 +60,13 @@ assert {x['id'] for x in assurance['properties']} == {'correct_guess','wrong_gue
 assert all(not x.get('evidence') for x in assurance['properties'])
 check = out/'Check.lean'
 check.write_text('import PlutusCore.UPLC.BlueprintEncoding.Assurance\n'
-                 f'#verify_blueprint Game {json.dumps(str(out/"assurance.json"))}\n')
+                 f'#verify_blueprint Game {json.dumps(str(out/"assurance.json"))} '
+                 f'(report := {json.dumps(str(out/"verification-report.json"))})\n')
 result = subprocess.run(lean_args + [str(check)], cwd=repo, text=True, capture_output=True, timeout=300)
 log = result.stdout + result.stderr
 (out/'verification.log').write_text(log)
 print(log, end='')
-verified = re.findall(r"Property '([^']+)': verified \(Blaster SMT", log)
+verified = [i for i, v in verdicts(out/'verification-report.json') if v == 'verified']
 expected = {x['id'] for x in assurance['properties']}
 if result.returncode != 0 or set(verified) != expected or len(verified) != len(expected):
     raise SystemExit('Fresh verification failed or skipped a property; see verification.log')
@@ -94,7 +94,7 @@ tracked_inputs = ['PlutusCore/UPLC/BlueprintEncoding/Assurance.lean',
 report = {'provenance':provenance(repo,generator,__file__),'format':'ual-blaster-run-2', 'created':datetime.datetime.now(datetime.timezone.utc).isoformat(),
           'method':'Blaster SMT; no reconstructed Lean proof',
           'verifiedProperties':verified, 'concreteHashVector':'passed',
-          'inputs':{f.name:digest(f) for f in out.glob('*.json') if f.name not in ['run-report.json', 'verified-assurance.json']},
+          'inputs':{f.name:digest(f) for f in out.glob('*.json') if f.name not in ['run-report.json', 'verified-assurance.json', 'verification-report.json']},
           'generatorSha256':digest(generator),
           'generatorSourceSha256':digest(a.plutus/'doc/docusaurus/static/code/Example/Ual/Game/Main.hs'),
           'environment':{'lean':capture([lean,'--version']), 'z3':capture(['z3','-version']),

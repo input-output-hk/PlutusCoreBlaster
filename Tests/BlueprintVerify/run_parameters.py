@@ -6,12 +6,11 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 
 from evidence import digest, provenance, verified_document
-from runtime import lean_command
+from runtime import lean_command, verdicts
 lean_args = lean_command()
 
 repo=Path(__file__).resolve().parents[2]
@@ -27,9 +26,13 @@ def run(source,name):
 code,log=run('import PlutusCore.UPLC.BlueprintEncoding.Assurance\n'+f'#write_checking_environment {json.dumps(str(out/"environment.json"))}\n','Environment.lean')
 if code: raise RuntimeError(log)
 subprocess.run([str(generator),'environment.json'],cwd=out,check=True,timeout=120)
-code,log=run('import PlutusCore.UPLC.BlueprintEncoding.Assurance\n'+f'#verify_blueprint Parameters {json.dumps(str(out/"assurance.json"))}\n','Check.lean')
+def report(name):
+    path=out/(name+'-report.json');path.unlink(missing_ok=True)
+    return path,f' (report := {json.dumps(str(path))})'
+path,option=report('Check')
+code,log=run('import PlutusCore.UPLC.BlueprintEncoding.Assurance\n'+f'#verify_blueprint Parameters {json.dumps(str(out/"assurance.json"))}{option}\n','Check.lean')
 print(log,end='')
-if code or set(re.findall(r"Property '([^']+)': verified",log)) != {'native_seven','data_seven','native_applied_seven','native_applied_eight','data_applied_seven','data_applied_eight'}:
+if code or {i for i,v in verdicts(path) if v=='verified'} != {'native_seven','data_seven','native_applied_seven','native_applied_eight','data_applied_seven','data_applied_eight'}:
     raise RuntimeError('parameter verification did not verify all six claims')
 # Keep the exact compiled program, change only its declared parameter wire type.
 # This must produce a false proposition, demonstrating that encodings affect execution.
@@ -40,8 +43,9 @@ for v in bp['validators']:
 doc['blueprint']={'uri':'wrong-wire.json','hash':{'alg':'sha256','digest':hashlib.sha256((out/'wrong-wire.json').read_bytes()).hexdigest()}}
 doc['properties']=[p for p in doc['properties'] if p['id']=='native_seven']
 (out/'wrong-wire-assurance.json').write_text(json.dumps(doc))
-code,log=run('import PlutusCore.UPLC.BlueprintEncoding.Assurance\n'+f'#verify_blueprint Wrong {json.dumps(str(out/"wrong-wire-assurance.json"))}\n','WrongWire.lean')
-if code == 0 or "Property 'native_seven': falsified" not in log: raise RuntimeError(log)
+path,option=report('WrongWire')
+code,log=run('import PlutusCore.UPLC.BlueprintEncoding.Assurance\n'+f'#verify_blueprint Wrong {json.dumps(str(out/"wrong-wire-assurance.json"))}{option}\n','WrongWire.lean')
+if code == 0 or verdicts(path) != [('native_seven','falsified')]: raise RuntimeError(log)
 print('PASS swapped native/Data schema falsifies the claim over the same compiled bytes')
 
 # Mutate fresh applied contexts independently and rebind metadata when the test

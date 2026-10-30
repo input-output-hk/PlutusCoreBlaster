@@ -5,11 +5,10 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 from evidence import provenance, verified_document
-from runtime import lean_command
+from runtime import lean_command, verdicts
 
 repo = Path(__file__).resolve().parents[2]
 generator, out = (Path(x).resolve() for x in sys.argv[1:3])
@@ -39,9 +38,10 @@ expected = {'leaf_seven','nested_sum','nested_mirror','malformed_tree'}
 def check(prop):
     d = copy.deepcopy(doc); d['properties'] = [prop]
     path = out / (prop['id'] + '.json'); write(path, d)
-    code, log = run(prop['id'], f'#verify_blueprint Recursive {json.dumps(str(path))}\n')
+    report = out / (prop['id'] + '-report.json'); report.unlink(missing_ok=True)
+    code, log = run(prop['id'], f'#verify_blueprint Recursive {json.dumps(str(path))} (report := {json.dumps(str(report))})\n')
     print(log, end='', flush=True)
-    if code or set(re.findall(r"Property '([^']+)': verified",log)) != {prop['id']}: raise RuntimeError(prop['id'])
+    if code or {i for i, v in verdicts(report) if v == 'verified'} != {prop['id']}: raise RuntimeError(prop['id'])
 with ThreadPoolExecutor(max_workers=3) as pool: list(pool.map(check, doc['properties']))
 assert {p['id'] for p in doc['properties']} == expected
 

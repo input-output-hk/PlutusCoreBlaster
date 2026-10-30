@@ -16,7 +16,7 @@ open PlutusCore.UPLC.BlueprintEncoding.Internal
 
 /-! ## Blueprint assurance checking
 
-`#verify_blueprint Ns "assurance.json" ["local-plutus.json"]` validates the
+`#verify_blueprint Ns "assurance.json" ["local-plutus.json"] [(report := "report.json")]` validates the
 bundled CIP meta-schema and cross-references, checks the blueprint digest and
 actual script hashes, imports generated types/wrappers, and runs Blaster on each
 available Lean/UAL proposition. Historical evidence is reported independently.
@@ -820,16 +820,89 @@ private def checkSource (ns : Name) (validators : List BlueprintValidator)
         Blaster.Smt.Translate.main expr |>.run solver
     return result
 
-syntax (name := verify_blueprint) "#verify_blueprint" ident str (str)? : command
+/-! ### Verification report
 
-@[command_elab verify_blueprint]
-unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
+`(report := "path")` additionally writes the fresh verdicts as JSON, described by
+`verification-report.schema.json`; log output is unchanged. An `error` report is
+written before checking starts and replaced only when the command finishes or
+aborts, so an interrupted run never leaves a report that looks complete. -/
+
+/-- A reached property's fresh verdict: `verified`, `falsified`, `inconclusive`,
+    `not_checked` or `error`. -/
+structure PropertyVerdict where
+  verdict        : String
+  reason         : Option String := none
+  counterexample : Option (List String) := none
+
+/-- What a run has established so far. Verdicts are recorded in document order;
+    `reached` counts the properties whose checking started. -/
+structure ReportState where
+  assurance     : Option Digest := none
+  blueprintPath : Option String := none
+  blueprint     : Option Digest := none
+  doc           : Option Document := none
+  reached       : Nat := 0
+  verdicts      : Array PropertyVerdict := #[]
+
+private def digestJson : Option Digest → Json
+  | some d => Json.mkObj [("alg", .str d.alg), ("digest", .str d.digest)]
+  | none   => .null
+
+/-- Render the report. With `error`, the property being checked is `error` and
+    the properties not reached are `not_checked`. -/
+def reportJson (assurancePath : String) (st : ReportState) (error : Option String) : Json :=
+  let props := (st.doc.map (·.properties)).getD #[]
+  let contexts := (st.doc.map (·.checkingContexts)).getD []
+  let records := props.mapIdx fun i p =>
+    let v := st.verdicts[i]?.getD <|
+      if i < st.reached then { verdict := "error", reason := error }
+      else { verdict := "not_checked", reason := some "not reached (run aborted)" }
+    Json.mkObj [
+      ("id", .str p.id),
+      ("verdict", .str v.verdict),
+      ("reason", toJson v.reason),
+      ("checkingContext", match p.checkingContext with
+        | some k => Json.mkObj [("id", .str k), ("hash", digestJson ((contexts.lookup k).bind (·.hash)))]
+        | none => .null),
+      ("scope", Json.mkObj [("validators", toJson p.scopeValidators), ("functions", toJson p.scopeFunctions)]),
+      ("counterexample", toJson v.counterexample)]
+  let count (verdict : String) := st.verdicts.toList.countP (·.verdict == verdict)
+  let failed := count "falsified" + count "inconclusive"
+  Json.mkObj [
+    ("format", .str "blaster-verification-report-v1"),
+    ("status", .str (if error.isSome then "error" else if failed > 0 then "failed" else "passed")),
+    ("error", toJson error),
+    ("trust", Json.mkObj [("method", .str "smt"), ("tool", .str "Blaster"), ("reconstructedLeanProof", .bool false)]),
+    ("assurance", Json.mkObj [("path", .str assurancePath), ("hash", digestJson st.assurance)]),
+    ("blueprint", Json.mkObj [("path", toJson st.blueprintPath), ("hash", digestJson st.blueprint)]),
+    -- The same counts as the summary log line.
+    ("summary", Json.mkObj [("checked", toJson (count "verified" + failed)),
+                            ("notChecked", toJson (count "not_checked")), ("failedOrInconclusive", toJson failed)]),
+    ("properties", .arr records)]
+
+/-- Replace the report atomically, so readers never see a partial file. -/
+def writeReport (path assurancePath : String) (st : ReportState) (error : Option String) : IO Unit := do
+  let tmp := path ++ ".tmp"
+  IO.FS.writeFile tmp ((reportJson assurancePath st error).pretty ++ "\n")
+  IO.FS.rename tmp path
+
+syntax (name := verify_blueprint)
+  "#verify_blueprint" ident str (str)? ("(" &"report" " := " str ")")? : command
+
+private unsafe def verifyBlueprint (stx : Syntax) (report : IO.Ref ReportState) (reporting : Bool) :
+    CommandElabM Unit := do
   let some assurancePath := stx[2].isStrLit? | throwError "string literal expected"
   let overridePath := if stx[3].getNumArgs == 0 then none else stx[3][0].isStrLit?
   let ns := stx[1].getId
+  let record (v : PropertyVerdict) : CommandElabM Unit :=
+    report.modify fun st => { st with verdicts := st.verdicts.push v }
+  if reporting then
+    let hash ← liftM (sha256File (System.FilePath.mk assurancePath))
+    report.modify ({ · with assurance := some ⟨"sha256", hash⟩ })
   let content ← liftM (IO.FS.readFile (System.FilePath.mk assurancePath))
   let doc ← match parseDocument content with
     | .ok d => pure d | .error e => throwError m!"Invalid assurance document: {e}"
+  report.modify ({ · with doc := some doc })
   match validateReferences doc with
   | .ok () => pure () | .error e => throwError m!"Invalid assurance references: {e}"
   let bpPath ← match overridePath with
@@ -838,13 +911,18 @@ unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
       if hasRemoteScheme doc.blueprint.uri then
         throwError "Remote blueprint requires an explicit local copy"
       pure (resolveLocalUri assurancePath doc.blueprint.uri)
+  report.modify ({ · with blueprintPath := some bpPath })
   if let some dig := doc.blueprint.hash then
     unless ["sha256", "sha-256"].contains dig.alg.toLower do
       throwError m!"Unsupported blueprint digest algorithm '{dig.alg}': binding is unverified"
     let actual ← liftM (sha256File (System.FilePath.mk bpPath))
+    report.modify ({ · with blueprint := some ⟨"sha256", actual⟩ })
     unless actual == dig.digest do throwError m!"Blueprint hash mismatch: expected {dig.digest}, computed {actual}"
   else
     logWarning "Blueprint document binding is unverified (no blueprint.hash)"
+    if reporting then
+      let actual ← liftM (sha256File (System.FilePath.mk bpPath))
+      report.modify ({ · with blueprint := some ⟨"sha256", actual⟩ })
   let parsed ← ofExcept (PlutusCore.UPLC.BlueprintEncoding.Internal.parseBlueprint (← liftM (IO.FS.readFile bpPath)))
   if parsed.extended && doc.blueprint.hash.isNone then throwError "compiled-interface checking requires a blueprint digest"
   if parsed.extended && !doc.schemaUri.endsWith "assurance-v2.json" then
@@ -871,6 +949,7 @@ unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
   -- Each property gets only its declared fragment closure. Definitions from one
   -- property cannot accidentally satisfy undeclared dependencies of the next.
   for p in doc.properties do
+    report.modify fun st => { st with reached := st.reached + 1 }
     let mut bound : List BlueprintValidator := []
     for ref in p.scopeValidators do
       let v ← match resolveValidator blueprint.validators ref with
@@ -904,10 +983,12 @@ unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
     match p.statement.formal with
     | none =>
       logInfo m!"Property '{p.id}': not checked (natural-language only)"
+      record { verdict := "not_checked", reason := some "natural-language only" }
       skipped := skipped + 1
     | some f =>
       if !isLeanLanguage doc f.language then
         logWarning m!"Property '{p.id}': not checked (unsupported language '{f.language}')"
+        record { verdict := "not_checked", reason := some s!"unsupported language '{f.language}'" }
         skipped := skipped + 1
       else
         let entry := (doc.languages.lookup f.language).get!
@@ -916,6 +997,7 @@ unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
           throwError m!"Unsupported formal-language version '{entry.version}'"
         let some src := f.source | do
           logWarning m!"Property '{p.id}': not checked (formal source is only available by URI)"
+          record { verdict := "not_checked", reason := some "formal source is only available by URI" }
           skipped := skipped + 1
           continue
         if blueprint.extended then
@@ -979,13 +1061,31 @@ unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
           setEnv savedEnv
         checked := checked + 1
         match result with
-        | .Valid => logInfo m!"Property '{p.id}': verified (Blaster SMT; no reconstructed Lean proof)"
-        | .Falsified _ =>
+        | .Valid =>
+          logInfo m!"Property '{p.id}': verified (Blaster SMT; no reconstructed Lean proof)"
+          record { verdict := "verified" }
+        | .Falsified cex =>
           logError m!"Property '{p.id}': falsified"
+          record { verdict := "falsified", counterexample := some cex }
           failed := failed + 1
         | .Undetermined =>
           logError m!"Property '{p.id}': inconclusive"
+          record { verdict := "inconclusive", reason := some "solver result undetermined (unknown or timeout)" }
           failed := failed + 1
   logInfo m!"Assurance '{doc.title}': {checked} checked, {skipped} not checked, {failed} failed/inconclusive"
+
+@[command_elab verify_blueprint]
+unsafe def verifyBlueprintImpl : CommandElab := fun stx => do
+  let report ← IO.mkRef ({} : ReportState)
+  let some path := (if stx[4].getNumArgs == 0 then none else stx[4][3].isStrLit?)
+    | verifyBlueprint stx report false
+  let some assurancePath := stx[2].isStrLit? | throwError "string literal expected"
+  liftM (writeReport path assurancePath {} (some "verification did not complete"))
+  try
+    verifyBlueprint stx report true
+  catch ex =>
+    liftM (writeReport path assurancePath (← report.get) (some (← ex.toMessageData.toString)))
+    throw ex
+  liftM (writeReport path assurancePath (← report.get) none)
 
 end PlutusCore.UPLC.BlueprintEncoding.Assurance
