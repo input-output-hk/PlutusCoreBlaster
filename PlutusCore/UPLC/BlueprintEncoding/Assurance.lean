@@ -448,6 +448,31 @@ def sha256File (path : System.FilePath) : IO String := do
     catch _ => pure ()
   return sha256Hex (← IO.FS.readBinFile path)
 
+/-- Hash a module inventory in bounded batches instead of starting a process for
+each module. Preserve input order and fall back to the individual implementation
+when a utility is unavailable or its output is ambiguous (e.g. escaped paths).
+No digest is cached across captures: changing a loaded artifact is still detected. -/
+def sha256Files (paths : Array System.FilePath) : IO (Array String) := do
+  let mut hashes := #[]
+  for start in [:((paths.size + 63) / 64)] do
+    let batch := paths.extract (start * 64) ((start + 1) * 64)
+    let mut result? : Option (Array String) := none
+    for (cmd, flags) in [("sha256sum", #["--"]), ("shasum", #["-a", "256", "--"])] do
+      try
+        let result ← IO.Process.output { cmd, args := flags ++ batch.map (·.toString) }
+        let lines := result.stdout.splitOn "\n" |>.filter (!·.isEmpty)
+        let values := lines.map (·.take 64) |>.toArray
+        if result.exitCode == 0 && values.size == batch.size && values.all (fun hash =>
+            hash.length == 64 && hash.data.all (fun c =>
+              ('0' ≤ c && c ≤ '9') || ('a' ≤ c && c ≤ 'f'))) then
+          result? := some values
+          break
+      catch _ => pure ()
+    hashes := hashes ++ (← match result? with
+      | some values => pure values
+      | none => batch.mapM sha256File)
+  return hashes
+
 end Internal
 
 open Internal
@@ -512,11 +537,10 @@ private def solverPath : IO String := do
 SMT translation, rather than trusting a version label or source checkout. -/
 def captureCheckingEnvironment : CommandElabM Json := do
   let env ← getEnv
-  let mut modules := []
-  for name in env.header.moduleNames do
-    let path ← liftM (findOLean name)
-    let hash ← liftM (sha256File path)
-    modules := modules ++ [(name.toString, Json.str hash)]
+  let names := env.header.moduleNames
+  let paths ← liftM (names.mapM findOLean)
+  let hashes ← liftM (sha256Files paths)
+  let modules := (names.zip hashes).toList.map fun (name, hash) => (name.toString, Json.str hash)
   let compiler ← liftM IO.appPath
   let solver ← liftM solverPath
   -- The runner passes the same configured library to --load-dynlib. Pin its
