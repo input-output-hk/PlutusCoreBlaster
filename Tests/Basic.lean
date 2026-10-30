@@ -12,6 +12,7 @@ import Tests.Cbor.Tests
 import Tests.UPLC.BlueprintEncoding.CtfTests
 import Tests.UPLC.BlueprintEncoding.Tests
 import Tests.UPLC.CekMachine.Tests
+import Tests.UPLC.Costing
 import Tests.UPLC.FlatEncoding.Tests
 import Tests.UPLC.PreProcess.Tests
 import Tests.UPLC.ScriptEncoding.Tests
