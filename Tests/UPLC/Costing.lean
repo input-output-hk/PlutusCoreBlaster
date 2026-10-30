@@ -24,9 +24,14 @@ example (args : List PlutusCore.UPLC.CekValue.CekValue) (i : Nat) :
     else 0) := by
   unfold argListLen
   by_cases h : i < args.length
-  · simp only [dif_pos h, List.get_eq_getElem]
-    cases args[i] <;> try rfl
+  · simp only [List.getElem?_eq_getElem h, dif_pos h, List.get_eq_getElem]
+    cases args[i] <;> rfl
   · simp [h]
 
 #blaster [∀ n : Int, argSize [.VCon (.Integer n)] 0 = integerSize n]
 #blaster [∀ n : Int, minArgSize [.VCon (.Integer n), .VCon (.Integer 0)] = 1]
+#blaster [∀ cs : List PlutusCore.UPLC.Term.Const,
+  argListLen [.VCon (.ConstList cs)] 0 = cs.length]
+#blaster [∀ n : Int, argSize [.VCon (.Integer n)] 1 = 1]
+#blaster [∀ cs : List PlutusCore.UPLC.Term.Const,
+  argListLen [.VCon (.ConstList cs)] 1 = 0]
