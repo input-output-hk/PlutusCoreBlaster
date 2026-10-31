@@ -126,6 +126,8 @@ def constSize (c : Const) : Nat :=
   | Const.ConstList cs => cs.foldl (fun acc c => acc + constSize c) 0
   | Const.ConstDataList ds => ds.foldl (fun acc d => acc + dataSize d) 0
   | Const.ConstPairDataList ps => ps.foldl (fun acc (d1, d2) => acc + dataSize d1 + dataSize d2) 0
+  -- Haskell measures an array by its length, not its contents (`ExMemoryUsage (Vector a)`).
+  | Const.ConstArray cs => cs.length
   | Const.Pair (c1, c2) => constSize c1 + constSize c2
   | Const.PairData (d1, d2) => dataSize d1 + dataSize d2
   | Const.Data d => dataSize d
@@ -151,6 +153,18 @@ def argListLen (args : List CekValue) (i : Nat) : Nat :=
     | .VCon (.ConstList cs) => cs.length
     | _ => 0
   | none => 0
+
+/-- Length of the list constant at position i in the CEK args, for any of the
+    list representations. Haskell measures a polymorphic list argument by its
+    spine length, not by the size of its elements (`ExMemoryUsage [a]`). -/
+def argAnyListLen (args : List CekValue) (i : Nat) : Nat :=
+  if h : i < args.length then
+    match args.get ⟨i, h⟩ with
+    | .VCon (.ConstList cs)         => cs.length
+    | .VCon (.ConstDataList ds)     => ds.length
+    | .VCon (.ConstPairDataList ps) => ps.length
+    | _ => 0
+  else 0
 
 def maxArgSize (args : List CekValue) : Nat :=
   match args.map cekValueSize with
@@ -415,6 +429,12 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
           if n > 0 then (n.toNat - 1) / 8 + 1 else argSize args 0
       | _ => argSize args 0
     ⟨⟨1293828 + 28716 * argSize args 0 + 63 * (argSize args 0)^2⟩, ⟨memSize⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match b with
@@ -664,6 +684,12 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
       | some (CekValue.VCon (Const.Integer n)) => n.natAbs
       | _ => 0
     ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 
 def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
@@ -917,6 +943,12 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
       | some (CekValue.VCon (Const.Integer n)) => n.natAbs
       | _ => 0
     ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 -- BuiltinCostsD
 -- Based on builtinCostModelD.json (plutus 1.64.0.0 / Van Rossem era, PlutusV1/V2 post-Conway).
@@ -1132,6 +1164,12 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
       | some (CekValue.VCon (Const.Integer n)) => n.natAbs
       | _ => 0
     ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 -- BuiltinCostsE
 -- Based on builtinCostModelE.json (plutus 1.64.0.0 / Van Rossem era, PlutusV3 post-Conway).
@@ -1350,6 +1388,12 @@ def builtinCostsE (b : BuiltinFun) (args : List CekValue) : ExBudget :=
       | some (CekValue.VCon (Const.Integer n)) => n.natAbs
       | _ => 0
     ⟨⟨116711 + 1957 * x⟩, ⟨4⟩⟩
+  | BuiltinFun.LengthOfArray =>
+    ⟨⟨231883⟩, ⟨10⟩⟩
+  | BuiltinFun.ListToArray =>
+    ⟨⟨1000 + 24838 * argAnyListLen args 0⟩, ⟨7 + 1 * argAnyListLen args 0⟩⟩
+  | BuiltinFun.IndexArray =>
+    ⟨⟨232010⟩, ⟨32⟩⟩
 
 def builtinCostSelected (semVar: BuiltinSemanticsVariant) (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match semVar with
