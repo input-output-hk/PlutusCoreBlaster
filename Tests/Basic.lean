@@ -20,6 +20,7 @@ import Tests.UPLC.TextEncoding.Tests
 import Tests.CekRuns
 import Tests.DataComparison
 import Tests.DecidableEq
+import Tests.StackIndependence
 
 -- The conformance test suite (Tests.Conformance) is intentionally NOT imported
 -- here. It is built and run only by the manual `ci-conformance` workflow,
