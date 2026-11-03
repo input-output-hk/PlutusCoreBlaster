@@ -153,7 +153,7 @@ def foldMap (xs : List (Data × Data)) (acc : String) : Option String :=
   match xs with
   | [] => some acc
   | a :: as =>
-     match encodeData a.fst, encodeData a.snd with
+     match encodeDataImpl a.fst, encodeDataImpl a.snd with
      | some s1, some s2 => foldMap as (acc ++ s1 ++ s2)
      | _, _ => none
 
@@ -161,11 +161,11 @@ def foldList (xs : List Data) (acc : String) : Option String :=
   match xs with
   | [] => some acc
   | a :: as =>
-      match encodeData a with
+      match encodeDataImpl a with
       | some s => foldList as (acc ++ s)
       | _ => none
 
-def encodeData : Data → Option String
+def encodeDataImpl : Data → Option String
   | .Constr idx fields =>
        if fields.isEmpty then
           -- empty field list is a DEFINITE empty array (0x80), matching the serialiseData builtin
@@ -193,6 +193,10 @@ def encodeData : Data → Option String
   | .B bs => encodeBytestring bs.data
 
 end
+
+/-- CBOR serialization is a primitive during symbolic reasoning. The mutually
+    recursive implementation remains executable behind this opaque boundary. -/
+opaque encodeData (d : Data) : Option String := encodeDataImpl d
 
 -- ==============
 -- =  Decoding  =

@@ -37,7 +37,7 @@ def utf8EncodeChar (c : Char) : List Char :=
      Char.ofUInt8 (v.toUInt8 &&& 0x3f ||| 0x80)]
 
 /-- Coverts String to ByteString using utf8 encoding -/
-def encodeUtf8 (s : String) : ByteString := ⟨⟨s.data.flatMap utf8EncodeChar⟩⟩
+opaque encodeUtf8 (s : String) : ByteString := ⟨⟨s.data.flatMap utf8EncodeChar⟩⟩
 
 def utf8DecodeChar? (a : List Char) (i : Nat) : Option Char := do
   let u ← a[i]?
@@ -94,7 +94,7 @@ def utf8DecodeChar? (a : List Char) (i : Nat) : Option Char := do
 /-- Decodes a ByteString to String using utf8 decoding.
     An error is triggered when the ByteString is not uft8 encoded.
 -/
-def decodeUtf8 (bs : ByteString) : Except String String :=
+private def decodeUtf8Impl (bs : ByteString) : Except String String :=
   loop 0 bs.length bs.data.toList ""
 where
   loop (i : Nat) (e : Nat) (bs : List Char) (acc : String) : Except String String :=
@@ -108,6 +108,10 @@ where
   decreasing_by
     have := Nat.sub_lt_sub_left _h (Nat.add_lt_add_left c.utf8Size_pos i)
     decreasing_tactic
+
+/-- UTF-8 decoding is a primitive during symbolic reasoning; its executable
+    implementation still validates input and reports invalid byte sequences. -/
+opaque decodeUtf8 (bs : ByteString) : Except String String := decodeUtf8Impl bs
 
 end PlutusCore.StringInternal
 
