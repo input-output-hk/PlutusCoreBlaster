@@ -111,10 +111,19 @@ def testDst₂ := String.toByteList "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_S
 
 theorem fieldPrime_le_pow_2_381 : fieldPrime ≤ 2 ^ 381 := by decide +native
 
+/-- The 381-bit width used by the hex printers below loses no information: every `Fq1`
+    representative is reduced mod `fieldPrime` (`Fq1.ofNat_lt`), and `fieldPrime` fits in
+    381 bits.  This is the invariant the `Fin fieldPrime` bound on `Fq1.t` used to carry in
+    the type. -/
+theorem toNat_ofNat_381 (n : Nat) :
+    (BitVec.ofNat 381 (Fq1.ofNat n).t).toNat = (Fq1.ofNat n).t := by
+  rw [BitVec.toNat_ofNat]
+  exact Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le (Fq1.ofNat_lt n) fieldPrime_le_pow_2_381)
+
 def Fq1.pointToHexString : Point Fq1 → String
   | .affine x y =>
-      let x' := Fin.castLE (fieldPrime_le_pow_2_381) x.t |> BitVec.ofFin |> BitVec.toHex
-      let y' := Fin.castLE (fieldPrime_le_pow_2_381) y.t |> BitVec.ofFin |> BitVec.toHex
+      let x' := BitVec.ofNat 381 x.t |> BitVec.toHex
+      let y' := BitVec.ofNat 381 y.t |> BitVec.toHex
       s!"{x'} {y'}"
   | .infinity   => "inf"
 
@@ -135,10 +144,10 @@ example : (Fq1.hashToCurve (String.toByteList "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 def Fq2.pointToHexString : Point Fq2 → String
   | .affine x y =>
-      let x₀ := Fin.castLE (fieldPrime_le_pow_2_381) x.u0.t |> BitVec.ofFin |> BitVec.toHex
-      let x₁ := Fin.castLE (fieldPrime_le_pow_2_381) x.u1.t |> BitVec.ofFin |> BitVec.toHex
-      let y₀ := Fin.castLE (fieldPrime_le_pow_2_381) y.u0.t |> BitVec.ofFin |> BitVec.toHex
-      let y₁ := Fin.castLE (fieldPrime_le_pow_2_381) y.u1.t |> BitVec.ofFin |> BitVec.toHex
+      let x₀ := BitVec.ofNat 381 x.u0.t |> BitVec.toHex
+      let x₁ := BitVec.ofNat 381 x.u1.t |> BitVec.toHex
+      let y₀ := BitVec.ofNat 381 y.u0.t |> BitVec.toHex
+      let y₁ := BitVec.ofNat 381 y.u1.t |> BitVec.toHex
       s!"{x₀} + I * {x₁}; {y₀} + I * {y₁}"
   | .infinity   => "inf"
 
