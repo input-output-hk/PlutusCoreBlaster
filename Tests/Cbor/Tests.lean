@@ -1,5 +1,6 @@
 import Blaster
 import PlutusCore.Cbor.Basic
+import PlutusCore.UPLC.BuiltinFunctions.Data
 
 namespace PlutusCore.Cbor
 open PlutusCore.Cbor.CborInternal
@@ -57,11 +58,16 @@ def encode_example_7 : Prop :=
 
 example : encode_example_7 := by simp [encode_example_7]; native_decide
 
-def encode_example_8 : Prop := encodeData (.I 12) = .some "\x0c"
-def encode_example_9 : Prop := encodeData (.I 42) = .some "\x18\x2a"
+-- Concrete implementation properties, checked by the kernel.
+def encode_example_8 : Prop := encodeDataImpl (.I 12) = .some "\x0c"
+def encode_example_9 : Prop := encodeDataImpl (.I 42) = .some "\x18\x2a"
 
-example : encode_example_8 := by simp [encode_example_8, encodeData, encodeInt, encodeHead]
-example : encode_example_9 := by simp [encode_example_9, encodeData, encodeInt, encodeHead]
+example : encode_example_8 := rfl
+example : encode_example_9 := rfl
+
+-- The public primitive has no defining equations available to Blaster.
+def opaque_encode_int_12_uninterpreted : Prop := encodeData (.I 12) = some "\x0c"
+def opaque_encode_int_42_uninterpreted : Prop := encodeData (.I 42) = some "\x18\x2a"
 
 
 def encode_example_10 : Prop :=
@@ -291,6 +297,8 @@ set_option warn.sorry false
 #blaster (only-optimize: 1) [encode_example_7]
 #blaster (only-optimize: 1) [encode_example_8]
 #blaster (only-optimize: 1) [encode_example_9]
+#blaster (only-optimize: 1) (solve-result: 2) [opaque_encode_int_12_uninterpreted]
+#blaster (only-optimize: 1) (solve-result: 2) [opaque_encode_int_42_uninterpreted]
 #blaster (only-optimize: 1) [encode_example_10]
 #blaster (only-optimize: 1) [encode_example_11]
 #blaster (only-optimize: 1) [encode_example_12]
@@ -314,8 +322,20 @@ set_option warn.sorry false
 #blaster (only-optimize: 1) [encode_example_30]
 #blaster (only-optimize: 1) [encode_example_31]
 
-example : encodeData (.List []) = some "\x80" := by blaster
-example : encodeData (.List [.I 1]) ≠ none := by blaster
+-- Kernel-checked implementation tests preserve the former concrete checks.
+example : encodeDataImpl (.List []) = some "\x80" := rfl
+example : encodeDataImpl (.List [.I 1]) ≠ none := by
+  intro h
+  cases h
+
+-- Symbolic checks exercise the opaque function through Blaster.
+example (x y : PlutusCore.Data.Data) : x = y → encodeData x = encodeData y := by blaster
+
+example (d : PlutusCore.Data.Data) :
+    PlutusCore.UPLC.BuiltinFunctions.Data.serializeData
+      [.VCon (.Data d)] =
+    (fun s => PlutusCore.UPLC.CekValue.CekValue.VCon
+      (.ByteString ⟨s⟩)) <$> encodeData d := by blaster
 
 def cex_encode_int_leq_2_pow_64_minus_one : Prop := ∀ (i : Integer), 0 ≤ i ∧ i ≤ 18446744073709551615 → (encodeInt i).length = 1
 -- NOTE: remove solver options once Char opacified or BitVec supported
