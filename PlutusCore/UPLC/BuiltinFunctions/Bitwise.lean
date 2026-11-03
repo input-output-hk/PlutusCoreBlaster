@@ -47,7 +47,8 @@ def integerToByteString (Vs : List CekValue) : Option CekValue :=
     unchanged: the provided value IS `byteStringToInteger`, and
     `PlutusCore.Bitwise.byteStringToInteger` itself stays a plain def for direct use and
     proofs. -/
-opaque byteStringToIntegerOpaque (e : Bool) (s : String) : Integer := PLC.byteStringToInteger e s
+opaque byteStringToIntegerOpaque (e : Bool) (s : String) : PlutusCore.Integer.Integer :=
+  PLC.byteStringToInteger e s
 
 -- Define byteStringToInteger: args reversed as [bs, e]
 def byteStringToInteger (Vs : List CekValue) : Option CekValue :=
