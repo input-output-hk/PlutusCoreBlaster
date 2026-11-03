@@ -27,19 +27,13 @@ def twoArgs (a b : ByteString) : List Term :=
 #prep_uplc bstoiSymbolicOne bstoiSymbolicOneScript oneArg 200
 #prep_uplc bstoiSymbolicTwo bstoiSymbolicTwoScript twoArgs 200
 
-/-- The run halts with the integer `n`. A match, as `Tests/BlueprintVerify/BooleanCase.lean`'s
-    predicates are, so the solver sees the result and never the whole CEK datatype: its
-    `Const` holds BLS12-381 points, whose `Fq1.t : Fin fieldPrime` Blaster can't declare. -/
+/-- The run halts with the integer `n`. -/
 def haltsWithInteger (s : State) (n : Int) : Prop :=
-  match s with
-  | .Halt (.VCon (.Integer m)) => m = n
-  | _ => False
+  s = .Halt (.VCon (.Integer n))
 
 /-- The run halts with the boolean `b`. -/
 def haltsWithBool (s : State) (b : Bool) : Prop :=
-  match s with
-  | .Halt (.VCon (.Bool c)) => c = b
-  | _ => False
+  s = .Halt (.VCon (.Bool b))
 
 -- The builtin's value isn't fixed: some bytestring converts to 258 (`#0102`). Needs the
 -- builtin's value in the solver, so it failed on `BitVec` before the alias.
