@@ -13,7 +13,6 @@ namespace Tests.Bitwise.ByteStringToIntegerSymbolic
 open PlutusCore.ByteString (ByteString)
 open PlutusCore.UPLC.Term (Term Const)
 open PlutusCore.UPLC.CekMachine (State)
-open PlutusCore.UPLC.CekValue (CekValue)
 
 -- `(lam a [byteStringToInteger True a])`
 #import_uplc bstoiSymbolicOneScript PlutusV3 textual "Tests/Bitwise/bstoi_one.uplc"
@@ -27,18 +26,32 @@ def twoArgs (a b : ByteString) : List Term :=
 #prep_uplc bstoiSymbolicOne bstoiSymbolicOneScript oneArg 200
 #prep_uplc bstoiSymbolicTwo bstoiSymbolicTwoScript twoArgs 200
 
-/-- The builtin's value isn't fixed: some bytestring converts to 258 (`#0102`). Needs the
-    builtin's value in the solver, so it failed on `BitVec` before the alias. -/
+/-- The run halts with the integer `n`. A match, as `Tests/BlueprintVerify/BooleanCase.lean`'s
+    predicates are, so the solver sees the result and never the whole CEK datatype: its
+    `Const` holds BLS12-381 points, whose `Fq1.t : Fin fieldPrime` Blaster can't declare. -/
+def haltsWithInteger (s : State) (n : Int) : Prop :=
+  match s with
+  | .Halt (.VCon (.Integer m)) => m = n
+  | _ => False
+
+/-- The run halts with the boolean `b`. -/
+def haltsWithBool (s : State) (b : Bool) : Prop :=
+  match s with
+  | .Halt (.VCon (.Bool c)) => c = b
+  | _ => False
+
+-- The builtin's value isn't fixed: some bytestring converts to 258 (`#0102`). Needs the
+-- builtin's value in the solver, so it failed on `BitVec` before the alias.
 #blaster (gen-cex: 0) (solve-result: 1) [∀ (a : ByteString),
-    bstoiSymbolicOne.prop a ≠ State.Halt (CekValue.VCon (Const.Integer 258))]
+    ¬ haltsWithInteger (bstoiSymbolicOne.prop a) 258]
 
 /-- Equal bytestrings convert to equal integers. -/
 theorem bstoi_equal_inputs : ∀ (a b : ByteString), a = b →
-    bstoiSymbolicTwo.prop a b = State.Halt (CekValue.VCon (Const.Bool true)) := by blaster
+    haltsWithBool (bstoiSymbolicTwo.prop a b) true := by blaster
 
-/-- And unequal ones aren't known to convert to unequal integers: the function is uninterpreted,
-    so only what holds for any function of the string can be proved. -/
+-- And unequal ones aren't known to convert to unequal integers: the function is uninterpreted,
+-- so only what holds for any function of the string can be proved.
 #blaster (gen-cex: 0) (solve-result: 1) [∀ (a b : ByteString), a ≠ b →
-    bstoiSymbolicTwo.prop a b = State.Halt (CekValue.VCon (Const.Bool false))]
+    haltsWithBool (bstoiSymbolicTwo.prop a b) false]
 
 end Tests.Bitwise.ByteStringToIntegerSymbolic
