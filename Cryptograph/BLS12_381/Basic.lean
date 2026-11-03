@@ -34,16 +34,9 @@ def millerLoopIterBinary : List Bool := millerLoopIter.getMsbD <$> List.range 64
     Note: this number is huge. -/
 def finalExponent : Nat := (fieldPrime ^ 12 - 1) / groupOrder
 
-/-- Field Fq1.
-
-    The representative is a bare `Nat` rather than a `Fin fieldPrime`: `Fin` is an
-    inductive parameterized by a *term*, which the Lean-blaster SMT translation
-    rejects outright (`genIndParams`, "Inductive datatype with instance parameters
-    not supported"), and that propagates all the way up through `Fq2`/`Fq6`/`Fq12`,
-    `Point Fq1` and `Option Fq12` — making every goal that mentions a BLS value
-    fail to elaborate. See `Fq1.ofNat_lt` for the canonicity invariant that the
-    `Fin` bound used to carry. -/
-structure Fq1 where
+/-- Field Fq1, modeled as natural numbers: the constructing function, `Fq1.ofNat`, makes
+    sure that `t < fieldPrime`. -/
+structure Fq1 where private mk ::
   t : Nat
   deriving Repr, DecidableEq
 

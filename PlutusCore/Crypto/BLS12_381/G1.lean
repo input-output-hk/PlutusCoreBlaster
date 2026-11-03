@@ -20,7 +20,7 @@ abbrev BLS12_381_G1_Element := Point Fq1
 
 instance : ToExpr Fq1 where
   toTypeExpr := .const ``Fq1 []
-  toExpr x   := .app (.const ``Fq1.mk []) (toExpr x.t)
+  toExpr x   := .app (.const ``Fq1.ofNat []) (toExpr x.t)
 
 instance : ToExpr BLS12_381_G1_Element where
   toTypeExpr := .const ``BLS12_381_G1_Element []
