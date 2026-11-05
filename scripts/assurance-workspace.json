@@ -2,9 +2,9 @@
   "format": "assurance-workspace-v1",
   "lean": "4.24.0",
   "ghc": "9.6.7",
-  "blasterCommit": "bc03bb402ce702984875bbf8ba51216bd6f843d7",
-  "z3Version": "5.1.0",
-  "z3SourceBaseline": "ca39e58c525c5b03c2484f118ade2b92fae31215",
+  "blasterCommit": "02c9566ec3bf09d6342a1f9459f9a554e771f257",
+  "z3Version": "5.3.4",
+  "z3SourceBaseline": "b283c65640cc8c070b79e6079a0422120e499802",
   "z3RequiredSimplifier": "recfun-finder",
   "layout": {
     "blaster": "../Lean-blaster",

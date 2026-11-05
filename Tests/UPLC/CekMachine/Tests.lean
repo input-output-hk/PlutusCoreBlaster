@@ -37,12 +37,12 @@ example (s : State) : stepN testSemanticsVariant s 0 = s := rfl
 
 -- Splitting through `runSteps` turns a halting run into an `Error`. Splitting
 -- through `stepN` does not.
-example : runSteps testSemanticsVariant testStart 1 = State.Error := rfl
+example : runSteps testSemanticsVariant testStart 1 = State.BudgetExhausted := rfl
 example : runSteps testSemanticsVariant testStart 2
     = State.Halt testResult := rfl
 example :
     runSteps testSemanticsVariant (runSteps testSemanticsVariant testStart 1) 1
-      = State.Error := rfl
+      = State.BudgetExhausted := rfl
 example :
     runSteps testSemanticsVariant (stepN testSemanticsVariant testStart 1) 1
       = State.Halt testResult := rfl
@@ -51,8 +51,9 @@ example :
 def testProgram : PlutusCore.UPLC.Term.Program :=
   PlutusCore.UPLC.Term.Program.Program (PlutusCore.UPLC.Term.Version.Version 1 1 0) testTerm
 
-example : cekExecuteProgramWithSemanticVariant testSemanticsVariant testProgram [] 1
+example : cekExecuteStateRetention testSemanticsVariant testProgram [] 1
     = State.Return [] testResult := rfl
+
 example (m : Nat) :
     cekExecuteProgramWithSemanticVariant testSemanticsVariant testProgram [] (2 + m)
       = State.Halt testResult :=

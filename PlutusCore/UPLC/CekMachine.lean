@@ -260,6 +260,11 @@ def cekExecuteProgramWithSemanticVariant (semanticVariant : BuiltinSemanticsVari
   | Program.Program _ body =>
       runSteps semanticVariant (initialState (applyParams body params)) n
 
+def cekExecuteStateRetention (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State :=
+  match p with
+  | Program.Program _ body =>
+      runStepsPreservingState semanticVariant (initialState (applyParams body params)) n
+
 -- Define CEK Execution
 def cekExecuteProgram : Program → List Term →  Nat → State := cekExecuteProgramWithSemanticVariant default
 
