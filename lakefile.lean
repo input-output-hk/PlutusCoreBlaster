@@ -3,7 +3,7 @@ open Lake DSL
 
 package «PlutusCore» where
   -- add package configuration options here
-  require Blaster from git "https://github.com/input-output-hk/Lean-blaster" @ "bc03bb402ce702984875bbf8ba51216bd6f843d7"
+  require Blaster from git "https://github.com/input-output-hk/Lean-blaster" @ "31347517f50bb765e4a3ad0a85c7a3f79efd5c84"
 
 input_file assuranceSchema where
   path := "PlutusCore/UPLC/BlueprintEncoding/assurance.schema.json"

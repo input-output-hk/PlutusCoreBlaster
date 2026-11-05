@@ -14,3 +14,4 @@ import Tests.BlueprintVerify.BooleanCase
 import Tests.BlueprintVerify.RecursiveSchema
 
 import Tests.BlueprintVerify.Regression
+import Tests.Smt.Model
