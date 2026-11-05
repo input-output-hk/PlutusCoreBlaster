@@ -342,6 +342,14 @@ theorem replicateByte_zero_l (b : Integer) : 0 ≤ b → b ≤ 255 → replicate
       omega
     next => rfl
 
+/-- `replicateByte` builds the `Char` list it built before it wrote bytes with
+    `PlutusCore.Bytes.repB`. -/
+theorem replicateByte_eq_replicate (l b : Nat) (hl : l ≤ maxOutputLength) (hb : b ≤ 255) :
+    replicateByte (.ofNat l) (.ofNat b) = .ok ⟨List.replicate l (Char.ofNat b)⟩ := by
+  rw [replicateByte, if_neg (Nat.not_lt.mpr hl), if_neg (Nat.not_lt.mpr hb),
+      PlutusCore.Bytes.repB_eq l b (Nat.lt_succ_of_le hb)]
+  rfl
+
 -- TODO: formalizations for replicateByte
 
 end PlutusCore.Bitwise

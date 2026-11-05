@@ -6,9 +6,9 @@ import PlutusCore.String
 /-! # The `Char`-based byte-level builtins, as they were before `PlutusCore.Bytes`
 
 Verbatim copies of the definitions that `consByteString*`, `sliceByteString`, `indexByteString`,
-`integerToByteString`, `byteStringToInteger`, `encodeUtf8`, `decodeUtf8` and `serialiseData`
-(`encodeData`) had before they were rewritten over `PlutusCore.Bytes`. `Tests.ByteString.Tests`
-checks the rewritten builtins against them.
+`integerToByteString`, `byteStringToInteger`, `encodeUtf8`, `decodeUtf8`, `serialiseData`
+(`encodeData`) and the logical and bitwise builtins had before they were rewritten over
+`PlutusCore.Bytes`. `Tests.ByteString.Tests` checks the rewritten builtins against them.
 -/
 
 namespace Tests.ByteString.Reference
@@ -274,5 +274,153 @@ def encodeData : Data → Option String
   | .B bs => encodeBytestring bs.data
 
 end
+
+/-! ## Logical and bitwise builtins -/
+
+section Bitwise
+
+open PlutusCore.Bitwise.BitwiseInternal (maxOutputLength)
+
+/-- Truncates `b` by `k` number of characters (bytes). -/
+def trunc (b : String) (k : Nat) : String := String.dropRight b k
+
+/-- Extends `b` by `k` number of characters (bytes) of full 1 bits in case `ones` is true (zeroes otherwise). -/
+def ext (b : String) (k : Nat) (ones : Bool) : String := String.pushn b (if ones then '\xFF' else '\x00') k
+
+/-- Helper function that truncates or extends a string as necessary. -/
+def truncateOrExtend : Bool → String → Nat → Bool → String
+  | false, s, n, _    => let m := String.length s; let l := Nat.min m n; trunc s (m - l)
+  | true , s, n, ones => let m := String.length s; let l := Nat.max m n; ext   s (l - m) ones
+
+/-- Helper function to extend a binary bitwise operation to Strings.
+    Extends the shorter string if `e` is true, otherwise truncates the longer. -/
+def byteStringOp (op : Nat → Nat → Nat) (ones e : Bool) (b c : String) : String :=
+  let m   := String.length b
+  let n   := String.length c
+  let b'  := truncateOrExtend e b n ones
+  let c'  := truncateOrExtend e c m ones
+  let b'' := (·.toUInt8.toNat) <$> String.toList b'
+  let c'' := (·.toUInt8.toNat) <$> String.toList c'
+  let r   := Function.uncurry op <$> List.zip b'' c''
+  ⟨Char.ofNat <$> r⟩
+
+/-- Performs bitwise `and` on bytestrings, extending the lengths if the bool argument is true. -/
+def andByteString : Bool → String → String → String := byteStringOp (· &&& ·) true
+/-- Performs bitwise `or` on bytestrings, extending the lengths if the bool argument is true. -/
+def  orByteString : Bool → String → String → String := byteStringOp (· ||| ·) false
+/-- Performs bitwise `xor` on bytestrings, extending the lengths if the bool argument is true. -/
+def xorByteString : Bool → String → String → String := byteStringOp (· ^^^ ·) false
+
+/-- Performs bitwise complementer calculation on the input bytestring. -/
+def complementByteString (b : String) : String := xorByteString false (String.map (λ _ => '\xFF') b) b
+
+/- Generates a bit sequence from a bytestring.
+   Tail recursive version, uses accumulator for the calculation. -/
+def bitSequenceFromByteString : List Char → List Bool → List Bool
+  | []    , acc => acc
+  | c :: t, acc =>
+      let b   := c |> Char.toUInt8 |> UInt8.toBitVec
+      let bcc := [b.getLsb 7, b.getLsb 6, b.getLsb 5, b.getLsb 4, b.getLsb 3, b.getLsb 2, b.getLsb 1, b.getLsb 0]
+      bitSequenceFromByteString t (acc ++ bcc)
+
+/-- Reconstruct a Natural number from it's base-2 big-endian representation.
+    Tail recursive version, uses accumulator for the calculation. -/
+def reconstructNat : List Bool → Nat → Nat
+  | false :: t, acc => reconstructNat t (2 * acc)
+  | true  :: t, acc => reconstructNat t (2 * acc + 1)
+  | []        , acc => acc
+
+/-- Generates a bytestring from a bit sequence.
+    Tail recursive version, uses accumulator for the calculation. -/
+def bitSequenceToByteString : List Bool → List Char → Option (List Char)
+  | b₇ :: b₆ :: b₅ :: b₄ :: b₃ :: b₂ :: b₁ :: b₀ :: t, acc =>
+      bitSequenceToByteString t (Char.ofNat (reconstructNat [b₇, b₆, b₅, b₄, b₃, b₂, b₁, b₀] 0) :: acc)
+  | []                                               , acc => .some (List.reverse acc)
+  | _                                                , _   => .none
+
+/-- Shifts the bits of `s`
+    - `k` places to the left if `k ≥ 0`
+    - `k` places to the right if `k < 0` -/
+def shiftByteString (s : String) (k : Integer) : String :=
+  let bs  := bitSequenceFromByteString s.data []
+  let l   := List.length bs
+  let bs' := match k with
+             | .ofNat n   => if n < l then List.drop n (bs ++ List.replicate n false)
+                                      else List.replicate l false
+             | .negSucc n => if n + 1 < l then List.take l (List.replicate (n + 1) false ++ bs)
+                                          else List.replicate l false
+  match bitSequenceToByteString bs' [] with
+  | .some x => ⟨x⟩
+  | _       => unreachable!
+
+/-- Rotates the bits of `s`
+    - `k` places to the left if `k ≥ 0`
+    - `k` places to the right if `k < 0` -/
+def rotateByteString (s : String) (k : Integer) : String :=
+  let bs  := bitSequenceFromByteString s.data []
+  let l   := List.length bs
+  let bs' := match k with
+             | .ofNat n   => List.take l (List.drop (n % l)             (bs ++ bs))
+             | .negSucc n => List.take l (List.drop (l - ((n + 1) % l)) (bs ++ bs))
+  match bitSequenceToByteString bs' [] with
+  | .some x => ⟨x⟩
+  | _       => unreachable!
+
+/-- Counts the number of set bits (1) in `s`. -/
+def countSetBits (s : String) : Integer :=
+  List.count true (bitSequenceFromByteString s.data [])
+
+/-- Finds the index of the first set bit (1) in a bytestring from the _right_.
+    Returns -1, if no bits are set. -/
+def findFirstSetBit (s : String) : Integer :=
+  match bitSequenceFromByteString s.data [] |> List.reverse |> List.findIdx? (·) with
+  | .some i => .ofNat i
+  | .none   => -1
+
+/-- Returns the value of the nth bit in the bytestring.
+    Bits are indexed from the _right_. -/
+def readBit : String → Integer → Except String Bool
+  | _, .negSucc _ => throw "readBit: index out of bounds"
+  | s, .ofNat   i =>
+      let len := String.length s
+      if 8 * len ≤ i then throw "readBit: index out of bounds"
+      else
+        let bigIx      := i / 8
+        have h : 8 > 0 := by simp
+        let littleIx   := ⟨i % 8, Nat.mod_lt i h⟩
+        let flipIx     := len - bigIx - 1
+        pure (BitVec.getLsb (s.data[flipIx]! |> Char.toUInt8 |> UInt8.toBitVec) littleIx)
+
+def writeBit : String → Integer → Bool → Except String String
+  | _, .negSucc _, _ => throw "writeBits: index out of bounds"
+  | s, .ofNat   i, x =>
+      let len := String.length s
+      if 8 * len ≤ i then throw "writeBits: index out of bounds"
+      else
+        let bigIx    := i / 8
+        let littleIx := i % 8
+        let flipIx   := len - bigIx - 1
+        let bs       := s.data[flipIx]! |> Char.toUInt8 |> UInt8.toNat
+        let mask     := 0x1 <<< littleIx
+        let bs'      := if x then bs ||| mask
+                               else bs &&& (mask ^^^ 0xFF)
+        pure ⟨List.set s.data flipIx (bs' |> Char.ofNat)⟩
+
+/-- Writes the value of the list of bits in the bytestring.
+    Bits are indexed from the _right_. -/
+def writeBits : String → List Integer → Bool → Except String String
+  | s, h :: t, x => do writeBits (←writeBit s h x) t x
+  | s, []    , _ => pure s
+
+/-- Creates a bytestring by repeating the provided value n times. -/
+def replicateByte : Integer → Integer → Except String String
+  | .negSucc _, _          => throw "replicateByte: negative length requested"
+  | _         , .negSucc _ => throw "replicateByte: negative byte requested"
+  | .ofNat   l, .ofNat   b =>
+           if maxOutputLength < l then throw s!"replicateByte: requested length is too long (maximum is {maxOutputLength} bytes)"
+      else if 255             < b then throw "replicateByte: requested byte is out of range (maximum is 255)"
+      else pure ⟨List.replicate l (Char.ofNat b)⟩
+
+end Bitwise
 
 end Tests.ByteString.Reference

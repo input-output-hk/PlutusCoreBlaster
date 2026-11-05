@@ -29,6 +29,12 @@ The seal costs two things.
   `attribute [local semireducible] PlutusCore.Bytes.instByteViewString`.
 * `rfl` and `decide` stop at the seal too. `with_unfolding_all rfl`, `decide +kernel`,
   `native_decide`, `#eval` and `#guard` all still evaluate readers.
+
+Compiled code (`#eval`, `#guard`, `native_decide`) does not run `uncons`, `takeB` and `dropB` as
+written, which would turn the rest of the string into a `List Char` and back at every byte.
+`@[csimp]` theorems (`unconsString_eq_fast`, `takeB_eq_impl`, `dropB_eq_impl`) replace them with
+equal functions that work on the UTF-8 bytes or take a single pass. Being theorems, they add
+nothing to what has to be trusted.
 -/
 
 namespace PlutusCore.Bytes
@@ -67,11 +73,79 @@ class ByteView (α : Type) where
   /-- The one-character string with the given code. -/
   cpStr  : Nat → α
 
+/-- `uncons` on `String`: the code of the first character and the rest. -/
+def unconsString (s : String) : Option (Nat × String) :=
+  match s.data with
+  | [] => none
+  | c :: cs => some (c.toNat, ⟨cs⟩)
+
+/-- `unconsString` for compiled code: it reads the first character and copies the rest of the
+    UTF-8 bytes, instead of turning the whole string into a `List Char` and back.
+    `unconsString_eq_fast` makes the compiler use it in place of `unconsString`. -/
+def unconsStringFast (s : String) : Option (Nat × String) :=
+  if s.utf8ByteSize = 0 then none
+  else some ((s.get 0).toNat, s.extract (s.next 0) s.endPos)
+
+theorem extract_go₂_utf8ByteSize (l : List Char) (i : String.Pos) :
+    String.extract.go₂ l i ⟨i.byteIdx + String.utf8ByteSize.go l⟩ = l := by
+  induction l generalizing i with
+  | nil => rfl
+  | cons c cs ih =>
+    have hc := Char.utf8Size_pos c
+    have hgo : String.utf8ByteSize.go (c :: cs) = String.utf8ByteSize.go cs + c.utf8Size := rfl
+    have hne : i ≠ ⟨i.byteIdx + String.utf8ByteSize.go (c :: cs)⟩ := by
+      intro h; have := congrArg String.Pos.byteIdx h; simp only [hgo] at this; omega
+    rw [String.extract.go₂, if_neg hne]
+    have h2 : (⟨i.byteIdx + String.utf8ByteSize.go (c :: cs)⟩ : String.Pos)
+        = ⟨(i + c).byteIdx + String.utf8ByteSize.go cs⟩ := by
+      rw [hgo]; show (⟨_⟩ : String.Pos) = ⟨i.byteIdx + c.utf8Size + _⟩; congr 1; omega
+    rw [h2, ih]
+
+/-- Extracting from just after the first character to the end gives the rest. -/
+theorem extract_tail (c : Char) (cs : List Char) :
+    String.extract ⟨c :: cs⟩ ⟨c.utf8Size⟩ (String.endPos ⟨c :: cs⟩) = ⟨cs⟩ := by
+  have hc := Char.utf8Size_pos c
+  have hsz : (String.endPos ⟨c :: cs⟩).byteIdx = String.utf8ByteSize.go cs + c.utf8Size := rfl
+  show (if _ then _ else _) = _
+  cases cs with
+  | nil => rw [if_pos (by show c.utf8Size ≥ 0 + c.utf8Size; omega)]
+  | cons d ds =>
+    have hd := Char.utf8Size_pos d
+    have hgo : String.utf8ByteSize.go (d :: ds) = String.utf8ByteSize.go ds + d.utf8Size := rfl
+    rw [if_neg (by rw [hsz, hgo]; show ¬ c.utf8Size ≥ _; omega)]
+    congr 1
+    have h0 : (0 : String.Pos) ≠ ⟨c.utf8Size⟩ := by
+      intro h; have := congrArg String.Pos.byteIdx h; simp only [String.Pos.byteIdx_zero] at this; omega
+    have h1 : (0 : String.Pos) + c = ⟨c.utf8Size⟩ := by
+      show (⟨0 + c.utf8Size⟩ : String.Pos) = _; congr 1; omega
+    rw [String.extract.go₁, if_neg h0, String.extract.go₁, if_pos h1]
+    have he : String.endPos ⟨c :: d :: ds⟩
+        = ⟨((0 : String.Pos) + c).byteIdx + String.utf8ByteSize.go (d :: ds)⟩ := by
+      show String.Pos.mk (String.utf8ByteSize.go (d :: ds) + c.utf8Size)
+        = String.Pos.mk (0 + c.utf8Size + String.utf8ByteSize.go (d :: ds))
+      congr 1; omega
+    rw [he, extract_go₂_utf8ByteSize]
+
+/-- Compiled code runs `unconsStringFast` for `unconsString`. It precedes the instance, which is
+    compiled with it. -/
+@[csimp] theorem unconsString_eq_fast : @unconsString = @unconsStringFast := by
+  funext s
+  obtain ⟨l⟩ := s
+  cases l with
+  | nil => rfl
+  | cons c cs =>
+    have hc := Char.utf8Size_pos c
+    have hsz : String.utf8ByteSize ⟨c :: cs⟩ = String.utf8ByteSize.go cs + c.utf8Size := rfl
+    have hget : String.get ⟨c :: cs⟩ 0 = c := by simp [String.get, String.utf8GetAux]
+    have hnext : String.next ⟨c :: cs⟩ 0 = ⟨c.utf8Size⟩ := by
+      show (0 : String.Pos) + String.get ⟨c :: cs⟩ 0 = _
+      rw [hget]; show (⟨0 + c.utf8Size⟩ : String.Pos) = _; congr 1; omega
+    rw [unconsStringFast, if_neg (by rw [hsz]; omega), hget, hnext, extract_tail]
+    rfl
+
 /-- The sealed instance. The kernel still unfolds it, so everything about it stays provable. -/
 @[irreducible] instance instByteViewString : ByteView String where
-  uncons s := match s.data with
-    | [] => none
-    | c :: cs => some (c.toNat, ⟨cs⟩)
+  uncons := unconsString
   cpStr c := String.singleton (Char.ofNat c)
 
 export ByteView (uncons cpStr)
@@ -91,6 +165,11 @@ def dropB : Nat → String → String
     match uncons s with
     | none => ""
     | some (_, t) => dropB n t
+
+/-- `n` copies of the byte `b` (`b < 256`). -/
+def repB : Nat → Nat → String
+  | 0, _ => ""
+  | n + 1, b => byteStr b ++ repB n b
 
 /-- What `uncons s` returns: `none` exactly on `""`; otherwise the first code `b` and the rest
     `t`, with `s = cpStr b ++ t`. The last conjunct restates it with `byteStr` for bytes. -/
@@ -177,5 +256,26 @@ theorem takeB_eq (n : Nat) (s : String) : takeB n s = String.mk (s.data.take n) 
 theorem takeB_length_le (n : Nat) (s : String) : (takeB n s).length ≤ n := by
   rw [takeB_eq]
   exact List.length_take_le n s.data
+
+/-- `takeB` for compiled code, in one pass over the characters; `takeB_eq_impl` makes the compiler
+    use it. -/
+def takeBImpl (n : Nat) (s : String) : String := String.mk (s.data.take n)
+
+/-- `dropB` for compiled code, in one pass over the characters; `dropB_eq_impl` makes the compiler
+    use it. -/
+def dropBImpl (n : Nat) (s : String) : String := String.mk (s.data.drop n)
+
+@[csimp] theorem takeB_eq_impl : @takeB = @takeBImpl := by
+  funext n s; exact takeB_eq n s
+
+@[csimp] theorem dropB_eq_impl : @dropB = @dropBImpl := by
+  funext n s; exact dropB_eq n s
+
+/-! ## `repB` is `List.replicate` -/
+
+theorem repB_eq (n b : Nat) (h : b < 256) : repB n b = String.mk (List.replicate n (Char.ofNat b)) := by
+  induction n with
+  | zero => rfl
+  | succ n ih => rw [repB, ih, byteStr_eq b h]; rfl
 
 end PlutusCore.Bytes

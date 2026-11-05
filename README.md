@@ -101,11 +101,14 @@ The final number is a **step limit**, not a CPU or memory `ExBudget`. Programs t
 ### Builtins that read bytes
 
 `ByteString` and `String` values are Lean `String`s, which Blaster maps to SMT strings. The builtins
-that read single bytes (`byteStringToInteger`, `sliceByteString`, `indexByteString`,
-`decodeUtf8`, `encodeUtf8` and `serialiseData`) read them through two primitives in
+that read single bytes read them through two primitives in
 [`PlutusCore.Bytes`](PlutusCore/ByteString/Bytes.lean), which Blaster treats as uninterpreted
-functions. A goal that applies one of these builtins to a symbolic value needs the facts about the
-primitives as a premise, because Blaster does not use theorems:
+functions. These builtins are `byteStringToInteger`, `sliceByteString`, `indexByteString`,
+`decodeUtf8`, `encodeUtf8`, `serialiseData` and the logical and bitwise builtins (`andByteString`,
+`orByteString`, `xorByteString`, `complementByteString`, `shiftByteString`, `rotateByteString`,
+`countSetBits`, `findFirstSetBit`, `readBit` and `writeBits`). A goal that applies one of these
+builtins to a symbolic value needs the facts about the primitives as a premise, because Blaster
+does not use theorems:
 
 ```lean
 import Blaster

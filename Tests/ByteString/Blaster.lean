@@ -138,6 +138,57 @@ open PlutusCore.UPLC.Term (Const) in
       [CekValue.VCon (Const.ByteString bs), CekValue.VCon (Const.Bool true)] = some (CekValue.VCon (Const.Integer n)) →
     n < 256]
 
+/-! ## Logical and bitwise builtins -/
+
+section Bitwise
+open PlutusCore.Bitwise
+  (andByteString orByteString xorByteString complementByteString shiftByteString
+   rotateByteString countSetBits findFirstSetBit readBit writeBits replicateByte)
+
+#smt_clean
+  [Spec → ∀ (a b : String), (andByteString false a b).length ≤ a.length]
+
+#smt_clean
+  [Spec → ∀ (a b : String), (orByteString true a b).length = Nat.max a.length b.length]
+
+#smt_clean
+  [Spec → ∀ (a : String), a.length = 1 → xorByteString false a a = "\x00"]
+
+#smt_clean
+  [Spec → ∀ (a : String), (complementByteString a).length = a.length]
+
+#smt_clean
+  [Spec → ∀ (a : String) (k : Integer), (shiftByteString a k).length = a.length]
+
+#smt_clean
+  [Spec → ∀ (a : String) (k : Integer), (rotateByteString a k).length = a.length]
+
+#smt_clean
+  [Spec → ∀ (a : String), countSetBits a ≤ 8 * (a.length : Integer)]
+
+#smt_clean
+  [Spec → ∀ (a : String), findFirstSetBit a < 8 * (a.length : Integer)]
+
+#smt_clean
+  [Spec → ∀ (a : String) (i : Integer), readBit a i = .ok true → countSetBits a > 0]
+
+#smt_clean
+  [Spec → ∀ (a b : String) (i : Integer), writeBits a [i] true = .ok b → readBit b i = .ok true]
+
+#smt_clean
+  [∀ (n : Integer) (s : String), replicateByte n 0 = .ok s → (s.length : Integer) = n]
+
+open PlutusCore.UPLC.CekValue (CekValue) in
+open PlutusCore.UPLC.Term (Const) in
+/-- The CEK-level builtin applied to symbolic byte strings; the optimizer alone proves it. -/
+example : Spec → ∀ (a b : ByteString),
+    PlutusCore.UPLC.BuiltinFunctions.Bitwise.xorByteString
+      [CekValue.VCon (Const.ByteString b), CekValue.VCon (Const.ByteString a), CekValue.VCon (Const.Bool false)]
+    = some (CekValue.VCon (Const.ByteString ⟨xorByteString false a.data b.data⟩)) := by
+  blaster
+
+end Bitwise
+
 /-! ## The check catches an unsealed read
 
 With the seal lifted, the same kind of goal still yields a query, but one that names selectors of

@@ -19,7 +19,9 @@ open PlutusCore.Data (Data)
 namespace Ref
 export Tests.ByteString.Reference
   (consByteStringV1 consByteStringV2 sliceByteString indexByteString integerToByteString
-   byteStringToInteger encodeUtf8 decodeUtf8 encodeData)
+   byteStringToInteger encodeUtf8 decodeUtf8 encodeData andByteString orByteString xorByteString
+   complementByteString shiftByteString rotateByteString countSetBits findFirstSetBit readBit
+   writeBit writeBits replicateByte)
 end Ref
 
 /-! ## Inputs -/
@@ -151,6 +153,68 @@ def datas : List Data :=
 
 #guard datas.all fun d => PlutusCore.Cbor.encodeData d == Ref.encodeData d
 
+/-! ## Logical and bitwise builtins -/
+
+/-- Short strings for the builtins that take two strings or a bit index: the empty string, strings
+    of up to 12 pseudo-random bytes, strings of zero and all-one bytes, and strings with characters
+    that are not bytes. -/
+def bitStrings : List String :=
+  [""] ++ (List.range 40).map (fun i => ofCodes (randoms (i + 500) (i % 12 + 1) 256)) ++
+  ["\x00", "\x00\x00\x00", "\xff", "\xff\xff", "\x00\x01\x00", "\x80\x00", "\x00\x00\x80"] ++ wideStrings
+
+-- Every pair of single bytes, so every value of the byte operations.
+#guard (List.range 65536).all fun i =>
+  let b := ofCodes [i / 256]
+  let c := ofCodes [i % 256]
+  PlutusCore.Bitwise.andByteString false b c == Ref.andByteString false b c &&
+  PlutusCore.Bitwise.orByteString  false b c == Ref.orByteString  false b c &&
+  PlutusCore.Bitwise.xorByteString false b c == Ref.xorByteString false b c
+
+#guard bitStrings.all fun b => bitStrings.all fun c => [true, false].all fun e =>
+  PlutusCore.Bitwise.andByteString e b c == Ref.andByteString e b c &&
+  PlutusCore.Bitwise.orByteString  e b c == Ref.orByteString  e b c &&
+  PlutusCore.Bitwise.xorByteString e b c == Ref.xorByteString e b c
+
+#guard (byteStrings ++ wideStrings).all fun s =>
+  PlutusCore.Bitwise.complementByteString s == Ref.complementByteString s
+
+/-- Shift and rotation amounts for a string of `len` bytes: every amount up to 20 places either
+    way, every amount around the bit length, and some huge ones. -/
+def amounts (len : Nat) : List Integer :=
+  let l : Integer := 8 * len
+  (List.range 41).map (fun (i : Nat) => (i : Integer) - 20) ++
+  [l - 9, l - 8, l - 1, l, l + 1, l + 7, l + 8, 2 * l + 3, -(l - 1), -l, -(l + 1), -(2 * l + 3),
+   2 ^ 63 - 1, -(2 ^ 63), 2 ^ 70, -(2 ^ 70)]
+
+#guard (bitStrings ++ byteStrings.drop 257).all fun s => (amounts s.length).all fun k =>
+  PlutusCore.Bitwise.shiftByteString  s k == Ref.shiftByteString  s k &&
+  PlutusCore.Bitwise.rotateByteString s k == Ref.rotateByteString s k
+
+/-- Every byte at the start, in the middle and at the end of a string of zero bytes. -/
+def lonelyBytes : List String :=
+  (List.range 256).flatMap fun b => [ofCodes [b, 0, 0], ofCodes [0, b, 0], ofCodes [0, 0, b]]
+
+#guard (byteStrings ++ wideStrings ++ lonelyBytes ++ bitStrings).all fun s =>
+  PlutusCore.Bitwise.countSetBits s == Ref.countSetBits s &&
+  PlutusCore.Bitwise.findFirstSetBit s == Ref.findFirstSetBit s
+
+/-- Every bit index of a string of `len` bytes, the ones just outside, and a huge one. -/
+def bitIndices (len : Nat) : List Integer :=
+  (List.range (8 * len + 3)).map (fun (i : Nat) => (i : Integer) - 1) ++ [2 ^ 70]
+
+#guard (bitStrings ++ lonelyBytes).all fun s => (bitIndices s.length).all fun i =>
+  sameE (PlutusCore.Bitwise.readBit s i) (Ref.readBit s i) &&
+  [true, false].all fun x => sameE (PlutusCore.Bitwise.BitwiseInternal.writeBit s i x) (Ref.writeBit s i x)
+
+#guard bitStrings.all fun s => [true, false].all fun x =>
+  [[], [0], [0, 3, 0], [15, 13, 8, 10], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [0, 100], [100, 0], [-1],
+   [7, -1], (bitIndices s.length).reverse].all fun is =>
+    sameE (PlutusCore.Bitwise.writeBits s is x) (Ref.writeBits s is x)
+
+#guard [-(2 ^ 70), -1, 0, 1, 2, 7, 64, 8191, 8192, 8193, 2 ^ 70].all fun l =>
+  [-(2 ^ 70), -1, 0, 1, 127, 128, 255, 256, 1000, 2 ^ 70].all fun b =>
+    sameE (PlutusCore.Bitwise.replicateByte l b) (Ref.replicateByte l b)
+
 /-! ## Known answers -/
 
 #guard PlutusCore.Bitwise.byteStringToInteger true  "\x01\x02" == 258
@@ -180,5 +244,7 @@ example : PlutusCore.ByteString.sliceByteString 1 2 ⟨"abcd"⟩ = ⟨"bc"⟩ :=
 example : PlutusCore.String.decodeUtf8 ⟨"\xe2\x82\xac"⟩ = .ok "€" := by with_unfolding_all rfl
 example : PlutusCore.Cbor.encodeData (.B ⟨"\x01\x02"⟩) = some "\x42\x01\x02" := by with_unfolding_all rfl
 example : PlutusCore.Bitwise.byteStringToInteger true "\x01\x02" = 258 := by decide +kernel
+example : PlutusCore.Bitwise.shiftByteString "\xCA\xFE" (-4) = "\x0C\xAF" := by with_unfolding_all rfl
+example : PlutusCore.Bitwise.readBit "\xA5\x00" 15 = .ok true := by with_unfolding_all rfl
 
 end Tests.ByteString.Tests
