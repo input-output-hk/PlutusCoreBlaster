@@ -9,6 +9,7 @@ import Tests.Cryptograph.Sha2.Sha512TestVectors
 import Tests.Cryptograph.Sha3.Sha3_256TestVectors
 
 import Tests.Bitwise.Tests
+import Tests.Bitwise.ByteStringToIntegerSymbolic
 import Tests.Cbor.Tests
 import Tests.UPLC.BlueprintEncoding.CtfTests
 import Tests.UPLC.BlueprintEncoding.Tests
