@@ -34,10 +34,11 @@ abbrev Stack := List Frame
 
 -- Define State
 inductive State where
-  | Eval    : Stack → Environment → Term → State
-  | Return  : Stack → CekValue → State
-  | Error   : State
-  | Halt    : CekValue → State
+  | Eval            : Stack → Environment → Term → State
+  | Return          : Stack → CekValue → State
+  | Error           : State
+  | BudgetExhausted : State
+  | Halt            : CekValue → State
 deriving Repr
 
 -- Result type for budget aware execution
@@ -220,6 +221,7 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
 
   | State.Halt V => State.Halt V
   | State.Error => State.Error
+  | State.BudgetExhausted => State.BudgetExhausted
 
   where
     folding (xs : List CekValue) (init : Stack) : Stack :=
@@ -232,14 +234,14 @@ def runSteps (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : N
   match n, Sigma with
   | _, State.Halt V => Sigma
   | _, State.Error => Sigma
-  | 0, _ => State.Error -- legacy API conflates exhaustion with script failure
+  | _, State.BudgetExhausted => Sigma
+  | 0, _ => State.BudgetExhausted
   | Nat.succ n, _ => runSteps semanticsVariant (step semanticsVariant Sigma) n
 
-/-- Assurance execution must distinguish exhausted fuel from script rejection.
-Keep the legacy `runSteps` API for existing callers and its iteration lemmas. -/
+/-- Similar to runSteps but retain state when script budget exhausted -/
 def runStepsPreservingState (semanticsVariant : BuiltinSemanticsVariant) (state : State) (n : Nat) : State :=
   match n, state with
-  | _, .Halt _ | _, .Error => state
+  | _, .Halt _ | _, .Error | _, .BudgetExhausted => state
   | 0, _ => state
   | n + 1, _ => runStepsPreservingState semanticsVariant (step semanticsVariant state) n
 
@@ -254,6 +256,11 @@ def initialState (t : Term) : State :=
   State.Eval [] [] t
 
 def cekExecuteProgramWithSemanticVariant (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State :=
+  match p with
+  | Program.Program _ body =>
+      runSteps semanticVariant (initialState (applyParams body params)) n
+
+def cekExecuteStateRetention (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State :=
   match p with
   | Program.Program _ body =>
       runStepsPreservingState semanticVariant (initialState (applyParams body params)) n
@@ -278,6 +285,7 @@ def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
     | State.Eval _ _ Term.Error             => ExBudget.zero
     | State.Return _ _                      => ExBudget.zero
     | State.Error                           => ExBudget.zero
+    | State.BudgetExhausted                 => ExBudget.zero
     | State.Halt _                          => ExBudget.zero
 
 def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) : ExBudget :=

@@ -17,6 +17,9 @@ build.log
 
 .plutus-conformance
 
+# lake manifest
+lake-manifest.json
+
 # Benchmark outputs
 /Benchmark/PrepUplc/Generated/
 /Benchmark/results/
