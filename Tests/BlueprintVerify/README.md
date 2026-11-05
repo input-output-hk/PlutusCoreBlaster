@@ -259,3 +259,39 @@ and verifies its ledger script hash. Its wrapper exposes only runtime inputs.
 Structural Data/native schemas are supported; unsupported refinements fail
 explicitly. Nine negative cases cover missing coverage, order, artifact hashes,
 wrong encodings, unrelated scripts, open terms and trailing bytes.
+
+## Typed counterexample prototype
+
+With the matching `feat/typed-counterexamples` Blaster branch, an optional
+`cex_report "path.json"` argument to `#verify_blueprint` exports structured model
+assignments and attempts concrete replay of the original proposition. `ToCEX`
+instances customize presentation after type-checked SMT reconstruction. The
+regular command and console diagnostics remain available.
+
+```sh
+lake build PlutusCore.UPLC.BlueprintEncoding.Assurance
+lake env python3 Tests/BlueprintVerify/run_counterexample.py \
+  --generator /absolute/path/to/example-ual-auction \
+  --source /absolute/path/to/plutus/doc/docusaurus/static/code/Example/Ual/Auction/FormalSpec.hs \
+  --z3 /absolute/path/to/compatible/z3 \
+  --output /absolute/path/to/counterexample-demo
+```
+
+The runner checks the correct compiled `outbids` claim, then changes `<` to `>`
+in a copied annotation. It requires a falsified verdict, typed Integer inputs,
+a replay that falsifies the original instantiated claim, and a halted compiled
+helper returning a different Bool from the claim. Outputs include a copyable
+`counterexample.hs`, digest-bound JSON reports, and `property-result.json` for
+the local VS Code demo. Open the generated `FormalSpec.hs` to see the result;
+the original source keeps its correct property.
+
+The coordinated Ledger runner also covers an Auction ScriptContext: see
+`CardanoLedgerApiBlaster/Tests/BlueprintVerify/README.md`. Replay discovers scoped
+script calls through specification helpers, records source arguments before
+encoding, and substitutes their exact terminal CEK states into the original
+proposition. Codec source hints are independent of display names. The source
+renderer supports primitives, containers and registered V3 Plutus Data codecs;
+unknown Haskell constructors or codecs require an explicit mapping. Function-valued, indexed and proof-bearing model values are
+unsupported. Missing or ambiguous original binders make replay unavailable;
+values are never guessed. SMT verdict, reconstruction, and replay status are
+separate; none is a reconstructed Lean kernel proof or ledger-validity claim.
