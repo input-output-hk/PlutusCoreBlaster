@@ -13,6 +13,7 @@ namespace PLC
     headList
     tailList
     nullList
+    dropList
   )
 end PLC
 
@@ -97,16 +98,18 @@ def nullList (Vs : List CekValue) : Option CekValue :=
       some (.VCon (.Bool (PLC.nullList xs)))
   | _ => none
 
--- dropList n xs = xs.drop n (n < 0 treated as 0 via Int.toNat)
+-- dropList n xs = PLC.dropList n xs (n < 0 treated as 0 via Int.toNat)
+-- `PLC.dropList` is `List.drop` by structural recursion on the count, in a
+-- form the Blaster optimizer unfolds (see `PlutusCore/List/Basic.lean`).
 -- Eval args (reversed): [list, Integer n]
 def dropList (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [.VCon (.ConstList xs), .VCon (.Integer n)] =>
-      some (.VCon (.ConstList (xs.drop n.toNat)))
+      some (.VCon (.ConstList (PLC.dropList n.toNat xs)))
   | [.VCon (.ConstDataList xs), .VCon (.Integer n)] =>
-      some (.VCon (.ConstDataList (xs.drop n.toNat)))
+      some (.VCon (.ConstDataList (PLC.dropList n.toNat xs)))
   | [.VCon (.ConstPairDataList xs), .VCon (.Integer n)] =>
-      some (.VCon (.ConstPairDataList (xs.drop n.toNat)))
+      some (.VCon (.ConstPairDataList (PLC.dropList n.toNat xs)))
   | _ => none
 
 end PlutusCore.UPLC.BuiltinFunctions.List
