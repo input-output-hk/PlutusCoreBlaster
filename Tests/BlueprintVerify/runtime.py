@@ -1,6 +1,14 @@
 """One native-loading policy for capture, verification and regression drivers."""
+import json
 import os
 from pathlib import Path
+
+def verdicts(report):
+    """(id, verdict) pairs from a `#verify_blueprint ... (report := ...)` file; none if it was not written."""
+    try:
+        return [(p['id'], p['verdict']) for p in json.loads(Path(report).read_text())['properties']]
+    except FileNotFoundError:
+        return []
 
 def lean_command():
     native = os.environ.get('ASSURANCE_NATIVE_LIBRARY')

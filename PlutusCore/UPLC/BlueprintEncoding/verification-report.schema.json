@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/input-output-hk/PlutusCoreBlaster/blob/main/PlutusCore/UPLC/BlueprintEncoding/verification-report.schema.json",
+  "title": "Blaster assurance verification report",
+  "description": "Written by `#verify_blueprint ... (report := \"path\")`: the fresh verdict of each property of one assurance document. Historical evidence in the document is not reflected here.",
+  "type": "object",
+  "required": ["format", "status", "error", "trust", "assurance", "blueprint", "summary", "properties"],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "blaster-verification-report-v1"
+    },
+    "status": {
+      "enum": ["passed", "failed", "error"],
+      "description": "passed: no property was falsified or inconclusive (properties may still be not_checked). failed: at least one was. error: the run did not complete; verdicts after the property in error are not_checked."
+    },
+    "error": {
+      "type": ["string", "null"],
+      "description": "Why the run did not complete; null unless status is error."
+    },
+    "trust": {
+      "type": "object",
+      "description": "A verified verdict is an SMT result from Blaster, not a reconstructed Lean proof.",
+      "required": ["method", "tool", "reconstructedLeanProof"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "const": "smt" },
+        "tool": { "const": "Blaster" },
+        "reconstructedLeanProof": { "const": false }
+      }
+    },
+    "assurance": {
+      "type": "object",
+      "required": ["path", "hash"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "hash": { "$ref": "#/$defs/optionalDigest" }
+      }
+    },
+    "blueprint": {
+      "type": "object",
+      "description": "The blueprint file actually checked, with the digest of its contents; null when the run stopped before reaching it.",
+      "required": ["path", "hash"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": ["string", "null"] },
+        "hash": { "$ref": "#/$defs/optionalDigest" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "The counts of the summary log line, over the properties the run reached.",
+      "required": ["checked", "notChecked", "failedOrInconclusive"],
+      "additionalProperties": false,
+      "properties": {
+        "checked": { "type": "integer", "minimum": 0 },
+        "notChecked": { "type": "integer", "minimum": 0 },
+        "failedOrInconclusive": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "properties": {
+      "type": "array",
+      "description": "One record per document property, in document order; empty when the document could not be parsed.",
+      "items": { "$ref": "#/$defs/property" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "error" } } },
+      "then": { "properties": { "error": { "type": "string" } } },
+      "else": {
+        "properties": {
+          "error": { "type": "null" },
+          "properties": { "items": { "properties": { "verdict": { "not": { "const": "error" } } } } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "optionalDigest": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["alg", "digest"],
+          "additionalProperties": false,
+          "properties": {
+            "alg": { "type": "string" },
+            "digest": { "type": "string", "pattern": "^([0-9a-f]{2})+$" }
+          }
+        }
+      ]
+    },
+    "property": {
+      "type": "object",
+      "required": ["id", "verdict", "reason", "checkingContext", "scope", "counterexample"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "verdict": { "enum": ["verified", "falsified", "inconclusive", "not_checked", "error"] },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Why the property was not checked, was inconclusive, or failed with an error (the error message)."
+        },
+        "checkingContext": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["id", "hash"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "hash": { "$ref": "#/$defs/optionalDigest" }
+              }
+            }
+          ]
+        },
+        "scope": {
+          "type": "object",
+          "required": ["validators", "functions"],
+          "additionalProperties": false,
+          "properties": {
+            "validators": { "type": "array", "items": { "type": "string" } },
+            "functions": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "counterexample": {
+          "type": ["array", "null"],
+          "description": "For falsified properties, the counterexample lines as Blaster reports them (possibly empty when no solver model was produced); null otherwise.",
+          "items": { "type": "string" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "verdict": { "const": "falsified" } } },
+          "then": { "properties": { "counterexample": { "type": "array" } } },
+          "else": { "properties": { "counterexample": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "verdict": { "enum": ["inconclusive", "not_checked", "error"] } } },
+          "then": { "properties": { "reason": { "type": "string" } } }
+        }
+      ]
+    }
+  }
+}
