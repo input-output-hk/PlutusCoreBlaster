@@ -44,13 +44,13 @@ def listInput (xs : List Data) : List Term := [Term.Const (Const.ConstDataList x
 #prep_uplc appliedTails readWithTails listInput 100
 
 -- The guard and the read both take tails.
-#blaster (gen-cex: 1) [
+#blaster [
   ∀ (xs : List Data),
     appliedGuard.prop xs = State.Halt (CekValue.VCon (Const.Bool true)) →
     appliedTails.prop xs = State.Halt (CekValue.VCon (Const.Bool true))]
 
 -- The guard takes tails, the read `dropList`.
-#blaster (gen-cex: 1) [
+#blaster [
   ∀ (xs : List Data),
     appliedGuard.prop xs = State.Halt (CekValue.VCon (Const.Bool true)) →
     appliedDropList.prop xs = State.Halt (CekValue.VCon (Const.Bool true))]
