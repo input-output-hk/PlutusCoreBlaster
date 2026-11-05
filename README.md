@@ -98,6 +98,30 @@ def answerScript : PlutusScript :=
 
 The final number is a **step limit**, not a CPU or memory `ExBudget`. Programs that take inputs can provide an input-conversion function before that number; see the syntax and example in [`PreProcess.lean`](PlutusCore/UPLC/PreProcess.lean).
 
+### Builtins that read bytes
+
+`ByteString` and `String` values are Lean `String`s, which Blaster maps to SMT strings. The builtins
+that read single bytes (`byteStringToInteger`, `sliceByteString`, `indexByteString`,
+`decodeUtf8`, `encodeUtf8` and `serialiseData`) read them through two primitives in
+[`PlutusCore.Bytes`](PlutusCore/ByteString/Bytes.lean), which Blaster treats as uninterpreted
+functions. A goal that applies one of these builtins to a symbolic value needs the facts about the
+primitives as a premise, because Blaster does not use theorems:
+
+```lean
+import Blaster
+import PlutusCore.Cbor
+
+open PlutusCore.ByteString (ByteString)
+open PlutusCore.Cbor (encodeData)  -- `serialiseData`
+
+example : PlutusCore.Bytes.Spec → ∀ (x : ByteString), encodeData (.B x) ≠ none := by blaster
+```
+
+`PlutusCore.Bytes.spec` proves `Spec` without axioms. Blaster no longer evaluates these builtins on
+literals. A module that only needs that can restore it with
+`attribute [local semireducible] PlutusCore.Bytes.instByteViewString`. See the module
+documentation for details.
+
 ## Testing
 
 ```sh
@@ -105,7 +129,7 @@ lake test
 # or: make build_tests
 ```
 
-The standard `Tests` target covers encoding and CBOR, bitwise operations, CEK execution, preprocessing, cryptographic vectors, and equality. It includes textual UPLC parser tests. It does **not** run the generated conformance suite.
+The standard `Tests` target covers encoding and CBOR, bitwise operations, byte-level builtins (checked against their original definitions and translated by Blaster), CEK execution, preprocessing, cryptographic vectors, and equality. It includes textual UPLC parser tests. It does **not** run the generated conformance suite.
 
 ## Conformance testing
 

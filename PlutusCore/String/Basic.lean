@@ -2,6 +2,7 @@ import PlutusCore.ByteString.Basic
 
 namespace PlutusCore.String
 open PlutusCore.ByteString
+open PlutusCore.Bytes (byteStr uncons cpStr)
 
 /-! ## Formalisation for PlutusCore String representation and builtin functions. -/
 
@@ -36,8 +37,35 @@ def utf8EncodeChar (c : Char) : List Char :=
      Char.ofUInt8 ((v >>>  6).toUInt8 &&& 0x3f ||| 0x80),
      Char.ofUInt8 (v.toUInt8 &&& 0x3f ||| 0x80)]
 
-/-- Coverts String to ByteString using utf8 encoding -/
-def encodeUtf8 (s : String) : ByteString := ⟨⟨s.data.flatMap utf8EncodeChar⟩⟩
+/-- The UTF-8 encoding of the code point `c` (a Unicode scalar value), as `utf8EncodeChar`
+    computes it, but built from `byteStr` so that Blaster can translate it for a symbolic `c`. -/
+def utf8EncodeCode (c : Nat) : String :=
+  if c ≤ 0x7f then
+    byteStr c
+  else if c ≤ 0x7ff then
+    byteStr (0xc0 + c / 0x40) ++
+    byteStr (0x80 + c % 0x40)
+  else if c ≤ 0xffff then
+    byteStr (0xe0 + c / 0x1000) ++
+    byteStr (0x80 + c / 0x40 % 0x40) ++
+    byteStr (0x80 + c % 0x40)
+  else
+    byteStr (0xf0 + c / 0x40000) ++
+    byteStr (0x80 + c / 0x1000 % 0x40) ++
+    byteStr (0x80 + c / 0x40 % 0x40) ++
+    byteStr (0x80 + c % 0x40)
+
+/-- Coverts String to ByteString using utf8 encoding.
+    Reads characters with `uncons`, so Blaster can translate it for a symbolic string. -/
+def encodeUtf8 (s : String) : ByteString := ⟨loop s.length s⟩
+where
+  /-- Encodes (at most `n` characters of) `s`. -/
+  loop : Nat → String → String
+    | 0    , _ => ""
+    | n + 1, s =>
+      match uncons s with
+      | none        => ""
+      | some (c, t) => utf8EncodeCode c ++ loop n t
 
 def utf8DecodeChar? (a : List Char) (i : Nat) : Option Char := do
   let u ← a[i]?
@@ -93,21 +121,70 @@ def utf8DecodeChar? (a : List Char) (i : Nat) : Option Char := do
 
 /-- Decodes a ByteString to String using utf8 decoding.
     An error is triggered when the ByteString is not uft8 encoded.
+
+    Accepts and rejects exactly what `utf8DecodeChar?` does, byte for byte, including reading each
+    character of `bs` modulo 256. Reads bytes with `uncons` and writes characters with `cpStr`, so
+    Blaster can translate it for a symbolic byte string.
 -/
 def decodeUtf8 (bs : ByteString) : Except String String :=
-  loop 0 bs.length bs.data.toList ""
+  loop bs.length bs.data ""
 where
-  loop (i : Nat) (e : Nat) (bs : List Char) (acc : String) : Except String String :=
-    if _h : i < e then
-      match utf8DecodeChar? bs i with
-      | none => throw "decodeUtf8: invalid ByteString"
-      | some c =>
-          loop (i + c.utf8Size) e bs (acc.push c)
-    else pure acc
-  termination_by e - i
-  decreasing_by
-    have := Nat.sub_lt_sub_left _h (Nat.add_lt_add_left c.utf8Size_pos i)
-    decreasing_tactic
+  invalid : Except String String := throw "decodeUtf8: invalid ByteString"
+  /-- Whether `b` is a continuation byte, `0b10xxxxxx`. -/
+  cont (b : Nat) : Bool := b / 0x40 == 2
+  /-- Decodes (at most `n` characters of) `s` onto `acc`. -/
+  loop : Nat → String → String → Except String String
+    | 0    , _, acc => pure acc
+    | n + 1, s, acc =>
+      match uncons s with
+      | none          => pure acc
+      | some (b₀, t₀) =>
+        let c₀ := b₀ % 256
+        -- 0xxxxxxx
+        if c₀ < 0x80 then loop n t₀ (acc ++ cpStr c₀)
+        -- 110xxxxx 10xxxxxx
+        else if c₀ / 0x20 == 0x06 then
+          match uncons t₀ with
+          | none          => invalid
+          | some (b₁, t₁) =>
+            let c₁ := b₁ % 256
+            let r := (c₀ % 0x20) * 0x40 + c₁ % 0x40
+            if cont c₁ && 0x80 ≤ r
+            then loop n t₁ (acc ++ cpStr r)
+            else invalid
+        -- 1110xxxx 10xxxxxx 10xxxxxx
+        else if c₀ / 0x10 == 0x0e then
+          match uncons t₀ with
+          | none          => invalid
+          | some (b₁, t₁) =>
+            match uncons t₁ with
+            | none          => invalid
+            | some (b₂, t₂) =>
+              let c₁ := b₁ % 256
+              let c₂ := b₂ % 256
+              let r := (c₀ % 0x10) * 0x1000 + (c₁ % 0x40) * 0x40 + c₂ % 0x40
+              if cont c₁ && cont c₂ && 0x800 ≤ r && (r < 0xd800 || (0xdfff < r && r < 0x110000))
+              then loop n t₂ (acc ++ cpStr r)
+              else invalid
+        -- 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+        else if c₀ / 0x08 == 0x1e then
+          match uncons t₀ with
+          | none          => invalid
+          | some (b₁, t₁) =>
+            match uncons t₁ with
+            | none          => invalid
+            | some (b₂, t₂) =>
+              match uncons t₂ with
+              | none          => invalid
+              | some (b₃, t₃) =>
+                let c₁ := b₁ % 256
+                let c₂ := b₂ % 256
+                let c₃ := b₃ % 256
+                let r := (c₀ % 0x08) * 0x40000 + (c₁ % 0x40) * 0x1000 + (c₂ % 0x40) * 0x40 + c₃ % 0x40
+                if cont c₁ && cont c₂ && cont c₃ && 0x10000 ≤ r && r < 0x110000
+                then loop n t₃ (acc ++ cpStr r)
+                else invalid
+        else invalid
 
 end PlutusCore.StringInternal
 
@@ -118,6 +195,7 @@ export PlutusCore.StringInternal
     emptyString
     encodeUtf8
     equalsString
+    utf8EncodeCode
     utf8EncodeChar
     utf8DecodeChar?
   )

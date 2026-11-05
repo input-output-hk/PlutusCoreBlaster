@@ -1,11 +1,13 @@
 import Lean
 
 import PlutusCore.Integer
+import PlutusCore.ByteString.Bytes
 
 namespace PlutusCore.ByteString
 
 open Lean (ToExpr)
 open PlutusCore.Integer
+open PlutusCore.Bytes (byteStr takeB dropB uncons)
 
 /-! ## Formalisation for PlutusCore ByteString representation and builtin functions. -/
 
@@ -129,6 +131,10 @@ def ByteString.cons (u :  UInt8) (bs : ByteString) : ByteString :=
 
 /-! ## Builtin ByteString functions. -/
 
+/- The builtins that read or write single bytes (`consByteString*`, `sliceByteString`,
+   `indexByteString`) do it through `PlutusCore.Bytes` rather than through `Char`, so that Blaster
+   can translate them on symbolic byte strings. See that module for the encoding and its `Spec`. -/
+
 /-- Return an empty ByteString
     NOTE: that this function is not a builtin. It is here provided for convenience.
 -/
@@ -137,11 +143,10 @@ def ByteString.cons (u :  UInt8) (bs : ByteString) : ByteString :=
 /-- Given two ByteStrings `[c₁, ... cₘ]` and `[d₁, ..., dₙ]`, return `[c₁, ... cₘ, d₁, ..., dₙ]` -/
 def appendByteString (b1 : ByteString) (b2 : ByteString) : ByteString := {data := String.append b1.data b2.data}
 
-/-- Given integer `n` and ByteString `[c₁, ... cₘ]` return `[modInteger n 256, c₁, ... cₘ]` -/
+/-- Given integer `n` and ByteString `[c₁, ... cₘ]` return `[modInteger n 256, c₁, ... cₘ]`
+    (`modInteger n 256 = n % 256`, as the divisor is positive). -/
 def consByteStringV1 (n : Integer) (bs : ByteString) : ByteString :=
-  match (modInteger n 256) with
-  | Except.ok m => ByteString.cons m.toNat.toUInt8 bs
-  | Except.error _ => unreachable!
+  { data := byteStr (n % 256).toNat ++ bs.data }
 
 /-- Given integer `n` and ByteString `[c₁, ... cₘ]` perform the following:
      - When 0 ≤ n ≤ 255:
@@ -151,7 +156,7 @@ def consByteStringV1 (n : Integer) (bs : ByteString) : ByteString :=
 -/
 def consByteStringV2 (n : Integer) (bs : ByteString) : Except String ByteString :=
   if 0 <= n && n <= 255
-  then pure (ByteString.cons n.toNat.toUInt8 bs)
+  then pure { data := byteStr n.toNat ++ bs.data }
   else throw "consByteStringV2: invalid byte representation"
 
 /-- Given `s`, `k` and ByteString `[c₀, ..., cₙ]` return `[cₘₐₓ₍ₛ,₀₎, ..., cₘᵢₙ₍ₛ₊ₖ₋₁, ₙ₎]` -/
@@ -160,8 +165,7 @@ def sliceByteString (s : Integer) (k : Integer) (bs : ByteString) : ByteString :
   -- Negative offsets are clamped to 0; the end is start + count (not s + k).
   let start := (Max.max s (0 : Integer)).toNat
   let count := (Max.max k (0 : Integer)).toNat
-  let subString := (bs.data.toList.drop start).take count
-  {data := String.mk subString }
+  {data := takeB count (dropB start bs.data) }
 
 
 /-- Given ByteString `[c₁, ..., cₙ]` return `n` as result; -/
@@ -174,11 +178,11 @@ def lengthOfByteString (bs : ByteString) : Integer := Int.ofNat bs.length
          - return ⊥
 -/
 def indexByteString (bs : ByteString) (j : Integer) : Except String Integer :=
-  if j < 0 then throw s!"indexByteString: index out of bounds"
+  if j < 0 then throw "indexByteString: index out of bounds"
   else
-    match bs.data.toList[j.toNat]? with
-    | none => throw s!"indexByteString: index out of bounds"
-    | some c => pure c.toNat
+    match uncons (dropB j.toNat bs.data) with
+    | none => throw "indexByteString: index out of bounds"
+    | some (b, _) => pure b
 
 
 def equalsByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 == b2

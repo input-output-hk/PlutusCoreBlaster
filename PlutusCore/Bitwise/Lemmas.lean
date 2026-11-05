@@ -2,6 +2,7 @@ import PlutusCore.Bitwise.Basic
 
 open PlutusCore.Integer
 open PlutusCore.Bitwise.BitwiseInternal
+open PlutusCore.Bytes (byteStr)
 
 namespace PlutusCore.Bitwise
 
@@ -9,18 +10,18 @@ namespace PlutusCore.Bitwise
 
 def Except.isError (e : Except ε α) : Bool := not (Except.isOk e)
 
--- itobs_be_loop (w, n) = ×, if 256 ^ w ≤ n
-/-- Given `w` and `n`, if 256 ^ w ≤ n, `itobs_be_loop` returns an error -/
-theorem itobs_be_loop_high_n (w n : Nat) (a : List Char) (hwn : 256 ^ w ≤ n) :
-  itobs_be_loop w a n = .error "integerToByteString: cannot represent Integer in given number of bytes" := by
+-- itobs_loop (w, n) = ×, if 256 ^ w ≤ n
+/-- Given `w` and `n`, if 256 ^ w ≤ n, `itobs_loop` returns an error -/
+theorem itobs_loop_high_n (e : Bool) (w n : Nat) (a : String) (hwn : 256 ^ w ≤ n) :
+  itobs_loop e w a n = .error "integerToByteString: cannot represent Integer in given number of bytes" := by
     induction w generalizing a n
     next =>
-      unfold itobs_be_loop
+      unfold itobs_loop
       split <;> try contradiction
       rfl
     next p ih =>
-      simp [itobs_be_loop]
-      rw [ih]
+      rw [itobs_loop, ih]
+      rw [Nat.pow_succ] at hwn
       omega
 
 /-- Lemma usable to drive induction via the base 256 representation of a Nat. -/
@@ -36,35 +37,37 @@ theorem base256_ind (P : Nat → Prop) (h0 : P 0) (hstep : ∀ (q r : Nat), r < 
         | 0     => assumption
         | p + 1 => apply ih; omega
 
-/-- Lemma formalizing one step of the `itobs_be_loop` recursive function. -/
-theorem itobs_be_loop_step (w : Nat) (a : List Char) (n : Nat) :
-  itobs_be_loop (w + 1) a n = itobs_be_loop w (Char.ofNat (n % 256) :: a) (n / 256) := by induction w <;> simp [itobs_be_loop]
+/-- Lemma formalizing one step of the `itobs_loop` recursive function. -/
+theorem itobs_loop_step (e : Bool) (w : Nat) (a : String) (n : Nat) :
+  itobs_loop e (w + 1) a n =
+    itobs_loop e w (if e then byteStr (n % 256) ++ a else a ++ byteStr (n % 256)) (n / 256) := by
+  rw [itobs_loop]
 
-/-- Lemma formalizing the base case of the `itobs_be_loop` recursive function. -/
-theorem itobs_be_loop_end (a : List Char) :
-  itobs_be_loop 0 a 0 = .ok a := by simp [itobs_be_loop]; rfl
+/-- Lemma formalizing the base case of the `itobs_loop` recursive function. -/
+theorem itobs_loop_end (e : Bool) (a : String) :
+  itobs_loop e 0 a 0 = .ok a := by simp [itobs_loop]; rfl
 
-/-- Lemma formalizing the error base case of the `itobs_be_loop` recursive function. -/
-theorem itobs_be_loop_end_error (a : List Char) (n : Nat) (hn : 0 < n) :
-  itobs_be_loop 0 a n = .error "integerToByteString: cannot represent Integer in given number of bytes" := by
-    unfold itobs_be_loop
+/-- Lemma formalizing the error base case of the `itobs_loop` recursive function. -/
+theorem itobs_loop_end_error (e : Bool) (a : String) (n : Nat) (hn : 0 < n) :
+  itobs_loop e 0 a n = .error "integerToByteString: cannot represent Integer in given number of bytes" := by
+    unfold itobs_loop
     split
     · contradiction
     · contradiction
     · rfl
 
-theorem itobs_be_loop_correct_l (w n : Nat) (a : List Char) (hwn : n < 256 ^ w) :
-  itobs_be_loop w [] n = .ok a → repr256_be a = n := by sorry
+theorem itobs_be_loop_correct_l (w n : Nat) (a : String) (hwn : n < 256 ^ w) :
+  itobs_loop true w "" n = .ok a → repr256_be a.data = n := by sorry
 
 
-theorem itobs_be_loop_correct_r (w n : Nat) (a : List Char) (hwn : n < 256 ^ w) :
-  repr256_be a = n → itobs_be_loop w [] n = .ok a := by sorry
+theorem itobs_be_loop_correct_r (w n : Nat) (a : String) (hwn : n < 256 ^ w) :
+  repr256_be a.data = n → itobs_loop true w "" n = .ok a := by sorry
 
 -- theorem
 
-/-- Lemma formalizing the correctness of the `itobs_be_loop` recursive function. -/
-theorem itobs_be_loop_correct (w n : Nat) (a : List Char) (hwn : n < 256 ^ w) :
-  itobs_be_loop w [] n = .ok a ↔ repr256_be a = n := by
+/-- Lemma formalizing the correctness of the big-endian `itobs_loop`. -/
+theorem itobs_be_loop_correct (w n : Nat) (a : String) (hwn : n < 256 ^ w) :
+  itobs_loop true w "" n = .ok a ↔ repr256_be a.data = n := by
     constructor
     · apply itobs_be_loop_correct_l <;> assumption
     · apply itobs_be_loop_correct_r <;> assumption
@@ -257,8 +260,60 @@ theorem integerToByteString_nonzero_w_high_n (e : Bool) (w : Nat) (n : Integer) 
 theorem integerToByteString_n_bounds_err (e : Bool) (w n : Integer) : n < 0 ∨ n ≥ 2 ^ 65536 →
   (integerToByteString e w n |> Except.isError) := sorry
 
-example : byteStringToInteger false "\x56\x34\x12\x00\x00" = 0x123456 := rfl
-example : byteStringToInteger true  "\x00\x00\x12\x34\x56" = 0x123456 := rfl
+/-- The big-endian loop is a left fold over the characters, as `byteStringToInteger` was before it
+    read through `PlutusCore.Bytes.uncons`. -/
+theorem bstoi_be_loop_eq_foldl (n : Nat) (s : String) (acc : Nat) (h : s.length ≤ n) :
+    bstoi_be_loop n s acc = s.data.foldl (fun acc c => acc * 256 + c.toNat) acc := by
+  induction n generalizing s acc with
+  | zero =>
+    obtain ⟨l⟩ := s
+    cases l with
+    | nil => rfl
+    | cons c cs => simp [String.length] at h
+  | succ n ih =>
+    obtain ⟨l⟩ := s
+    cases l with
+    | nil => rw [bstoi_be_loop, PlutusCore.Bytes.uncons_nil]; rfl
+    | cons c cs =>
+      rw [bstoi_be_loop, PlutusCore.Bytes.uncons_cons]
+      exact ih ⟨cs⟩ _ (by simp [String.length] at h ⊢; omega)
+
+/-- The little-endian loop is a right fold over the characters. -/
+theorem bstoi_le_loop_eq_foldr (n : Nat) (s : String) (h : s.length ≤ n) :
+    bstoi_le_loop n s = s.data.foldr (fun c acc => c.toNat + 256 * acc) 0 := by
+  induction n generalizing s with
+  | zero =>
+    obtain ⟨l⟩ := s
+    cases l with
+    | nil => rfl
+    | cons c cs => simp [String.length] at h
+  | succ n ih =>
+    obtain ⟨l⟩ := s
+    cases l with
+    | nil => rw [bstoi_le_loop, PlutusCore.Bytes.uncons_nil]; rfl
+    | cons c cs =>
+      rw [bstoi_le_loop, PlutusCore.Bytes.uncons_cons]
+      dsimp only
+      rw [ih ⟨cs⟩ (by simp [String.length] at h ⊢; omega)]
+      rfl
+
+/-- `byteStringToInteger` computes the `Char`-list folds it computed before it read through
+    `PlutusCore.Bytes.uncons`, on every string. -/
+theorem byteStringToInteger_eq_foldl (e : Bool) (s : String) :
+    byteStringToInteger e s =
+    if e then .ofNat (s.data.foldl (fun acc c => acc * 256 + c.toNat) 0)
+         else .ofNat (s.data.reverse.foldl (fun acc c => acc * 256 + c.toNat) 0) := by
+  unfold byteStringToInteger
+  rw [bstoi_be_loop_eq_foldl _ _ _ (Nat.le_refl _), bstoi_le_loop_eq_foldr _ _ (Nat.le_refl _),
+      List.foldl_reverse]
+  congr 2
+  apply congrArg (fun f => List.foldr f 0 s.data)
+  funext c acc
+  omega
+
+-- `byteStringToInteger` reads through the sealed `PlutusCore.Bytes.uncons`, which plain `rfl` does not unfold.
+example : byteStringToInteger false "\x56\x34\x12\x00\x00" = 0x123456 := by with_unfolding_all rfl
+example : byteStringToInteger true  "\x00\x00\x12\x34\x56" = 0x123456 := by with_unfolding_all rfl
 
 theorem bstoi_itobs_roundtrip (e : Bool) (s : String) :
   integerToByteString e (byteStringToInteger e s) (String.length s) = .ok s := sorry

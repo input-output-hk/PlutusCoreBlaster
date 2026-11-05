@@ -1,7 +1,9 @@
 import PlutusCore.Integer
+import PlutusCore.ByteString.Bytes
 
 namespace PlutusCore.Bitwise
 open PlutusCore.Integer
+open PlutusCore.Bytes (byteStr uncons)
 
 /-! ## Formalisation for PlutusCore Logical and Bitwise builtin functions on ByteString. -/
 
@@ -27,10 +29,13 @@ def integerWidth : Nat → Nat
   | 0 => 0
   | n => Nat.log2 n / 8 + 1
 
-/-- Calculates the big-endian representation of a natural number with maximal byte width.
-    Tail recursive version, uses accumulator for the calculation. -/
-def itobs_be_loop : Nat → List Char → Nat → Except String (List Char)
-  | .succ p, a, n => itobs_be_loop p (Char.ofNat (n % 256) :: a) (n / 256)
+/-- Writes the `p` least significant base-256 digits of `n` onto `a`: in front of it, most
+    significant first, if `e` (big-endian); after it, least significant first, otherwise.
+    Fails if `n` has more than `p` digits.
+    Tail recursive version, uses accumulator for the calculation.
+    The bytes come from `byteStr`, so Blaster can translate this for a symbolic `n`. -/
+def itobs_loop (e : Bool) : Nat → String → Nat → Except String String
+  | .succ p, a, n => itobs_loop e p (if e then byteStr (n % 256) ++ a else a ++ byteStr (n % 256)) (n / 256)
   | .zero  , a, 0 => pure a
   | .zero  , _, _ => throw "integerToByteString: cannot represent Integer in given number of bytes"
 
@@ -70,25 +75,35 @@ def integerToByteString (e : Bool) (w n : Integer) : Except String String :=
   else if w > maxOutputLength                         then throw s!"integerToByteString: requested length is too long (maximum is {maxOutputLength} bytes)"
   else if w = 0 ∧ integerLog2 n ≥ maxOutputBitsLength then throw s!"integerToByteString: input too long (maximum is 2^{maxOutputBitsLength}-1)"
   else if n < 0                                       then throw "integerToByteString: cannot convert negative Integer"
-  else do
-    let r ← match w, n with
-             | 0        , 0         => pure []
-             | 0        , .ofNat n' => itobs_be_loop (integerWidth n') [] n'
-             | .ofNat w', .ofNat n' => itobs_be_loop w'                [] n'
-             | _        , _         => unreachable!
-    if e then pure ⟨r⟩
-         else pure ⟨r.reverse⟩
+  else match w, n with
+       | 0        , 0         => pure ""
+       | 0        , .ofNat n' => itobs_loop e (integerWidth n') "" n'
+       | .ofNat w', .ofNat n' => itobs_loop e w'                "" n'
+       | _        , _         => unreachable!
 
-/-- Reconstructs a natural number from it's big-endian representation.
-    Tail recursive version, uses accumulator for the calculation. -/
-def bstoi_be_loop : List Char → Nat → Nat
-  | []    , acc => acc
-  | h :: t, acc => bstoi_be_loop t (acc * 256 + (Char.toNat h))
+/-- Reconstructs a natural number from (at most `n` bytes of) its big-endian representation.
+    Tail recursive version, uses accumulator for the calculation.
+    Reads bytes with `uncons`, so Blaster can translate this for a symbolic string. -/
+def bstoi_be_loop : Nat → String → Nat → Nat
+  | 0    , _, acc => acc
+  | n + 1, s, acc =>
+    match uncons s with
+    | none        => acc
+    | some (b, t) => bstoi_be_loop n t (acc * 256 + b)
+
+/-- Reconstructs a natural number from (at most `n` bytes of) its little-endian representation.
+    Reads bytes with `uncons`, so Blaster can translate this for a symbolic string. -/
+def bstoi_le_loop : Nat → String → Nat
+  | 0    , _ => 0
+  | n + 1, s =>
+    match uncons s with
+    | none        => 0
+    | some (b, t) => b + 256 * bstoi_le_loop n t
 
 /-- The `byteStringToInteger` function converts bytestrings to non-negative integers. -/
 def byteStringToInteger (e : Bool) (s : String) : Integer :=
-  if e then .ofNat (bstoi_be_loop s.data         0)
-       else .ofNat (bstoi_be_loop s.data.reverse 0)
+  if e then .ofNat (bstoi_be_loop s.length s 0)
+       else .ofNat (bstoi_le_loop s.length s)
 
 /-- Truncates `b` by `k` number of characters (bytes). -/
 def trunc (b : String) (k : Nat) : String := String.dropRight b k
