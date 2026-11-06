@@ -27,23 +27,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: PlutusCoreBlaster
-      - name: Read pinned Blaster revision
-        id: blaster
-        working-directory: PlutusCoreBlaster
-        run: |
-          python3 - <<'PYCODE'
-          import json, os, re
-          rev = json.load(open('scripts/assurance-workspace.json'))['blasterCommit']
-          assert re.fullmatch('[0-9a-f]{40}', rev)
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              print('ref=' + rev, file=out)
-          PYCODE
-      - name: Checkout coordinated Blaster
-        uses: actions/checkout@v6
-        with:
-          repository: input-output-hk/Lean-blaster
-          ref: ${{ steps.blaster.outputs.ref }}
-          path: Lean-blaster
       - name: Setup Lean
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
@@ -55,16 +38,34 @@ jobs:
           elan toolchain install ${{ env.LEAN_VERSION }}
           elan default ${{ env.LEAN_VERSION }}
 
-      - uses: actions/cache@v4
-        id: solver
+      - name: Resolve upstream Z3 revision
+        id: z3
+        run: |
+          revision=$(git ls-remote https://github.com/Z3Prover/z3.git refs/heads/master | cut -f1)
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$revision" >> "$GITHUB_OUTPUT"
+      - name: Restore Z3 build
+        uses: actions/cache@v4
+        id: z3-cache
         with:
-          path: ${{ runner.temp }}/assurance-z3
-          key: assurance-z3-${{ runner.os }}-${{ hashFiles('Lean-blaster/scripts/build-assurance-z3.sh') }}
-      - name: Build compatible solver
-        if: steps.solver.outputs.cache-hit != 'true'
-        run: bash ../Lean-blaster/scripts/build-assurance-z3.sh "$RUNNER_TEMP/assurance-z3"
-      - name: Select solver
-        run: echo "$RUNNER_TEMP/assurance-z3/bin" >> "$GITHUB_PATH"
+          path: ${{ runner.temp }}/z3
+          key: z3-${{ runner.os }}-${{ runner.arch }}-${{ steps.z3.outputs.sha }}
+      - name: Build upstream Z3
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        env:
+          Z3_REVISION: ${{ steps.z3.outputs.sha }}
+        run: |
+          git init "$RUNNER_TEMP/z3-src"
+          git -C "$RUNNER_TEMP/z3-src" fetch --depth 1 https://github.com/Z3Prover/z3.git "$Z3_REVISION"
+          git -C "$RUNNER_TEMP/z3-src" checkout --detach "$Z3_REVISION"
+          cmake -S "$RUNNER_TEMP/z3-src" -B "$RUNNER_TEMP/z3-src/build" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/z3" \
+            -DZ3_BUILD_LIBZ3_SHARED=OFF -DZ3_BUILD_PYTHON_BINDINGS=OFF \
+            -DZ3_BUILD_TEST_EXECUTABLES=OFF
+          cmake --build "$RUNNER_TEMP/z3-src/build" --parallel 2
+          cmake --install "$RUNNER_TEMP/z3-src/build"
+      - name: Add Z3 to PATH
+        run: echo "$RUNNER_TEMP/z3/bin" >> "$GITHUB_PATH"
 
       - name: Tools version
         run: |

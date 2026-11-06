@@ -20,7 +20,8 @@ PlutusCoreBlaster is a Lean 4 formalization of [Untyped Plutus Core (UPLC)](http
 
 ## Installation and building
 
-Install z3 version 4.15.2.
+Install a recent upstream Z3 build. The build and conformance workflows build
+`Z3Prover/z3`'s `master` branch and cache the resolved source revision.
 Install Lean 4 through [elan](https://github.com/leanprover/elan). The version selected by this repository is recorded in [`lean-toolchain`](lean-toolchain) (currently 4.24.0). Lake fetches the [Lean-blaster](https://github.com/input-output-hk/Lean-blaster) dependency; the `Cryptograph` library is included in this repository.
 
 ```sh
@@ -146,8 +147,5 @@ Bug reports, documentation improvements, tests, and code changes are welcome. Op
 
 Maintainers: [Jean-Frédéric Etienne](https://github.com/etiennejf), [Romain Soulat](https://github.com/RSoulatIOHK), and [Mark Petruska](https://github.com/mpetruska).
 
-The coordinated assurance runner revision-checks the sibling repositories, then
-selects them using ignored `.lake/package-overrides.json` files. Normal consumers
-use the Git dependency pinned in `lakefile.lean` and `lake-manifest.json` and need
-no sibling checkout. Remove local overrides to return to the published pins.
-The runner rejects existing conflicting overrides instead of replacing them.
+Lake resolves the Blaster Git dependency from `lakefile.lean` and
+`lake-manifest.json`; no sibling checkout is required.

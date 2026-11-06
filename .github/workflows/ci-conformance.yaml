@@ -190,33 +190,36 @@ jobs:
           path: PlutusCoreBlaster
           persist-credentials: false
 
-      # workflow_dispatch can write the default-branch cache. Keep the executed
-      # dependency literal here; PR-controlled pin data only checks consistency.
-      - name: Check coordinated Blaster pin
-        working-directory: PlutusCoreBlaster
+      - name: Resolve upstream Z3 revision
+        id: z3
         run: |
-          python3 - <<'PYCODE'
-          import json
-          rev = json.load(open('scripts/assurance-workspace.json'))['blasterCommit']
-          assert rev == "bc03bb402ce702984875bbf8ba51216bd6f843d7", "conformance Blaster pin differs from the coordinated workspace"
-          PYCODE
-      - name: Checkout coordinated Blaster
-        uses: actions/checkout@v6
+          revision=$(git ls-remote https://github.com/Z3Prover/z3.git refs/heads/master | cut -f1)
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$revision" >> "$GITHUB_OUTPUT"
+      - name: Restore Z3 build
+        uses: actions/cache@v4
+        id: z3-cache
         with:
-          repository: input-output-hk/Lean-blaster
-          ref: bc03bb402ce702984875bbf8ba51216bd6f843d7
-          path: Lean-blaster
-          persist-credentials: false
-      - uses: actions/cache@v4
-        id: solver
-        with:
-          path: ${{ runner.temp }}/assurance-z3
-          key: assurance-z3-${{ runner.os }}-${{ hashFiles('Lean-blaster/scripts/build-assurance-z3.sh') }}
-      - name: Build compatible solver
-        if: steps.solver.outputs.cache-hit != 'true'
-        run: bash Lean-blaster/scripts/build-assurance-z3.sh "$RUNNER_TEMP/assurance-z3"
-      - name: Select solver
-        run: echo "$RUNNER_TEMP/assurance-z3/bin" >> "$GITHUB_PATH"
+          path: ${{ runner.temp }}/z3
+          key: z3-${{ runner.os }}-${{ runner.arch }}-${{ steps.z3.outputs.sha }}
+      - name: Build upstream Z3
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        env:
+          Z3_REVISION: ${{ steps.z3.outputs.sha }}
+        run: |
+          git init "$RUNNER_TEMP/z3-src"
+          git -C "$RUNNER_TEMP/z3-src" fetch --depth 1 https://github.com/Z3Prover/z3.git "$Z3_REVISION"
+          git -C "$RUNNER_TEMP/z3-src" checkout --detach "$Z3_REVISION"
+          cmake -S "$RUNNER_TEMP/z3-src" -B "$RUNNER_TEMP/z3-src/build" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/z3" \
+            -DZ3_BUILD_LIBZ3_SHARED=OFF -DZ3_BUILD_PYTHON_BINDINGS=OFF \
+            -DZ3_BUILD_TEST_EXECUTABLES=OFF
+          cmake --build "$RUNNER_TEMP/z3-src/build" --parallel 2
+          cmake --install "$RUNNER_TEMP/z3-src/build"
+      - name: Add Z3 to PATH
+        run: echo "$RUNNER_TEMP/z3/bin" >> "$GITHUB_PATH"
+      - name: Z3 version
+        run: z3 --version
 
       - name: Checkout IntersectMBO/plutus
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
