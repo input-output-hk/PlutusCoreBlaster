@@ -20,10 +20,7 @@ PlutusCoreBlaster is a Lean 4 formalization of [Untyped Plutus Core (UPLC)](http
 
 ## Installation and building
 
-Use the Z3 version recommended by
-[Lean-blaster](https://github.com/input-output-hk/Lean-blaster#prerequisites):
-currently the upstream `Z3Prover/z3` `master` branch, pending the official v5.3.4
-release. CI builds the same branch and caches the resolved source revision.
+Use the Z3 version recommended by [Lean-blaster](https://github.com/input-output-hk/Lean-blaster#prerequisites): currently the upstream `Z3Prover/z3` `master` branch, pending the official v5.3.4 release. CI builds the same branch and caches the resolved source revision.
 Install Lean 4 through [elan](https://github.com/leanprover/elan). The version selected by this repository is recorded in [`lean-toolchain`](lean-toolchain) (currently 4.24.0). Lake fetches the [Lean-blaster](https://github.com/input-output-hk/Lean-blaster) dependency; the `Cryptograph` library is included in this repository.
 
 ```sh
