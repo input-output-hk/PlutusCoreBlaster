@@ -9,7 +9,7 @@ open PlutusCore.Integer (Integer)
 -- =  Encoding  =
 -- ==============
 
-example : e₈ 7234295460216005990 = "deadbeef" := by decide
+example : e₈ 7234295460216005990 = "deadbeef" := by decide +kernel
 
 def encode_example_1 : Prop := splitToChunks "" = []
 example : encode_example_1 := by simp [encode_example_1]; native_decide
@@ -60,8 +60,8 @@ example : encode_example_7 := by simp [encode_example_7]; native_decide
 def encode_example_8 : Prop := encodeData (.I 12) = .some "\x0c"
 def encode_example_9 : Prop := encodeData (.I 42) = .some "\x18\x2a"
 
-example : encode_example_8 := by simp [encode_example_8, encodeData, encodeInt, encodeHead]; decide
-example : encode_example_9 := by simp [encode_example_9, encodeData, encodeInt, encodeHead]; decide
+example : encode_example_8 := by simp [encode_example_8, encodeData, encodeInt, encodeHead]; decide +kernel
+example : encode_example_9 := by simp [encode_example_9, encodeData, encodeInt, encodeHead]; decide +kernel
 
 
 def encode_example_10 : Prop :=
@@ -321,7 +321,8 @@ attribute [local semireducible] PlutusCore.Bytes.instByteViewString
 
 end Concrete
 
-example : encodeData (.List []) = some "\x80" := by blaster
+-- The byte comes from the sealed `byteStr`; `Spec`'s table of byte values gives it.
+example : PlutusCore.Bytes.Spec → encodeData (.List []) = some "\x80" := by blaster
 example : encodeData (.List [.I 1]) ≠ none := by blaster
 
 def cex_encode_int_leq_2_pow_64_minus_one : Prop := ∀ (i : Integer), 0 ≤ i ∧ i ≤ 18446744073709551615 → (encodeInt i).length = 1

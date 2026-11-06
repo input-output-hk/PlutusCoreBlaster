@@ -11,6 +11,7 @@ import Tests.Cryptograph.Sha3.Sha3_256TestVectors
 import Tests.Bitwise.Tests
 import Tests.Bitwise.ByteStringToIntegerSymbolic
 import Tests.ByteString.Blaster
+import Tests.ByteString.SymbolicReads
 import Tests.ByteString.Tests
 import Tests.Cbor.Tests
 import Tests.UPLC.BlueprintEncoding.CtfTests

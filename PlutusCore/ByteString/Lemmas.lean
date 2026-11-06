@@ -49,7 +49,7 @@ open PlutusCore.Bytes
 
 set_option maxRecDepth 100000 in
 theorem byteStr_eq_ofUInt8 : ∀ b, b < 256 → byteStr b = String.singleton (Char.ofUInt8 b.toUInt8) := by
-  decide
+  intro b; rw [byteStr_def]; revert b; decide
 
 theorem consByteStringV1_eq_cons (n : Integer) (bs : ByteString) :
     consByteStringV1 n bs =

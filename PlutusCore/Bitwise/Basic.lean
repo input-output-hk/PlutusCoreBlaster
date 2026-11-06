@@ -95,7 +95,7 @@ def bstoi_be_loop : Nat → String → Nat → Nat
   | n + 1, s, acc =>
     match uncons s with
     | none        => acc
-    | some (b, t) => bstoi_be_loop n t (acc * 256 + b)
+    | some ⟨b, t⟩ => bstoi_be_loop n t (acc * 256 + b)
 
 /-- `bstoi_be_loop` over the characters, for compiled code. -/
 def bstoiBeGo : Nat → List Char → Nat → Nat
@@ -124,7 +124,7 @@ def bstoi_le_loop : Nat → String → Nat
   | n + 1, s =>
     match uncons s with
     | none        => 0
-    | some (b, t) => b + 256 * bstoi_le_loop n t
+    | some ⟨b, t⟩ => b + 256 * bstoi_le_loop n t
 
 theorem bstoi_le_loop_take_foldr (n : Nat) (l : List Char) :
     bstoi_le_loop n ⟨l⟩ = (l.take n).foldr (fun c acc => acc * 256 + c.toNat) 0 := by
@@ -262,9 +262,9 @@ def logicLoop (o : LogicOp) (e : Bool) : Nat → String → String → String
   | 0    , _, _ => ""
   | n + 1, b, c =>
     match uncons b, uncons c with
-    | some (x, b'), some (y, c') => byteStr (o.byte (x % 256) (y % 256)) ++ logicLoop o e n b' c'
-    | some (x, b'), none         => if e then byteStr (o.byte (x % 256) o.pad) ++ logicLoop o e n b' c else ""
-    | none        , some (y, c') => if e then byteStr (o.byte o.pad (y % 256)) ++ logicLoop o e n b c' else ""
+    | some ⟨x, b'⟩, some ⟨y, c'⟩ => byteStr (o.byte (x % 256) (y % 256)) ++ logicLoop o e n b' c'
+    | some ⟨x, b'⟩, none         => if e then byteStr (o.byte (x % 256) o.pad) ++ logicLoop o e n b' c else ""
+    | none        , some ⟨y, c'⟩ => if e then byteStr (o.byte o.pad (y % 256)) ++ logicLoop o e n b c' else ""
     | none        , none         => ""
 
 /-- `acc ++ logicLoop o e n ⟨b⟩ ⟨c⟩`, tail recursively, for compiled code. -/
@@ -307,7 +307,7 @@ def complementLoop : Nat → String → String
   | n + 1, s =>
     match uncons s with
     | none        => ""
-    | some (x, t) => byteStr (255 - x % 256) ++ complementLoop n t
+    | some ⟨x, t⟩ => byteStr (255 - x % 256) ++ complementLoop n t
 
 /-- `acc ++ complementLoop n ⟨l⟩`, tail recursively, for compiled code. -/
 def complementGo : Nat → List Char → String → String
@@ -346,10 +346,10 @@ def shlLoop (r last : Nat) : Nat → String → String
   | n + 1, s =>
     match uncons s with
     | none        => ""
-    | some (x, t) =>
+    | some ⟨x, t⟩ =>
       let y := match uncons t with
                | none        => last
-               | some (y, _) => y % 256
+               | some ⟨y, _⟩ => y % 256
       byteStr (shlByte r (x % 256) y) ++ shlLoop r last n t
 
 /-- `acc ++ shlLoop r last n ⟨l⟩`, tail recursively, for compiled code. -/
@@ -385,7 +385,7 @@ def shrLoop (r : Nat) : Nat → Nat → String → String
   | n + 1, p, s =>
     match uncons s with
     | none        => ""
-    | some (x, t) => byteStr (shrByte r p (x % 256)) ++ shrLoop r n (x % 256) t
+    | some ⟨x, t⟩ => byteStr (shrByte r p (x % 256)) ++ shrLoop r n (x % 256) t
 
 /-- `acc ++ shrLoop r n p ⟨l⟩`, tail recursively, for compiled code. -/
 def shrGo (r : Nat) : Nat → Nat → List Char → String → String
@@ -433,7 +433,7 @@ def rotateByteString (s : String) (k : Integer) : String :=
   let u     := dropB (a / 8) s ++ takeB (a / 8) s
   let first := match uncons u with
                | none        => 0
-               | some (x, _) => x % 256
+               | some ⟨x, _⟩ => x % 256
   shlLoop (a % 8) first len u
 
 /-! ### Counting, reading and writing bits
@@ -446,7 +446,7 @@ def countSetBitsLoop : Nat → String → Nat
   | n + 1, s =>
     match uncons s with
     | none        => 0
-    | some (x, t) => popCount (x % 256) + countSetBitsLoop n t
+    | some ⟨x, t⟩ => popCount (x % 256) + countSetBitsLoop n t
 
 /-- `acc + countSetBitsLoop n ⟨l⟩`, tail recursively, for compiled code. -/
 def countSetBitsGo : Nat → List Char → Nat → Nat
@@ -479,7 +479,7 @@ def findFirstSetBitLoop : Nat → String → Integer → Integer
   | n + 1, s, acc =>
     match uncons s with
     | none        => acc
-    | some (x, t) =>
+    | some ⟨x, t⟩ =>
       findFirstSetBitLoop n t (if x % 256 = 0 then acc else .ofNat (8 * t.length + lowestSetBit (x % 256)))
 
 /-- `findFirstSetBitLoop` over the characters, for compiled code; `len` is the length of the list,
@@ -522,7 +522,7 @@ def readBit : String → Integer → Except String Bool
       else
         match uncons (dropB (len - i / 8 - 1) s) with
         | none        => pure false -- unreachable: `i / 8 < len`
-        | some (x, _) => pure (bitAt (x % 256) (i % 8) = 1)
+        | some ⟨x, _⟩ => pure (bitAt (x % 256) (i % 8) = 1)
 
 /-- Writes the value of the nth bit in the bytestring.
     Bits are indexed from the _right_. -/
@@ -535,7 +535,7 @@ def writeBit : String → Integer → Bool → Except String String
         let j := len - i / 8 - 1
         match uncons (dropB j s) with
         | none        => pure s -- unreachable: `i / 8 < len`
-        | some (b, t) => pure (takeB j s ++ byteStr (setBitAt (b % 256) (i % 8) x) ++ t)
+        | some ⟨b, t⟩ => pure (takeB j s ++ byteStr (setBitAt (b % 256) (i % 8) x) ++ t)
 
 /-- Writes the value of the list of bits in the bytestring.
     Bits are indexed from the _right_. -/

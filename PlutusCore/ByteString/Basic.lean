@@ -182,7 +182,7 @@ def indexByteString (bs : ByteString) (j : Integer) : Except String Integer :=
   else
     match uncons (dropB j.toNat bs.data) with
     | none => throw "indexByteString: index out of bounds"
-    | some (b, _) => pure b
+    | some ⟨b, _⟩ => pure b
 
 
 def equalsByteString (b1 : ByteString) (b2 : ByteString) : Bool := b1 == b2

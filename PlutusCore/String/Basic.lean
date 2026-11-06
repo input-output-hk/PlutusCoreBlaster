@@ -65,7 +65,7 @@ where
     | n + 1, s =>
       match uncons s with
       | none        => ""
-      | some (c, t) => utf8EncodeCode c ++ loop n t
+      | some ⟨c, t⟩ => utf8EncodeCode c ++ loop n t
 
 /-- `acc ++ encodeUtf8.loop n ⟨l⟩`, tail recursively, for compiled code. `encodeUtf8.loop` reads
     with `uncons`, which copies the rest of the string, and takes a stack frame per character. -/
@@ -160,7 +160,7 @@ where
     | n + 1, s, acc =>
       match uncons s with
       | none          => pure acc
-      | some (b₀, t₀) =>
+      | some ⟨b₀, t₀⟩ =>
         let c₀ := b₀ % 256
         -- 0xxxxxxx
         if c₀ < 0x80 then loop n t₀ (acc ++ cpStr c₀)
@@ -168,7 +168,7 @@ where
         else if c₀ / 0x20 == 0x06 then
           match uncons t₀ with
           | none          => invalid
-          | some (b₁, t₁) =>
+          | some ⟨b₁, t₁⟩ =>
             let c₁ := b₁ % 256
             let r := (c₀ % 0x20) * 0x40 + c₁ % 0x40
             if cont c₁ && 0x80 ≤ r
@@ -178,10 +178,10 @@ where
         else if c₀ / 0x10 == 0x0e then
           match uncons t₀ with
           | none          => invalid
-          | some (b₁, t₁) =>
+          | some ⟨b₁, t₁⟩ =>
             match uncons t₁ with
             | none          => invalid
-            | some (b₂, t₂) =>
+            | some ⟨b₂, t₂⟩ =>
               let c₁ := b₁ % 256
               let c₂ := b₂ % 256
               let r := (c₀ % 0x10) * 0x1000 + (c₁ % 0x40) * 0x40 + c₂ % 0x40
@@ -192,13 +192,13 @@ where
         else if c₀ / 0x08 == 0x1e then
           match uncons t₀ with
           | none          => invalid
-          | some (b₁, t₁) =>
+          | some ⟨b₁, t₁⟩ =>
             match uncons t₁ with
             | none          => invalid
-            | some (b₂, t₂) =>
+            | some ⟨b₂, t₂⟩ =>
               match uncons t₂ with
               | none          => invalid
-              | some (b₃, t₃) =>
+              | some ⟨b₃, t₃⟩ =>
                 let c₁ := b₁ % 256
                 let c₂ := b₂ % 256
                 let c₃ := b₃ % 256
