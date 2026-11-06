@@ -30,11 +30,14 @@ The seal costs two things.
 * `rfl` and `decide` stop at the seal too. `with_unfolding_all rfl`, `decide +kernel`,
   `native_decide`, `#eval` and `#guard` all still evaluate readers.
 
-Compiled code (`#eval`, `#guard`, `native_decide`) does not run `uncons`, `takeB` and `dropB` as
-written, which would turn the rest of the string into a `List Char` and back at every byte.
-`@[csimp]` theorems (`unconsString_eq_fast`, `takeB_eq_impl`, `dropB_eq_impl`) replace them with
-equal functions that work on the UTF-8 bytes or take a single pass. Being theorems, they add
-nothing to what has to be trusted.
+Compiled code (`#eval`, `#guard`, `native_decide`) does not run `uncons`, `takeB`, `dropB`,
+`byteStr` and `repB` as written, which would turn the rest of the string into a `List Char` and
+back at every byte, walk the table, or take a stack frame per byte. `@[csimp]` theorems
+(`unconsString_eq_fast`, `takeB_eq_impl`, `dropB_eq_impl`, `byteStr_eq_impl`, `repB_eq_impl`)
+replace them with equal functions that work on the UTF-8 bytes or take a single pass. The loops of
+the builtins get the same treatment where they are defined: each is followed by a tail-recursive
+version over the `List Char` and a `@[csimp]` theorem, since `uncons` copies the rest of the
+string. Being theorems, they add nothing to what has to be trusted.
 -/
 
 namespace PlutusCore.Bytes
@@ -178,11 +181,17 @@ def UnconsOk (s : String) : Option (Nat × String) → Prop
   | some (b, t) => s.length = t.length + 1 ∧ s = cpStr b ++ t ∧ (b < 256 → s = byteStr b ++ t)
 
 /-- Everything a solver needs to know about the sealed pair. Proved by `spec`; pass it to Blaster
-    as a premise. -/
+    as a premise.
+
+    The last conjunct fixes the code that `uncons` returns for a string that starts with a byte.
+    `UnconsOk` alone does not: it relates that code to the string only through `cpStr`, which is
+    pinned down for codes below 256 only, so a solver could take `cpStr 261 = "\x05"` and read
+    `"\x05"` as 261. -/
 def Spec : Prop :=
   (∀ s, UnconsOk s (uncons s)) ∧
   (∀ c, (cpStr c : String).length = 1) ∧
-  (∀ c, c < 256 → cpStr c = byteStr c)
+  (∀ c, c < 256 → cpStr c = byteStr c) ∧
+  (∀ b t, b < 256 → uncons (byteStr b ++ t) = some (b, t))
 
 /-! ## Unfolding the sealed pair -/
 
@@ -220,9 +229,35 @@ theorem byteStr_eq_cpStr (b : Nat) (h : b < 256) : byteStr b = cpStr b := by
 theorem byteStr_length (b : Nat) (h : b < 256) : (byteStr b).length = 1 := by
   rw [byteStr_eq_cpStr b h, cpStr_length]
 
+set_option maxRecDepth 10000 in
+theorem byteTable_length : byteTable.length = 256 := rfl
+
+/-- `byteStr` for compiled code, without walking the table; `byteStr_eq_impl` makes the compiler
+    use it. -/
+def byteStrImpl (k : Nat) : String := if k < 256 then String.singleton (Char.ofNat k) else ""
+
+@[csimp] theorem byteStr_eq_impl : @byteStr = @byteStrImpl := by
+  funext k
+  unfold byteStrImpl
+  split
+  · exact byteStr_eq k ‹_›
+  · rw [byteStr, List.getD_eq_getElem?_getD, List.getElem?_eq_none (by rw [byteTable_length]; omega)]
+    rfl
+
+theorem toNat_ofNat_byte (b : Nat) (h : b < 256) : (Char.ofNat b).toNat = b := by
+  have hv : b.isValidChar := Or.inl (Nat.lt_trans h (by decide))
+  rw [Char.ofNat, dif_pos hv]
+  rfl
+
+theorem uncons_byteStr_append (b : Nat) (t : String) (h : b < 256) :
+    uncons (byteStr b ++ t) = some (b, t) := by
+  rw [byteStr_eq b h]
+  show uncons (String.mk (Char.ofNat b :: t.data)) = _
+  rw [uncons_cons, toNat_ofNat_byte b h]
+
 /-- The sealed pair meets `Spec`. No axioms are involved. -/
 theorem spec : Spec := by
-  refine ⟨?_, cpStr_length, fun c h => (byteStr_eq_cpStr c h).symm⟩
+  refine ⟨?_, cpStr_length, fun c h => (byteStr_eq_cpStr c h).symm, uncons_byteStr_append⟩
   intro s
   obtain ⟨l⟩ := s
   cases l with
@@ -277,5 +312,22 @@ theorem repB_eq (n b : Nat) (h : b < 256) : repB n b = String.mk (List.replicate
   induction n with
   | zero => rfl
   | succ n ih => rw [repB, ih, byteStr_eq b h]; rfl
+
+/-- `acc ++ repB n b`, tail recursively, for compiled code. -/
+def repBGo : Nat → Nat → String → String
+  | 0    , _, acc => acc
+  | n + 1, b, acc => repBGo n b (acc ++ byteStr b)
+
+theorem repBGo_eq (n b : Nat) (acc : String) : repBGo n b acc = acc ++ repB n b := by
+  induction n generalizing acc with
+  | zero => rw [repBGo, repB, String.append_empty]
+  | succ n ih => rw [repBGo, ih, repB, String.append_assoc]
+
+/-- `repB` for compiled code, without a stack frame per byte; `repB_eq_impl` makes the compiler use
+    it. -/
+def repBImpl (n b : Nat) : String := repBGo n b ""
+
+@[csimp] theorem repB_eq_impl : @repB = @repBImpl := by
+  funext n b; rw [repBImpl, repBGo_eq, String.empty_append]
 
 end PlutusCore.Bytes

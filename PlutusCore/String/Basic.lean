@@ -2,7 +2,7 @@ import PlutusCore.ByteString.Basic
 
 namespace PlutusCore.String
 open PlutusCore.ByteString
-open PlutusCore.Bytes (byteStr uncons cpStr)
+open PlutusCore.Bytes (byteStr uncons cpStr uncons_cons uncons_nil)
 
 /-! ## Formalisation for PlutusCore String representation and builtin functions. -/
 
@@ -66,6 +66,28 @@ where
       match uncons s with
       | none        => ""
       | some (c, t) => utf8EncodeCode c ++ loop n t
+
+/-- `acc ++ encodeUtf8.loop n ⟨l⟩`, tail recursively, for compiled code. `encodeUtf8.loop` reads
+    with `uncons`, which copies the rest of the string, and takes a stack frame per character. -/
+def encodeUtf8Go : Nat → List Char → String → String
+  | 0    , _      , acc => acc
+  | _ + 1, []     , acc => acc
+  | n + 1, c :: cs, acc => encodeUtf8Go n cs (acc ++ utf8EncodeCode c.toNat)
+
+theorem encodeUtf8Go_eq (n : Nat) (l : List Char) (acc : String) :
+    encodeUtf8Go n l acc = acc ++ encodeUtf8.loop n ⟨l⟩ := by
+  induction n generalizing l acc with
+  | zero => rw [encodeUtf8Go, encodeUtf8.loop, String.append_empty]
+  | succ n ih =>
+    cases l with
+    | nil => rw [encodeUtf8Go, encodeUtf8.loop, uncons_nil, String.append_empty]
+    | cons c cs => rw [encodeUtf8Go, encodeUtf8.loop, uncons_cons, ih, String.append_assoc]
+
+def encodeUtf8Impl (s : String) : ByteString := ⟨encodeUtf8Go s.length s.data ""⟩
+
+/-- Compiled code runs `encodeUtf8Impl` for `encodeUtf8`. -/
+@[csimp] theorem encodeUtf8_eq_impl : @encodeUtf8 = @encodeUtf8Impl := by
+  funext s; rw [encodeUtf8, encodeUtf8Impl, encodeUtf8Go_eq, String.empty_append]
 
 def utf8DecodeChar? (a : List Char) (i : Nat) : Option Char := do
   let u ← a[i]?
@@ -185,6 +207,69 @@ where
                 then loop n t₃ (acc ++ cpStr r)
                 else invalid
         else invalid
+
+/-- `decodeUtf8.loop` over the characters, for compiled code. `decodeUtf8.loop` reads with
+    `uncons`, which copies the rest of the string. -/
+def decodeUtf8Go : Nat → List Char → String → Except String String
+  | 0    , _       , acc => pure acc
+  | _ + 1, []      , acc => pure acc
+  | n + 1, b₀ :: t₀, acc =>
+    let c₀ := b₀.toNat % 256
+    if c₀ < 0x80 then decodeUtf8Go n t₀ (acc ++ cpStr c₀)
+    else if c₀ / 0x20 == 0x06 then
+      match t₀ with
+      | []       => decodeUtf8.invalid
+      | b₁ :: t₁ =>
+        let c₁ := b₁.toNat % 256
+        let r := (c₀ % 0x20) * 0x40 + c₁ % 0x40
+        if decodeUtf8.cont c₁ && 0x80 ≤ r
+        then decodeUtf8Go n t₁ (acc ++ cpStr r)
+        else decodeUtf8.invalid
+    else if c₀ / 0x10 == 0x0e then
+      match t₀ with
+      | []       => decodeUtf8.invalid
+      | b₁ :: t₁ =>
+        match t₁ with
+        | []       => decodeUtf8.invalid
+        | b₂ :: t₂ =>
+          let c₁ := b₁.toNat % 256
+          let c₂ := b₂.toNat % 256
+          let r := (c₀ % 0x10) * 0x1000 + (c₁ % 0x40) * 0x40 + c₂ % 0x40
+          if decodeUtf8.cont c₁ && decodeUtf8.cont c₂ && 0x800 ≤ r && (r < 0xd800 || (0xdfff < r && r < 0x110000))
+          then decodeUtf8Go n t₂ (acc ++ cpStr r)
+          else decodeUtf8.invalid
+    else if c₀ / 0x08 == 0x1e then
+      match t₀ with
+      | []       => decodeUtf8.invalid
+      | b₁ :: t₁ =>
+        match t₁ with
+        | []       => decodeUtf8.invalid
+        | b₂ :: t₂ =>
+          match t₂ with
+          | []       => decodeUtf8.invalid
+          | b₃ :: t₃ =>
+            let c₁ := b₁.toNat % 256
+            let c₂ := b₂.toNat % 256
+            let c₃ := b₃.toNat % 256
+            let r := (c₀ % 0x08) * 0x40000 + (c₁ % 0x40) * 0x1000 + (c₂ % 0x40) * 0x40 + c₃ % 0x40
+            if decodeUtf8.cont c₁ && decodeUtf8.cont c₂ && decodeUtf8.cont c₃ && 0x10000 ≤ r && r < 0x110000
+            then decodeUtf8Go n t₃ (acc ++ cpStr r)
+            else decodeUtf8.invalid
+    else decodeUtf8.invalid
+
+theorem decodeUtf8Go_eq (n : Nat) (l : List Char) (acc : String) :
+    decodeUtf8Go n l acc = decodeUtf8.loop n ⟨l⟩ acc := by
+  induction n generalizing l acc with
+  | zero => rw [decodeUtf8Go, decodeUtf8.loop]
+  | succ n ih =>
+    rcases l with _ | ⟨b₀, _ | ⟨b₁, _ | ⟨b₂, _ | ⟨b₃, t⟩⟩⟩⟩ <;>
+      simp only [decodeUtf8Go, decodeUtf8.loop, uncons_cons, uncons_nil, ih]
+
+def decodeUtf8Impl (bs : ByteString) : Except String String := decodeUtf8Go bs.length bs.data.data ""
+
+/-- Compiled code runs `decodeUtf8Impl` for `decodeUtf8`. -/
+@[csimp] theorem decodeUtf8_eq_impl : @decodeUtf8 = @decodeUtf8Impl := by
+  funext bs; rw [decodeUtf8, decodeUtf8Impl, decodeUtf8Go_eq]
 
 end PlutusCore.StringInternal
 

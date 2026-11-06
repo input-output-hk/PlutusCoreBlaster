@@ -235,6 +235,31 @@ def bitIndices (len : Nat) : List Integer :=
   | .ok s => s.length == 8192 && PlutusCore.Bitwise.byteStringToInteger true s == n
   | .error _ => false
 
+/-! ## Long inputs
+
+Compiled code runs each byte loop as a single tail-recursive pass (the `@[csimp]` theorems next to
+the loops). As written, the loops take a stack frame per byte and copy the rest of the string at
+each one; on these inputs that overflowed the stack and aborted Lean. -/
+
+/-- 200,000 bytes `a` (`0x61`, three bits set) and as many `b`s. -/
+def longA : String := String.mk (List.replicate 200000 'a')
+def longB : String := String.mk (List.replicate 200000 'b')
+
+#guard (PlutusCore.Bitwise.andByteString true longA longB).length == 200000
+#guard (PlutusCore.Bitwise.xorByteString false longA longB).length == 200000
+#guard (PlutusCore.Bitwise.complementByteString longA).length == 200000
+#guard (PlutusCore.Bitwise.shiftByteString longA 13).length == 200000
+#guard (PlutusCore.Bitwise.shiftByteString longA (-13)).length == 200000
+#guard (PlutusCore.Bitwise.shiftByteString longA (8 * 199999)).length == 200000
+#guard (PlutusCore.Bitwise.rotateByteString longA 13).length == 200000
+#guard PlutusCore.Bitwise.countSetBits longA == 600000
+#guard PlutusCore.Bitwise.findFirstSetBit longA == 0
+#guard (PlutusCore.String.encodeUtf8 longA).length == 200000
+#guard (PlutusCore.String.decodeUtf8 ⟨longA⟩).toOption == some longA
+#guard (PlutusCore.Bitwise.replicateByte 8192 0x61).toOption == some (longA.take 8192)
+#guard PlutusCore.Bitwise.byteStringToInteger true  (longA.take 20000) ==
+       PlutusCore.Bitwise.byteStringToInteger false (longA.take 20000)
+
 /-! ## Proofs about concrete values go through the seal
 
 `rfl` and `decide` stop at the sealed `PlutusCore.Bytes.uncons`; unfolding everything does not. -/

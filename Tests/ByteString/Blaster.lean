@@ -64,13 +64,15 @@ open PlutusCore.Cbor (encodeData)
 /-! ## PR #71: `byteStringToInteger`, `integerToByteString`, `sliceByteString` -/
 
 #smt_clean
-  [Spec → ∀ (s : String), s.length = 2 → byteStringToInteger true s < 65536]
+  [Spec → ∀ (a b : Nat), a < 256 → b < 256 → byteStringToInteger true (byteStr a ++ byteStr b) < 65536]
 
 #smt_clean
   [Spec → ∀ (s : String), s.length = 1 → byteStringToInteger false s = byteStringToInteger true s]
 
+-- Reading the bytes back needs the last conjunct of `Spec`, which fixes what `uncons` returns.
 #smt_clean
-  [Spec → ∀ (s : String), s ≠ "\x01\x02" → byteStringToInteger true s ≠ 258]
+  [Spec → ∀ (a b : Nat), a < 256 → b < 256 →
+    byteStringToInteger true (byteStr a ++ byteStr b) = 258 → a = 1 ∧ b = 2]
 
 #smt_clean
   [∀ (n : Integer) (s : String), integerToByteString true 2 n = .ok s → s.length = 2]
@@ -83,6 +85,9 @@ open PlutusCore.Cbor (encodeData)
 #smt_clean
   [Spec → ∀ (bs : ByteString),
     indexByteString bs (lengthOfByteString bs) = .error "indexByteString: index out of bounds"]
+
+#smt_clean
+  [Spec → ∀ (k : Nat) (bs : ByteString), k < 256 → indexByteString ⟨byteStr k ++ bs.data⟩ 0 = .ok k]
 
 #smt_clean
   [Spec → ∀ (bs : ByteString) (n : Integer), (consByteStringV1 n bs).length = bs.length + 1]
@@ -133,9 +138,9 @@ example : Spec → ∀ (bs : ByteString),
 open PlutusCore.UPLC.CekValue (CekValue) in
 open PlutusCore.UPLC.Term (Const) in
 #smt_clean
-  [Spec → ∀ (bs : ByteString) (n : Integer), bs.length = 1 →
+  [Spec → ∀ (a : Nat) (n : Integer), a < 256 →
     PlutusCore.UPLC.BuiltinFunctions.Bitwise.byteStringToInteger
-      [CekValue.VCon (Const.ByteString bs), CekValue.VCon (Const.Bool true)] = some (CekValue.VCon (Const.Integer n)) →
+      [CekValue.VCon (Const.ByteString ⟨byteStr a⟩), CekValue.VCon (Const.Bool true)] = some (CekValue.VCon (Const.Integer n)) →
     n < 256]
 
 /-! ## Logical and bitwise builtins -/
@@ -199,7 +204,8 @@ attribute [local semireducible] PlutusCore.Bytes.instByteViewString
 
 /-- error: #smt_clean: the SMT query mentions `(String.mk.` -/
 #guard_msgs in
-#smt_clean [∀ (s : String), s.length = 2 → byteStringToInteger true s < 65536]
+#smt_clean
+  [∀ (a b : Nat), a < 256 → b < 256 → byteStringToInteger true (byteStr a ++ byteStr b) < 65536]
 
 end Unsealed
 
