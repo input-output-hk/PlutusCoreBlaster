@@ -48,8 +48,6 @@ concurrency:
 
 env:
   LEAN_VERSION: "4.24.0"
-  Z3_VERSION: "4.15.2"
-  GLIBC_Z3: "2.39"
   # Where the benchmark run directory goes, relative to the PlutusCoreBlaster checkout.
   RUN_DIR: Benchmark/results/ci
   ARTIFACT: prep-uplc-benchmark-${{ github.run_id }}
@@ -220,12 +218,34 @@ jobs:
           elan toolchain install ${{ env.LEAN_VERSION }}
           elan default ${{ env.LEAN_VERSION }}
 
-      - name: Install Z3
+      - name: Resolve upstream Z3 revision
+        id: z3
         run: |
-          cd /home/runner/
-          wget -q https://github.com/Z3Prover/z3/releases/download/z3-${{ env.Z3_VERSION }}/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
-          unzip -q z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
-          echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
+          revision=$(git ls-remote https://github.com/Z3Prover/z3.git refs/heads/master | cut -f1)
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$revision" >> "$GITHUB_OUTPUT"
+      - name: Restore Z3 build
+        uses: actions/cache@v4
+        id: z3-cache
+        with:
+          path: ${{ runner.temp }}/z3
+          key: z3-${{ runner.os }}-${{ runner.arch }}-${{ steps.z3.outputs.sha }}
+      - name: Build upstream Z3
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        env:
+          Z3_REVISION: ${{ steps.z3.outputs.sha }}
+        run: |
+          git init "$RUNNER_TEMP/z3-src"
+          git -C "$RUNNER_TEMP/z3-src" fetch --depth 1 https://github.com/Z3Prover/z3.git "$Z3_REVISION"
+          git -C "$RUNNER_TEMP/z3-src" checkout --detach "$Z3_REVISION"
+          cmake -S "$RUNNER_TEMP/z3-src" -B "$RUNNER_TEMP/z3-src/build" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/z3" \
+            -DZ3_BUILD_LIBZ3_SHARED=OFF -DZ3_BUILD_PYTHON_BINDINGS=OFF \
+            -DZ3_BUILD_TEST_EXECUTABLES=OFF
+          cmake --build "$RUNNER_TEMP/z3-src/build" --parallel 2
+          cmake --install "$RUNNER_TEMP/z3-src/build"
+      - name: Add Z3 to PATH
+        run: echo "$RUNNER_TEMP/z3/bin" >> "$GITHUB_PATH"
 
       - name: Tools version
         run: |
