@@ -14,6 +14,8 @@ concurrency:
 
 env:
   LEAN_VERSION: "4.24.0"
+  Z3_VERSION: "master"
+  GLIBC_Z3: "2.39"
 
 jobs:
   build:
@@ -27,23 +29,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: PlutusCoreBlaster
-      - name: Read pinned Blaster revision
-        id: blaster
-        working-directory: PlutusCoreBlaster
-        run: |
-          python3 - <<'PYCODE'
-          import json, os, re
-          rev = json.load(open('scripts/assurance-workspace.json'))['blasterCommit']
-          assert re.fullmatch('[0-9a-f]{40}', rev)
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              print('ref=' + rev, file=out)
-          PYCODE
-      - name: Checkout coordinated Blaster
-        uses: actions/checkout@v6
-        with:
-          repository: input-output-hk/Lean-blaster
-          ref: ${{ steps.blaster.outputs.ref }}
-          path: Lean-blaster
       - name: Setup Lean
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
@@ -55,16 +40,54 @@ jobs:
           elan toolchain install ${{ env.LEAN_VERSION }}
           elan default ${{ env.LEAN_VERSION }}
 
-      - uses: actions/cache@v4
-        id: solver
+      - name: Install Z3 (release)
+        if: env.Z3_VERSION != 'master'
+        run: |
+          cd /home/runner/
+          wget -q https://github.com/Z3Prover/z3/releases/download/z3-${{ env.Z3_VERSION }}/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          unzip -q z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          chmod +x z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}.zip
+          echo "/home/runner/z3-${{ env.Z3_VERSION }}-x64-glibc-${{ env.GLIBC_Z3 }}/bin" >> $GITHUB_PATH
+
+      - name: Resolve Z3 master commit
+        if: env.Z3_VERSION == 'master'
+        id: z3-master
+        run: |
+          sha=$(git ls-remote https://github.com/Z3Prover/z3.git refs/heads/master | cut -f1)
+          echo "sha=$sha" >> $GITHUB_OUTPUT
+
+      - name: Restore cached Z3 master build
+        if: env.Z3_VERSION == 'master'
+        id: z3-master-cache
+        uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/assurance-z3
-          key: assurance-z3-${{ runner.os }}-${{ hashFiles('Lean-blaster/scripts/build-assurance-z3.sh') }}
-      - name: Build compatible solver
-        if: steps.solver.outputs.cache-hit != 'true'
-        run: bash ../Lean-blaster/scripts/build-assurance-z3.sh "$RUNNER_TEMP/assurance-z3"
-      - name: Select solver
-        run: echo "$RUNNER_TEMP/assurance-z3/bin" >> "$GITHUB_PATH"
+          path: /home/runner/z3-master
+          key: z3-master-${{ runner.os }}-${{ env.ImageOS }}-${{ steps.z3-master.outputs.sha }}
+
+      - name: Build Z3 from master
+        if: env.Z3_VERSION == 'master' && steps.z3-master-cache.outputs.cache-hit != 'true'
+        run: |
+          cd /home/runner/
+          git clone --depth 1 --branch master https://github.com/Z3Prover/z3.git z3-src
+          cmake -S z3-src -B z3-src/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DZ3_BUILD_LIBZ3_SHARED=OFF \
+            -DZ3_BUILD_PYTHON_BINDINGS=OFF \
+            -DZ3_BUILD_TEST_EXECUTABLES=OFF \
+            -DCMAKE_INSTALL_PREFIX=/home/runner/z3-master
+          cmake --build z3-src/build -j"$(nproc)"
+          cmake --install z3-src/build
+
+      - name: Save Z3 master build
+        if: env.Z3_VERSION == 'master' && steps.z3-master-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/z3-master
+          key: ${{ steps.z3-master-cache.outputs.cache-primary-key }}
+
+      - name: Add Z3 master to PATH
+        if: env.Z3_VERSION == 'master'
+        run: echo "/home/runner/z3-master/bin" >> $GITHUB_PATH
 
       - name: Tools version
         run: |
