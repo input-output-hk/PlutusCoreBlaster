@@ -43,6 +43,8 @@ concurrency:
 
 env:
   LEAN_VERSION: "4.24.0"
+  Z3_VERSION: "master"
+  GLIBC_Z3: "2.39"
 
 jobs:
   # Checks the trigger and prepares the run. Never runs the PR's code.
@@ -190,20 +192,32 @@ jobs:
           path: PlutusCoreBlaster
           persist-credentials: false
 
+      - name: Install Z3 release
+        if: env.Z3_VERSION != 'master'
+        run: |
+          archive="z3-${Z3_VERSION}-x64-glibc-${GLIBC_Z3}"
+          curl -fsSL "https://github.com/Z3Prover/z3/releases/download/z3-${Z3_VERSION}/${archive}.zip" \
+            -o "$RUNNER_TEMP/z3.zip"
+          unzip -q "$RUNNER_TEMP/z3.zip" -d "$RUNNER_TEMP/z3-release"
+          echo "$RUNNER_TEMP/z3-release/$archive/bin" >> "$GITHUB_PATH"
+
       - name: Resolve upstream Z3 revision
+        if: env.Z3_VERSION == 'master'
         id: z3
         run: |
           revision=$(git ls-remote https://github.com/Z3Prover/z3.git refs/heads/master | cut -f1)
           [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=$revision" >> "$GITHUB_OUTPUT"
       - name: Restore Z3 build
-        uses: actions/cache@v4
+        if: env.Z3_VERSION == 'master'
+        uses: actions/cache/restore@v4
         id: z3-cache
         with:
           path: ${{ runner.temp }}/z3
           key: z3-${{ runner.os }}-${{ runner.arch }}-${{ steps.z3.outputs.sha }}
       - name: Build upstream Z3
-        if: steps.z3-cache.outputs.cache-hit != 'true'
+        id: z3-build
+        if: env.Z3_VERSION == 'master' && steps.z3-cache.outputs.cache-hit != 'true'
         env:
           Z3_REVISION: ${{ steps.z3.outputs.sha }}
         run: |
@@ -214,9 +228,17 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/z3" \
             -DZ3_BUILD_LIBZ3_SHARED=OFF -DZ3_BUILD_PYTHON_BINDINGS=OFF \
             -DZ3_BUILD_TEST_EXECUTABLES=OFF
-          cmake --build "$RUNNER_TEMP/z3-src/build" --parallel 2
+          cmake --build "$RUNNER_TEMP/z3-src/build" -j"$(nproc)"
           cmake --install "$RUNNER_TEMP/z3-src/build"
+      # Save before project builds and tests, so their failures do not discard Z3.
+      - name: Save Z3 build
+        if: env.Z3_VERSION == 'master' && steps.z3-cache.outputs.cache-hit != 'true' && steps.z3-build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/z3
+          key: ${{ steps.z3-cache.outputs.cache-primary-key }}
       - name: Add Z3 to PATH
+        if: env.Z3_VERSION == 'master'
         run: echo "$RUNNER_TEMP/z3/bin" >> "$GITHUB_PATH"
       - name: Z3 version
         run: z3 --version
