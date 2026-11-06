@@ -3,16 +3,17 @@
 usage:
 	@echo "usage: make <command>"
 	@echo "Available commands:"
-# Plutus Core
-	@echo " - build_plutus_core: Build PlutusCore formalization."
-	@echo " - clean_plutus_core: Clean compiled lean files for PlutusCore formalization."
-	@echo " - check_plutus_core: Same as build_plutus_core but also checks that each lean file"
-	@echo "                      in the PlutusCore formalization is considered during compilation."
+	@echo " - Plutus core"
+	@echo "   - build_plutus_core: Build PlutusCore formalization."
+	@echo "   - clean_plutus_core: Clean compiled lean files for PlutusCore formalization."
+	@echo "   - check_plutus_core: Same as build_plutus_core but also checks that each lean file"
+	@echo "                        in the PlutusCore formalization is considered during compilation."
 # Test suite
-	@echo " - build_tests: Build Test suite."
-	@echo " - clean_tests: Clean compiled lean files for the Test suite."
-	@echo " - check_tests: Same as build_tests but also checks that each lean file"
-	@echo "                in the Test suite is considered during compilation."
+	@echo " - Tests"
+	@echo "   - build_tests: Build Test suite."
+	@echo "   - clean_tests: Clean compiled lean files for the Test suite."
+	@echo "   - check_tests: Same as build_tests but also checks that each lean file"
+	@echo "                  in the Test suite is considered during compilation."
 # Conformance test generator
 	@echo " - gen_conformance_tests: (Re)generate the conformance test suite under"
 	@echo "                          Tests/Conformance/Generated/ from CONFORMANCE_ROOT"
