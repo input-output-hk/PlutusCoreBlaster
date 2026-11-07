@@ -77,15 +77,16 @@ def itobs_loop (e : Bool) : Nat → String → Nat → Except String String
 -/
 @[simp]
 def integerToByteString (e : Bool) (w n : Integer) : Except String String :=
-       if w < 0                                       then throw "integerToByteString: negative length argument"
-  else if w > maxOutputLength                         then throw s!"integerToByteString: requested length is too long (maximum is {maxOutputLength} bytes)"
-  else if w = 0 ∧ integerLog2 n ≥ maxOutputBitsLength then throw s!"integerToByteString: input too long (maximum is 2^{maxOutputBitsLength}-1)"
-  else if n < 0                                       then throw "integerToByteString: cannot convert negative Integer"
-  else match w, n with
-       | 0        , 0         => pure ""
-       | 0        , .ofNat n' => itobs_loop e (integerWidth n') "" n'
-       | .ofNat w', .ofNat n' => itobs_loop e w'                "" n'
-       | _        , _         => unreachable!
+       if hw0 : w < 0                                       then throw "integerToByteString: negative length argument"
+  else if hwm : w > maxOutputLength                         then throw s!"integerToByteString: requested length is too long (maximum is {maxOutputLength} bytes)"
+  else if hwn : w = 0 ∧ integerLog2 n ≥ maxOutputBitsLength then throw s!"integerToByteString: input too long (maximum is 2^{maxOutputBitsLength}-1)"
+  else if hn0 : n < 0                                       then throw "integerToByteString: cannot convert negative Integer"
+  else match hw : w, hn : n with
+       | 0         , 0          => pure ""
+       | 0         , .ofNat n'  => itobs_loop e (integerWidth n') "" n'
+       | .ofNat w' , .ofNat n'  => itobs_loop e w'                "" n'
+       | .negSucc _, _          => False.elim (by grind)
+       | _         , .negSucc _ => False.elim (by grind)
 
 /-- Reconstructs a natural number from (at most `n` bytes of) its big-endian representation.
     Tail recursive version, uses accumulator for the calculation.
@@ -104,13 +105,14 @@ def bstoiBeGo : Nat → List Char → Nat → Nat
   | n + 1, x :: t, acc => bstoiBeGo n t (acc * 256 + x.toNat)
 
 theorem bstoiBeGo_eq (n : Nat) (l : List Char) (acc : Nat) :
-    bstoiBeGo n l acc = bstoi_be_loop n ⟨l⟩ acc := by
-  induction n generalizing l acc with
-  | zero => rw [bstoiBeGo, bstoi_be_loop]
-  | succ n ih =>
-    cases l with
-    | nil => rw [bstoiBeGo, bstoi_be_loop, uncons_nil]
-    | cons x t => rw [bstoiBeGo, bstoi_be_loop, uncons_cons, ih]
+  bstoiBeGo n l acc = bstoi_be_loop n ⟨l⟩ acc :=
+    by
+      induction n generalizing l acc with
+      | zero => rw [bstoiBeGo, bstoi_be_loop]
+      | succ n ih =>
+        cases l with
+        | nil => rw [bstoiBeGo, bstoi_be_loop, uncons_nil]
+        | cons x t => rw [bstoiBeGo, bstoi_be_loop, uncons_cons, ih]
 
 def bstoi_be_loopImpl (n : Nat) (s : String) (acc : Nat) : Nat := bstoiBeGo n s.data acc
 
@@ -127,15 +129,16 @@ def bstoi_le_loop : Nat → String → Nat
     | some ⟨b, t⟩ => b + 256 * bstoi_le_loop n t
 
 theorem bstoi_le_loop_take_foldr (n : Nat) (l : List Char) :
-    bstoi_le_loop n ⟨l⟩ = (l.take n).foldr (fun c acc => acc * 256 + c.toNat) 0 := by
-  induction n generalizing l with
-  | zero => rw [bstoi_le_loop]; rfl
-  | succ n ih =>
-    cases l with
-    | nil => rw [bstoi_le_loop, uncons_nil]; rfl
-    | cons x t =>
-      rw [bstoi_le_loop, uncons_cons]; dsimp only
-      rw [ih, List.take_succ_cons, List.foldr_cons, Nat.add_comm, Nat.mul_comm]
+  bstoi_le_loop n ⟨l⟩ = (l.take n).foldr (fun c acc => acc * 256 + c.toNat) 0 :=
+    by
+      induction n generalizing l with
+      | zero => rw [bstoi_le_loop]; rfl
+      | succ n ih =>
+        cases l with
+        | nil => rw [bstoi_le_loop, uncons_nil]; rfl
+        | cons x t =>
+          rw [bstoi_le_loop, uncons_cons]; dsimp only
+          rw [ih, List.take_succ_cons, List.foldr_cons, Nat.add_comm, Nat.mul_comm]
 
 /-- `bstoi_le_loop` for compiled code: the big-endian fold over the reversed characters, tail
     recursive, and multiplying only the accumulator. -/
@@ -172,13 +175,13 @@ def bitAt (a : Nat) : Nat → Nat
 
 /-- `2 ^ i`, for `i < 8`. -/
 def bitVal : Nat → Nat
-  | 0 => 1
-  | 1 => 2
-  | 2 => 4
-  | 3 => 8
-  | 4 => 16
-  | 5 => 32
-  | 6 => 64
+  | 0 =>   1
+  | 1 =>   2
+  | 2 =>   4
+  | 3 =>   8
+  | 4 =>  16
+  | 5 =>  32
+  | 6 =>  64
   | _ => 128
 
 /-- The byte `x` shifted left by `r < 8` bits, with the top `r` bits of the next byte `y` shifted
@@ -261,11 +264,11 @@ def LogicOp.pad : LogicOp → Nat
 def logicLoop (o : LogicOp) (e : Bool) : Nat → String → String → String
   | 0    , _, _ => ""
   | n + 1, b, c =>
-    match uncons b, uncons c with
-    | some ⟨x, b'⟩, some ⟨y, c'⟩ => byteStr (o.byte (x % 256) (y % 256)) ++ logicLoop o e n b' c'
-    | some ⟨x, b'⟩, none         => if e then byteStr (o.byte (x % 256) o.pad) ++ logicLoop o e n b' c else ""
-    | none        , some ⟨y, c'⟩ => if e then byteStr (o.byte o.pad (y % 256)) ++ logicLoop o e n b c' else ""
-    | none        , none         => ""
+      match uncons b, uncons c with
+      | some ⟨x, b'⟩, some ⟨y, c'⟩ => byteStr (o.byte (x % 256) (y % 256)) ++ logicLoop o e n b' c'
+      | some ⟨x, b'⟩, none         => if e then byteStr (o.byte (x % 256) o.pad) ++ logicLoop o e n b' c else ""
+      | none        , some ⟨y, c'⟩ => if e then byteStr (o.byte o.pad (y % 256)) ++ logicLoop o e n b c' else ""
+      | none        , none         => ""
 
 /-- `acc ++ logicLoop o e n ⟨b⟩ ⟨c⟩`, tail recursively, for compiled code. -/
 def logicGo (o : LogicOp) (e : Bool) : Nat → List Char → List Char → String → String
@@ -276,13 +279,14 @@ def logicGo (o : LogicOp) (e : Bool) : Nat → List Char → List Char → Strin
   | _ + 1, []     , []     , acc => acc
 
 theorem logicGo_eq (o : LogicOp) (e : Bool) (n : Nat) (b c : List Char) (acc : String) :
-    logicGo o e n b c acc = acc ++ logicLoop o e n ⟨b⟩ ⟨c⟩ := by
-  induction n generalizing b c acc with
-  | zero => rw [logicGo, logicLoop, String.append_empty]
-  | succ n ih =>
-    cases b <;> cases c <;>
-      simp only [logicGo, logicLoop, uncons_cons, uncons_nil, ih, String.append_assoc, String.append_empty] <;>
-      split <;> simp only [String.append_empty]
+  logicGo o e n b c acc = acc ++ logicLoop o e n ⟨b⟩ ⟨c⟩ :=
+    by
+      induction n generalizing b c acc with
+      | zero => rw [logicGo, logicLoop, String.append_empty]
+      | succ n ih =>
+          cases b <;> cases c <;>
+            simp only [logicGo, logicLoop, uncons_cons, uncons_nil, ih, String.append_assoc, String.append_empty] <;>
+            split <;> simp only [String.append_empty]
 
 def logicLoopImpl (o : LogicOp) (e : Bool) (n : Nat) (b c : String) : String := logicGo o e n b.data c.data ""
 
@@ -297,7 +301,7 @@ def logicOp (o : LogicOp) (e : Bool) (b c : String) : String :=
 /-- Performs bitwise `and` on bytestrings, extending the lengths if the bool argument is true. -/
 def andByteString : Bool → String → String → String := logicOp .and
 /-- Performs bitwise `or` on bytestrings, extending the lengths if the bool argument is true. -/
-def  orByteString : Bool → String → String → String := logicOp .or
+def  orByteString : Bool → String → String → String := logicOp  .or
 /-- Performs bitwise `xor` on bytestrings, extending the lengths if the bool argument is true. -/
 def xorByteString : Bool → String → String → String := logicOp .xor
 
@@ -305,9 +309,9 @@ def xorByteString : Bool → String → String → String := logicOp .xor
 def complementLoop : Nat → String → String
   | 0    , _ => ""
   | n + 1, s =>
-    match uncons s with
-    | none        => ""
-    | some ⟨x, t⟩ => byteStr (255 - x % 256) ++ complementLoop n t
+      match uncons s with
+      | none        => ""
+      | some ⟨x, t⟩ => byteStr (255 - x % 256) ++ complementLoop n t
 
 /-- `acc ++ complementLoop n ⟨l⟩`, tail recursively, for compiled code. -/
 def complementGo : Nat → List Char → String → String
@@ -316,13 +320,14 @@ def complementGo : Nat → List Char → String → String
   | n + 1, c :: cs, acc => complementGo n cs (acc ++ byteStr (255 - c.toNat % 256))
 
 theorem complementGo_eq (n : Nat) (l : List Char) (acc : String) :
-    complementGo n l acc = acc ++ complementLoop n ⟨l⟩ := by
-  induction n generalizing l acc with
-  | zero => rw [complementGo, complementLoop, String.append_empty]
-  | succ n ih =>
-    cases l with
-    | nil => rw [complementGo, complementLoop, uncons_nil, String.append_empty]
-    | cons c cs => rw [complementGo, complementLoop, uncons_cons, ih, String.append_assoc]
+  complementGo n l acc = acc ++ complementLoop n ⟨l⟩ :=
+    by
+      induction n generalizing l acc with
+      | zero => rw [complementGo, complementLoop, String.append_empty]
+      | succ n ih =>
+        cases l with
+        | nil => rw [complementGo, complementLoop, uncons_nil, String.append_empty]
+        | cons c cs => rw [complementGo, complementLoop, uncons_cons, ih, String.append_assoc]
 
 def complementLoopImpl (n : Nat) (s : String) : String := complementGo n s.data ""
 
@@ -344,34 +349,34 @@ towards the start of the string. The byte strings are traversed a byte at a time
 def shlLoop (r last : Nat) : Nat → String → String
   | 0    , _ => ""
   | n + 1, s =>
-    match uncons s with
-    | none        => ""
-    | some ⟨x, t⟩ =>
-      let y := match uncons t with
-               | none        => last
-               | some ⟨y, _⟩ => y % 256
-      byteStr (shlByte r (x % 256) y) ++ shlLoop r last n t
+      match uncons s with
+      | none        => ""
+      | some ⟨x, t⟩ =>
+          let y := match uncons t with
+                   | none        => last
+                   | some ⟨y, _⟩ => y % 256
+          byteStr (shlByte r (x % 256) y) ++ shlLoop r last n t
 
 /-- `acc ++ shlLoop r last n ⟨l⟩`, tail recursively, for compiled code. -/
 def shlGo (r last : Nat) : Nat → List Char → String → String
   | 0    , _     , acc => acc
   | _ + 1, []    , acc => acc
   | n + 1, x :: t, acc =>
-    let y := match t with
-             | []     => last
-             | y :: _ => y.toNat % 256
-    shlGo r last n t (acc ++ byteStr (shlByte r (x.toNat % 256) y))
+      let y := match t with
+               | []     => last
+               | y :: _ => y.toNat % 256
+      shlGo r last n t (acc ++ byteStr (shlByte r (x.toNat % 256) y))
 
 theorem shlGo_eq (r last n : Nat) (l : List Char) (acc : String) :
     shlGo r last n l acc = acc ++ shlLoop r last n ⟨l⟩ := by
   induction n generalizing l acc with
   | zero => rw [shlGo, shlLoop, String.append_empty]
   | succ n ih =>
-    cases l with
-    | nil => rw [shlGo, shlLoop, uncons_nil, String.append_empty]
-    | cons x t =>
-      cases t <;> rw [shlGo, shlLoop, uncons_cons, ih, String.append_assoc] <;>
-        simp only [uncons_cons, uncons_nil]
+      cases l with
+      | nil => rw [shlGo, shlLoop, uncons_nil, String.append_empty]
+      | cons x t =>
+          cases t <;> rw [shlGo, shlLoop, uncons_cons, ih, String.append_assoc] <;>
+            simp only [uncons_cons, uncons_nil]
 
 def shlLoopImpl (r last n : Nat) (s : String) : String := shlGo r last n s.data ""
 
@@ -383,9 +388,9 @@ def shlLoopImpl (r last n : Nat) (s : String) : String := shlGo r last n s.data 
 def shrLoop (r : Nat) : Nat → Nat → String → String
   | 0    , _, _ => ""
   | n + 1, p, s =>
-    match uncons s with
-    | none        => ""
-    | some ⟨x, t⟩ => byteStr (shrByte r p (x % 256)) ++ shrLoop r n (x % 256) t
+      match uncons s with
+      | none        => ""
+      | some ⟨x, t⟩ => byteStr (shrByte r p (x % 256)) ++ shrLoop r n (x % 256) t
 
 /-- `acc ++ shrLoop r n p ⟨l⟩`, tail recursively, for compiled code. -/
 def shrGo (r : Nat) : Nat → Nat → List Char → String → String
@@ -394,13 +399,14 @@ def shrGo (r : Nat) : Nat → Nat → List Char → String → String
   | n + 1, p, x :: t, acc => shrGo r n (x.toNat % 256) t (acc ++ byteStr (shrByte r p (x.toNat % 256)))
 
 theorem shrGo_eq (r n p : Nat) (l : List Char) (acc : String) :
-    shrGo r n p l acc = acc ++ shrLoop r n p ⟨l⟩ := by
-  induction n generalizing p l acc with
-  | zero => rw [shrGo, shrLoop, String.append_empty]
-  | succ n ih =>
-    cases l with
-    | nil => rw [shrGo, shrLoop, uncons_nil, String.append_empty]
-    | cons x t => rw [shrGo, shrLoop, uncons_cons, ih, String.append_assoc]
+  shrGo r n p l acc = acc ++ shrLoop r n p ⟨l⟩ :=
+    by
+      induction n generalizing p l acc with
+      | zero => rw [shrGo, shrLoop, String.append_empty]
+      | succ n ih =>
+          cases l with
+          | nil => rw [shrGo, shrLoop, uncons_nil, String.append_empty]
+          | cons x t => rw [shrGo, shrLoop, uncons_cons, ih, String.append_assoc]
 
 def shrLoopImpl (r n p : Nat) (s : String) : String := shrGo r n p s.data ""
 
@@ -414,11 +420,11 @@ def shiftByteString (s : String) (k : Integer) : String :=
   let len := s.length
   match k with
   | .ofNat n   =>
-    if n < 8 * len then shlLoop (n % 8) 0 len (dropB (n / 8) s) ++ repB (n / 8) 0
-    else repB len 0
+      if n < 8 * len then shlLoop (n % 8) 0 len (dropB (n / 8) s) ++ repB (n / 8) 0
+      else repB len 0
   | .negSucc n =>
-    if n + 1 < 8 * len then repB ((n + 1) / 8) 0 ++ shrLoop ((n + 1) % 8) len 0 (takeB (len - (n + 1) / 8) s)
-    else repB len 0
+      if n + 1 < 8 * len then repB ((n + 1) / 8) 0 ++ shrLoop ((n + 1) % 8) len 0 (takeB (len - (n + 1) / 8) s)
+      else repB len 0
 
 /-- Rotates the bits of `s`
     - `k` places to the left if `k ≥ 0`
@@ -444,9 +450,9 @@ Bits are indexed from the _right_: bit `8 * j + i` is bit `i` of the `j`-th byte
 def countSetBitsLoop : Nat → String → Nat
   | 0    , _ => 0
   | n + 1, s =>
-    match uncons s with
-    | none        => 0
-    | some ⟨x, t⟩ => popCount (x % 256) + countSetBitsLoop n t
+      match uncons s with
+      | none        => 0
+      | some ⟨x, t⟩ => popCount (x % 256) + countSetBitsLoop n t
 
 /-- `acc + countSetBitsLoop n ⟨l⟩`, tail recursively, for compiled code. -/
 def countSetBitsGo : Nat → List Char → Nat → Nat
@@ -455,13 +461,14 @@ def countSetBitsGo : Nat → List Char → Nat → Nat
   | n + 1, x :: t, acc => countSetBitsGo n t (acc + popCount (x.toNat % 256))
 
 theorem countSetBitsGo_eq (n : Nat) (l : List Char) (acc : Nat) :
-    countSetBitsGo n l acc = acc + countSetBitsLoop n ⟨l⟩ := by
-  induction n generalizing l acc with
-  | zero => rw [countSetBitsGo, countSetBitsLoop, Nat.add_zero]
-  | succ n ih =>
-    cases l with
-    | nil => rw [countSetBitsGo, countSetBitsLoop, uncons_nil, Nat.add_zero]
-    | cons x t => rw [countSetBitsGo, countSetBitsLoop, uncons_cons, ih, Nat.add_assoc]
+  countSetBitsGo n l acc = acc + countSetBitsLoop n ⟨l⟩ :=
+    by
+      induction n generalizing l acc with
+      | zero => rw [countSetBitsGo, countSetBitsLoop, Nat.add_zero]
+      | succ n ih =>
+        cases l with
+        | nil => rw [countSetBitsGo, countSetBitsLoop, uncons_nil, Nat.add_zero]
+        | cons x t => rw [countSetBitsGo, countSetBitsLoop, uncons_cons, ih, Nat.add_assoc]
 
 def countSetBitsLoopImpl (n : Nat) (s : String) : Nat := countSetBitsGo n s.data 0
 
@@ -477,10 +484,10 @@ def countSetBits (s : String) : Integer := .ofNat (countSetBitsLoop s.length s)
 def findFirstSetBitLoop : Nat → String → Integer → Integer
   | 0    , _, acc => acc
   | n + 1, s, acc =>
-    match uncons s with
-    | none        => acc
-    | some ⟨x, t⟩ =>
-      findFirstSetBitLoop n t (if x % 256 = 0 then acc else .ofNat (8 * t.length + lowestSetBit (x % 256)))
+      match uncons s with
+      | none        => acc
+      | some ⟨x, t⟩ =>
+          findFirstSetBitLoop n t (if x % 256 = 0 then acc else .ofNat (8 * t.length + lowestSetBit (x % 256)))
 
 /-- `findFirstSetBitLoop` over the characters, for compiled code; `len` is the length of the list,
     passed along so as not to count it again for every byte. -/
@@ -492,15 +499,16 @@ def findFirstSetBitGo : Nat → List Char → Nat → Integer → Integer
       (if x.toNat % 256 = 0 then acc else .ofNat (8 * (len - 1) + lowestSetBit (x.toNat % 256)))
 
 theorem findFirstSetBitGo_eq (n : Nat) (l : List Char) (acc : Integer) :
-    findFirstSetBitGo n l l.length acc = findFirstSetBitLoop n ⟨l⟩ acc := by
-  induction n generalizing l acc with
-  | zero => rw [findFirstSetBitGo, findFirstSetBitLoop]
-  | succ n ih =>
-    cases l with
-    | nil => rw [findFirstSetBitGo, findFirstSetBitLoop, uncons_nil]
-    | cons x t =>
-      rw [findFirstSetBitGo, findFirstSetBitLoop, uncons_cons, List.length_cons, Nat.add_sub_cancel, ih]
-      rfl
+  findFirstSetBitGo n l l.length acc = findFirstSetBitLoop n ⟨l⟩ acc :=
+    by
+      induction n generalizing l acc with
+      | zero => rw [findFirstSetBitGo, findFirstSetBitLoop]
+      | succ n ih =>
+        cases l with
+        | nil => rw [findFirstSetBitGo, findFirstSetBitLoop, uncons_nil]
+        | cons x t =>
+          rw [findFirstSetBitGo, findFirstSetBitLoop, uncons_cons, List.length_cons, Nat.add_sub_cancel, ih]
+          rfl
 
 def findFirstSetBitLoopImpl (n : Nat) (s : String) (acc : Integer) : Integer :=
   findFirstSetBitGo n s.data s.data.length acc

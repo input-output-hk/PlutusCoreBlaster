@@ -39,7 +39,7 @@ def b_ (i n : Nat) : String := byteStr ((n / (256 ^ i)) % 256)
     Expects `m ≤ 7` and `n ≤ 18446744073709551615`. -/
 -- Spec B.4.
 def encodeHead (m n : Nat) : String :=
- if n ≤                   23 then byteStr (32 * m + n)
+      if n ≤                   23 then byteStr (32 * m + n)
  else if n ≤                  255 then byteStr (32 * m + 24) ++ e₁ n
  else if n ≤                65535 then byteStr (32 * m + 25) ++ e₂ n
  else if n ≤           4294967295 then byteStr (32 * m + 26) ++ e₄ n
@@ -60,21 +60,21 @@ def splitToChunks (s : String) : List String := splitToChunksLoop s.length [] s
 
 /-- Helper for `split_to_chunks_elem_leq_64`: every chunk produced by the loop has
     length at most 64, provided every string already accumulated does. -/
-theorem splitToChunksLoop_elem_leq_64 (n : Nat) (acc : List String) (s : String)
-    (hacc : ∀ e ∈ acc, e.length ≤ 64) :
-    ∀ e ∈ splitToChunksLoop n acc s, e.length ≤ 64 := by
-  induction n generalizing acc s with
-  | zero => simpa [splitToChunksLoop] using hacc
-  | succ n ih =>
-    unfold splitToChunksLoop
-    split
-    · simpa using hacc
-    · apply ih
-      intro e he
-      rcases List.mem_cons.mp he with h | h
-      · subst h
-        exact takeB_length_le 64 s
-      · exact hacc e h
+theorem splitToChunksLoop_elem_leq_64 (n : Nat) (acc : List String) (s : String) (hacc : ∀ e ∈ acc, e.length ≤ 64) :
+  ∀ e ∈ splitToChunksLoop n acc s, e.length ≤ 64 :=
+    by
+      induction n generalizing acc s with
+      | zero => simpa [splitToChunksLoop] using hacc
+      | succ n ih =>
+        unfold splitToChunksLoop
+        split
+        · simpa using hacc
+        · apply ih
+          intro e he
+          rcases List.mem_cons.mp he with h | h
+          · subst h
+            exact takeB_length_le 64 s
+          · exact hacc e h
 
 theorem split_to_chunks_elem_leq_64 (s : String) (e : String) (h : e ∈ splitToChunks s) : e.length ≤ 64 := by
   exact splitToChunksLoop_elem_leq_64 s.length [] s (by simp) e h
@@ -91,10 +91,9 @@ def encodeBytestringChunk (s : String) : String :=
 /-- Encodes (at most `n` of) the 64-byte chunks of `s`, as `splitToChunks` splits it,
     one after the other. -/
 def encodeChunks : Nat → String → String
-  | 0    , _ => ""
-  | n + 1, s =>
-    if s = "" then ""
-              else encodeBytestringChunk (takeB 64 s) ++ encodeChunks n (dropB 64 s)
+  | 0    , _  => ""
+  | _ + 1, "" => ""
+  | n + 1, s  => encodeBytestringChunk (takeB 64 s) ++ encodeChunks n (dropB 64 s)
 
 /-- Encodes a bytestring.
     Note: it first splits the byte string to 64 byte chunks
@@ -103,8 +102,9 @@ def encodeChunks : Nat → String → String
           sequence of its chunks. -/
 -- Spec B.5. ε_B*
 def encodeBytestring (s : String) : String :=
-  if s.length ≤ 64 then encodeBytestringChunk s
-  else encodeIndef 2 ++ encodeChunks s.length s ++ "\xFF"
+  if s.length ≤ 64
+    then encodeBytestringChunk s
+    else encodeIndef 2 ++ encodeChunks s.length s ++ "\xFF"
 
 /-- Encodes a natural number as a list of characters in big-endian -/
 -- Spec B.6. itos
@@ -132,9 +132,10 @@ def encodeInt (n : Integer) : String :=
 /-- Encodes a ctag. -/
 -- Spec B.7. ε_ctag
 def encodeCtag (i : Integer) : String :=
-  if 0 ≤ i ∧ i ≤ 6 then encodeHead 6 (Int.toNat (121 + i))
+       if 0 ≤ i ∧ i ≤   6 then encodeHead 6 (Int.toNat (121 + i))
   else if 7 ≤ i ∧ i ≤ 127 then encodeHead 6 (Int.toNat (1280 + (i - 7)))
-  else encodeHead 6 102 ++ encodeHead 4 2 ++ (encodeInt i)
+  else
+       encodeHead 6 102 ++ encodeHead 4 2 ++ (encodeInt i)
 
 -- Spec B.7. Encoding and  decoding Data. ε_data
 
