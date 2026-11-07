@@ -412,7 +412,7 @@ theorem integerToByteString_ofNat (e : Bool) (w n : Nat) (hw : w ≤ 8192)
         omega
       have h4 : ¬ ((n : Int) < 0) := by omega
       unfold integerToByteString
-      rw [dif_neg h1, dif_neg h2, dif_neg h3, dif_neg h4]
+      rw [if_neg h1, if_neg h2, if_neg h3, if_neg h4]
       cases w with
       | zero =>
           cases n with

@@ -77,16 +77,14 @@ def itobs_loop (e : Bool) : Nat → String → Nat → Except String String
 -/
 @[simp]
 def integerToByteString (e : Bool) (w n : Integer) : Except String String :=
-       if hw0 : w < 0                                       then throw "integerToByteString: negative length argument"
-  else if hwm : w > maxOutputLength                         then throw s!"integerToByteString: requested length is too long (maximum is {maxOutputLength} bytes)"
-  else if hwn : w = 0 ∧ integerLog2 n ≥ maxOutputBitsLength then throw s!"integerToByteString: input too long (maximum is 2^{maxOutputBitsLength}-1)"
-  else if hn0 : n < 0                                       then throw "integerToByteString: cannot convert negative Integer"
-  else match hw : w, hn : n with
-       | 0         , 0          => pure ""
-       | 0         , .ofNat n'  => itobs_loop e (integerWidth n') "" n'
-       | .ofNat w' , .ofNat n'  => itobs_loop e w'                "" n'
-       | .negSucc _, _          => False.elim (by grind)
-       | _         , .negSucc _ => False.elim (by grind)
+       if w < 0                                       then throw "integerToByteString: negative length argument"
+  else if w > maxOutputLength                         then throw s!"integerToByteString: requested length is too long (maximum is {maxOutputLength} bytes)"
+  else if w = 0 ∧ integerLog2 n ≥ maxOutputBitsLength then throw s!"integerToByteString: input too long (maximum is 2^{maxOutputBitsLength}-1)"
+  else if n < 0                                       then throw "integerToByteString: cannot convert negative Integer"
+  else match w.toNat, n.toNat with
+       | 0 , 0  => pure ""
+       | 0 , n' => itobs_loop e (integerWidth n') "" n'
+       | w', n' => itobs_loop e w'                "" n'
 
 /-- Reconstructs a natural number from (at most `n` bytes of) its big-endian representation.
     Tail recursive version, uses accumulator for the calculation.
