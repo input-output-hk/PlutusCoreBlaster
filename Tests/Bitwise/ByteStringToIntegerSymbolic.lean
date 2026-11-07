@@ -3,15 +3,20 @@ import Blaster
 
 /-! The `ByteStringToInteger` builtin over a symbolic bytestring.
 
-Before `byteStringToIntegerOpaque`, a goal that needed the builtin's value failed to
-translate, with "Inductive datatype with instance parameters not supported: `BitVec":
-`bstoi_be_loop` folds `Char.toNat` over the `List Char`, and `Char`'s `UInt32` is a
-`BitVec` (Lean-blaster #153). The alias makes the builtin an uninterpreted function of the
-whole string, as the hash builtins are, so the goals below translate. It returns a `Nat`, so
-the builtin's result is still known to be non-negative. -/
+The builtin reads its bytes through `PlutusCore.Bytes` (see `PlutusCore/ByteString/Bytes.lean`), so
+Blaster translates it as defined, through the CEK machine's dispatch. A goal that needs the value
+it computes takes `PlutusCore.Bytes.Spec` as a premise, which `PlutusCore.Bytes.spec` proves.
+
+The builtin used to go through an `opaque` alias, which the solver saw as some function of the
+whole string with a non-negative result. Now that the definition is visible, non-negativity
+follows from it only by induction over the length of the string, which the solver does not do;
+the two theorems that say so are proved in Lean instead.
+
+The `blaster` goals need the solver that CI builds. Each has a timeout. -/
 
 namespace Tests.Bitwise.ByteStringToIntegerSymbolic
 open PlutusCore.ByteString (ByteString)
+open PlutusCore.Bytes (Spec byteStr)
 open PlutusCore.UPLC.Term (Term Const)
 open PlutusCore.UPLC.CekMachine (State cekExecuteProgram)
 
@@ -35,38 +40,60 @@ def haltsWithInteger (s : State) (n : Int) : Prop :=
 def haltsWithBool (s : State) (b : Bool) : Prop :=
   s = .Halt (.VCon (.Bool b))
 
--- The builtin's value isn't fixed: some bytestring converts to 258 (`#0102`). Needs the
--- builtin's value in the solver, so it failed on `BitVec` before the alias.
-#blaster (gen-cex: 0) (solve-result: 1) [∀ (a : ByteString),
+-- Some bytestring converts to 258 (`#0102`).
+#blaster (gen-cex: 0) (solve-result: 1) (timeout: 60) [∀ (a : ByteString),
     ¬ haltsWithInteger (bstoiSymbolicOne.prop a) 258]
 
-/-- But it's never negative: the alias returns a `Nat`. -/
+/-- With `Spec`, the value is the one the bytes give. -/
+theorem bstoi_two_bytes : Spec → ∀ (x y : Nat), x < 256 → y < 256 →
+    haltsWithInteger (bstoiSymbolicOne.prop ⟨byteStr x ++ byteStr y⟩) (256 * x + y) := by
+  blaster (timeout: 60)
+
+/-- The result is never negative. -/
 theorem bstoi_nonnegative : ∀ (a : ByteString) (n : Int),
-    haltsWithInteger (bstoiSymbolicOne.prop a) n → 0 ≤ n := by blaster
+    haltsWithInteger (bstoiSymbolicOne.prop a) n → 0 ≤ n := by
+  intro a n h
+  have hp : bstoiSymbolicOne.prop a =
+      .Halt (.VCon (.Integer (PlutusCore.Bitwise.byteStringToInteger true a.data))) := rfl
+  rw [haltsWithInteger, hp] at h
+  cases h
+  exact Int.natCast_nonneg _
 
 /-- Equal bytestrings convert to equal integers. -/
 theorem bstoi_equal_inputs : ∀ (a b : ByteString), a = b →
     haltsWithBool (bstoiSymbolicTwo.prop a b) true := by blaster
 
--- And unequal ones aren't known to convert to unequal integers: the function is uninterpreted,
--- so only what holds for any function of the string can be proved.
-#blaster (gen-cex: 0) (solve-result: 1) [∀ (a b : ByteString), a ≠ b →
+-- Unequal ones need not convert to unequal integers: a leading zero byte adds nothing (`#01` and
+-- `#0001` are both 1).
+#blaster (gen-cex: 0) (solve-result: 1) (timeout: 60) [∀ (a b : ByteString), a ≠ b →
     haltsWithBool (bstoiSymbolicTwo.prop a b) false]
 
 -- The same goals over `cekExecuteProgram` itself, with no `#prep_uplc`: Blaster unfolds the
--- CEK machine's own dispatch down to the alias.
-#blaster (gen-cex: 0) (solve-result: 1) [∀ (a : ByteString),
+-- CEK machine's own dispatch down to the byte loop.
+#blaster (gen-cex: 0) (solve-result: 1) (timeout: 60) [∀ (a : ByteString),
     ¬ haltsWithInteger (cekExecuteProgram bstoiSymbolicOneScript.script (oneArg a) 200) 258]
+
+theorem bstoi_two_bytes_cek : Spec → ∀ (x y : Nat), x < 256 → y < 256 →
+    haltsWithInteger
+      (cekExecuteProgram bstoiSymbolicOneScript.script (oneArg ⟨byteStr x ++ byteStr y⟩) 200)
+      (256 * x + y) := by
+  blaster (timeout: 60)
 
 theorem bstoi_nonnegative_cek : ∀ (a : ByteString) (n : Int),
     haltsWithInteger (cekExecuteProgram bstoiSymbolicOneScript.script (oneArg a) 200) n → 0 ≤ n := by
-  blaster
+  intro a n h
+  have hp : cekExecuteProgram bstoiSymbolicOneScript.script (oneArg a) 200 =
+      .Halt (.VCon (.Integer (PlutusCore.Bitwise.byteStringToInteger true a.data))) := by
+    with_unfolding_all rfl
+  rw [haltsWithInteger, hp] at h
+  cases h
+  exact Int.natCast_nonneg _
 
 theorem bstoi_equal_inputs_cek : ∀ (a b : ByteString), a = b →
     haltsWithBool (cekExecuteProgram bstoiSymbolicTwoScript.script (twoArgs a b) 200) true := by
   blaster
 
--- Compiled evaluation runs the alias's value, the conversion itself: `#0102` is 258.
+-- Compiled evaluation: `#0102` is 258.
 #guard match cekExecuteProgram bstoiSymbolicOneScript.script (oneArg ⟨"\x01\x02"⟩) 200 with
   | .Halt (.VCon (.Integer n)) => n == 258
   | _ => false
