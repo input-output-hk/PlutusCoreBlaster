@@ -2,6 +2,7 @@
 import Tests.Cryptograph.Blake2b.Blake2bTestVectors
 import Tests.Cryptograph.BLS12_381.TestVectors
 import Tests.Cryptograph.BLS12_381.SymbolicPoints
+import Tests.Cryptograph.BLS12_381.BuiltinOperandOrder
 import Tests.Cryptograph.Keccak.Keccak256TestVectors
 import Tests.Cryptograph.Ripemd.Ripemd160TestVectors
 import Tests.Cryptograph.Sha2.Sha256TestVectors
