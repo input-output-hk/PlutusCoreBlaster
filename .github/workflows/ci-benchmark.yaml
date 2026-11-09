@@ -88,7 +88,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Add an "eyes" reaction to the triggering comment so the author sees
-          # the workflow picked it up. Best-effort â€” failures here don't matter.
+          # the workflow picked it up. Best-effort — failures here don't matter.
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
