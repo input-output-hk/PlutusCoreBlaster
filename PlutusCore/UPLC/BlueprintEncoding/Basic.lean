@@ -265,14 +265,14 @@ def validateSemantics (version sem : String) : Except String Unit := do
   unless allowed.contains sem do
     throw s!"semantics variant '{sem}' is incompatible with Plutus {version}"
 
-/-- Legacy step-only budgets use the post-Conway default for their language. -/
+/-- Legacy step-only budgets use the current (post-Van-Rossem) default for their language. -/
 def defaultSemantics (version : String) : Except String String := do
   let language ← match version with
     | "v1" => pure _root_.PlutusCore.Default.Internal.PlutusVersion.plutusV1
     | "v2" => pure _root_.PlutusCore.Default.Internal.PlutusVersion.plutusV2
     | "v3" => pure _root_.PlutusCore.Default.Internal.PlutusVersion.plutusV3
     | _ => throw s!"unsupported Plutus language '{version}'"
-  return match _root_.PlutusCore.Default.Internal.PlutusVersion.toSemanticsVariant language .postConway with
+  return match _root_.PlutusCore.Default.Internal.PlutusVersion.toSemanticsVariant language .postVanRossem with
     | .defaultFunSemanticsVariantA => "A" | .defaultFunSemanticsVariantB => "B"
     | .defaultFunSemanticsVariantC => "C" | .defaultFunSemanticsVariantD => "D"
     | .defaultFunSemanticsVariantE => "E"
@@ -1237,7 +1237,8 @@ def emitAppliedWrapper (ns : Name) (wrapperName scriptName : String)
 to its declared `arguments` and run on the CEK machine for " ++ toString steps ++ " steps. -/\n" ++
     "def " ++ escapeIdent wrapperName ++ binders ++ " : _root_.PlutusCore.UPLC.CekMachine.State :=\n" ++
     "  _root_.PlutusCore.UPLC.CekMachine.cekExecuteProgramWithSemanticVariant " ++
-      "_root_.PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariant" ++ semantics ++ " " ++ escapeIdent scriptName ++
+      "_root_.PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariant" ++ semantics ++ " " ++
+      "_root_.PlutusCore.Default.Internal.ProtocolVersion.postVanRossem " ++ escapeIdent scriptName ++
       ".script [" ++ terms ++ "] " ++ toString steps
   withTempNamespace ns do
     -- Bring `IsData` / `Data` / `Integer` / `ByteString` short names into scope
