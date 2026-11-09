@@ -31,4 +31,11 @@ theorem caseList_empty (n : β) (f : α → List α → β) (xs : List α) :
 
 @[simp] theorem mkCons_rfl (x : α) (xs : List α) : mkCons x xs = x :: xs := rfl
 
+/-- `dropList` agrees with Lean's `List.drop`; it is only defined
+    differently so that the Blaster optimizer unfolds it. -/
+theorem dropList_eq_drop : ∀ (n : Nat) (xs : List α), dropList n xs = xs.drop n
+  | 0, _ => rfl
+  | _ + 1, [] => rfl
+  | n + 1, _ :: xs => dropList_eq_drop n xs
+
 end PlutusCore.List
