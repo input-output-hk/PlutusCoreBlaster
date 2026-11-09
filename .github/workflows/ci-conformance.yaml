@@ -79,7 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Add an "eyes" reaction to the triggering comment so the author sees
-          # the workflow picked it up. Best-effort — failures here don't matter.
+          # the workflow picked it up. Best-effort â€” failures here don't matter.
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
@@ -206,6 +206,7 @@ jobs:
         id: z3-master
         run: |
           sha=$(git ls-remote https://github.com/Z3Prover/z3.git refs/heads/master | cut -f1)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=$sha" >> $GITHUB_OUTPUT
 
       - name: Restore cached Z3 master build
@@ -218,9 +219,14 @@ jobs:
 
       - name: Build Z3 from master
         if: env.Z3_VERSION == 'master' && steps.z3-master-cache.outputs.cache-hit != 'true'
+        env:
+          Z3_SHA: ${{ steps.z3-master.outputs.sha }}
         run: |
           cd /home/runner/
-          git clone --depth 1 --branch master https://github.com/Z3Prover/z3.git z3-src
+          git init z3-src
+          git -C z3-src remote add origin https://github.com/Z3Prover/z3.git
+          git -C z3-src fetch --depth 1 origin "$Z3_SHA"
+          git -C z3-src checkout --detach FETCH_HEAD
           cmake -S z3-src -B z3-src/build \
             -DCMAKE_BUILD_TYPE=Release \
             -DZ3_BUILD_LIBZ3_SHARED=OFF \
