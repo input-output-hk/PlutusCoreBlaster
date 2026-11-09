@@ -56,7 +56,7 @@ def dataProgram : Program :=
   Program.Program (Version.Version 1 1 0) dataTerm
 
 -- One step short of enough fuel the assurance runner retains an unfinished state.
-example : ¬ terminal (cekExecuteProgramWithSemanticVariant testSemanticsVariant dataProgram [] 4) :=
+example : ¬ terminal (cekExecuteStateRetention testSemanticsVariant dataProgram [] 4) :=
   by decide
 
 -- At five and at every larger fuel the program halts on the `Data` constant.
