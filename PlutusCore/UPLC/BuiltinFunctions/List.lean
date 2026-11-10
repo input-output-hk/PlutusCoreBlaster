@@ -112,4 +112,14 @@ def dropList (Vs : List CekValue) : Option CekValue :=
       some (.VCon (.ConstPairDataList (PLC.dropList n.toNat xs)))
   | _ => none
 
+-- def dropList (Vs : List CekValue) : Option CekValue :=
+--   match Vs with
+--   | [.VCon (.ConstList xs), .VCon (.Integer n)] =>
+--       some (.VCon (.ConstList (xs.drop n.toNat)))
+--   | [.VCon (.ConstDataList xs), .VCon (.Integer n)] =>
+--       some (.VCon (.ConstDataList (xs.drop n.toNat)))
+--   | [.VCon (.ConstPairDataList xs), .VCon (.Integer n)] =>
+--       some (.VCon (.ConstPairDataList (xs.drop n.toNat)))
+--   | _ => none
+
 end PlutusCore.UPLC.BuiltinFunctions.List

@@ -50,6 +50,7 @@ def listInput (xs : List Data) : List Term := [Term.Const (Const.ConstDataList x
     appliedTails.prop xs = State.Halt (CekValue.VCon (Const.Bool true))]
 
 -- The guard takes tails, the read `dropList`.
+set_option trace.Translate.optExpr true in
 #blaster [
   ∀ (xs : List Data),
     appliedGuard.prop xs = State.Halt (CekValue.VCon (Const.Bool true)) →
