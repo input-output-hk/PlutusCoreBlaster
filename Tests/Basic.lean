@@ -9,13 +9,13 @@ import Tests.Cryptograph.Sha2.Sha256TestVectors
 import Tests.Cryptograph.Sha2.Sha512TestVectors
 import Tests.Cryptograph.Sha3.Sha3_256TestVectors
 
-import PlutusCore.UPLC.CekMachine.Tests
 import Tests.Bitwise.Tests
 import Tests.Bitwise.ByteStringToIntegerSymbolic
 import Tests.Cbor.Tests
 import Tests.UPLC.BlueprintEncoding.CtfTests
 import Tests.UPLC.BlueprintEncoding.Tests
 import Tests.UPLC.CekMachine.Tests
+import Tests.UPLC.CekMachine.CaseTests
 import Tests.UPLC.Costing
 import Tests.UPLC.FlatEncoding.Tests
 import Tests.UPLC.PreProcess.Tests

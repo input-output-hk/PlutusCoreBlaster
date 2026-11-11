@@ -78,7 +78,7 @@ example : isError ((con .Unit).Case [t0, t1]) = true := by native_decide
 private def intList (cs : List Integer) : Term := con (.ConstList (cs.map Const.Integer))
 
 /-- `(lam h (lam t h))`: keeps the head of the matched list -/
-private def headBranch : Term := Term.Lam "h" (Term.Lam "t" (Term.Var 1))
+private def headBranch : Term := Term.Lam (Term.Lam (Term.Var 1))
 
 example : run ((intList [7, 8]).Case [headBranch, t0]) = some 7  := by native_decide
 example : run ((intList [7, 8]).Case [headBranch])     = some 7  := by native_decide
@@ -104,14 +104,14 @@ private def script (t : Term) : PlutusScript :=
 /-- `(lam x (lam y (case [(builtin lessThanEqualsInteger) x y] y x)))`, i.e. `min x y`
     the way the Scalus compiler lowers it for PlutusV3. -/
 def minCaseScript : PlutusScript :=
-  script (Term.Lam "x" (Term.Lam "y"
+  script (Term.Lam (Term.Lam
     ((((Term.Builtin BuiltinFun.LessThanEqualsInteger).Apply (Term.Var 1)).Apply
         (Term.Var 0)).Case [Term.Var 0, Term.Var 1])))
 
 /-- `(lam x (case x [(con integer 10) (con integer 20)]))`: a `case` on a symbolic
     integer tag, the shape an ADT match lowers to. -/
 def intCaseScript : PlutusScript :=
-  script (Term.Lam "x" ((Term.Var 0).Case [t0, t1]))
+  script (Term.Lam ((Term.Var 0).Case [t0, t1]))
 
 private def oneInteger  (x : Integer)   : List Term := [con (.Integer x)]
 private def twoIntegers (x y : Integer) : List Term := [con (.Integer x), con (.Integer y)]
