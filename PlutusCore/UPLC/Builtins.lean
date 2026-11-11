@@ -9,11 +9,36 @@ inductive ExpectedBuiltinArg
 | ArgQ : ExpectedBuiltinArg
 deriving Repr, BEq
 
+instance : LawfulBEq ExpectedBuiltinArg where
+  eq_of_beq {a b} h := by cases a <;> cases b <;> first | rfl | contradiction
+  rfl {a} := by cases a <;> rfl
+
+instance : DecidableEq ExpectedBuiltinArg := instDecidableEqOfLawfulBEq
+
 -- Define expectedBuiltinArgs
 inductive ExpectedBuiltinArgs
 | One : ExpectedBuiltinArg → ExpectedBuiltinArgs
 | More : ExpectedBuiltinArg → ExpectedBuiltinArgs → ExpectedBuiltinArgs
 deriving Repr, BEq
+
+theorem ExpectedBuiltinArgs.eq_of_beq :
+    ∀ {a b : ExpectedBuiltinArgs}, (a == b) = true → a = b := by
+  intro a b h
+  change instBEqExpectedBuiltinArgs.beq _ _ = true at h
+  cases a <;> cases b <;> simp_all [instBEqExpectedBuiltinArgs.beq]
+  case More.More => exact ExpectedBuiltinArgs.eq_of_beq h.2
+
+theorem ExpectedBuiltinArgs.beq_refl : ∀ a : ExpectedBuiltinArgs, (a == a) = true := by
+  intro a
+  change instBEqExpectedBuiltinArgs.beq _ _ = true
+  cases a <;> simp [instBEqExpectedBuiltinArgs.beq]
+  case More => exact ExpectedBuiltinArgs.beq_refl _
+
+instance : LawfulBEq ExpectedBuiltinArgs where
+  eq_of_beq := ExpectedBuiltinArgs.eq_of_beq
+  rfl := ExpectedBuiltinArgs.beq_refl _
+
+instance : DecidableEq ExpectedBuiltinArgs := instDecidableEqOfLawfulBEq
 
 namespace ExpectedArgNotations
 

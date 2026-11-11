@@ -1,3 +1,4 @@
+
 import PlutusCore.Parser.Basic
 import PlutusCore.UPLC.Term
 
@@ -557,7 +558,7 @@ mutual
       | "lam"     =>
           let name ← varName
           let body ← parseTerm v (name :: ctx)
-          return .Lam name body
+          return .Lam body
       | "con"     => .Const   <$> parseCon
       | "builtin" => .Builtin <$> parseBuiltinFun
       | "constr"  =>

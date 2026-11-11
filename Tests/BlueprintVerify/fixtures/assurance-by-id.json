@@ -1,0 +1,32 @@
+{
+  "$schema": "https://cips.cardano.org/cips/cipXXXX/schemas/assurance.json",
+  "preamble": {
+    "title": "By-id validator reference",
+    "authors": ["PlutusCoreBlaster test suite"],
+    "created": "2026-08-12"
+  },
+  "blueprint": {
+    "uri": "https://example.com/placeholder/plutus.json"
+  },
+  "properties": [
+    {
+      "id": "referenced-by-id",
+      "title": "Scope resolves through the validator's stable id",
+      "scope": {
+        "validators": ["spend"]
+      },
+      "statement": {
+        "text": "This property references the spend validator by its blueprint 'id' rather than its title."
+      },
+      "evidence": [
+        {
+          "method": "manual-review",
+          "verifier": "PlutusCoreBlaster test suite",
+          "outcome": "verified",
+          "date": "2026-08-12",
+          "scriptHash": "0000000000000000000000000000000000000000000000000000dead"
+        }
+      ]
+    }
+  ]
+}

@@ -79,6 +79,16 @@ def toLeanName (s : String) : String := capFirst (sanitize s)
 /-- Source directory segment → Lean identifier component. -/
 def toIdent (s : String) : String := sanitize s
 
+/-- Whether a source directory or `.uplc` file name may go into the generated
+    files: a letter followed by letters, digits, `_`, `-` and `+`. The names
+    become Lean identifiers, module names, doc comments and string literals, and
+    they come from the plutus checkout, so anything else is refused rather than
+    escaped. -/
+def isSafeName (s : String) : Bool :=
+  match s.toList with
+  | c :: cs => c.isAlpha && cs.all fun c => c.isAlphanum || c == '_' || c == '-' || c == '+'
+  | []      => false
+
 /-! ## Parsing the expected/budget files -/
 
 inductive ExpectedKind where
@@ -287,6 +297,13 @@ private def cleanExcludedOutputs (cfg : Config) : IO Unit := do
     if ← file.pathExists then
       IO.FS.removeFile file
 
+/-- Fails on a name that `isSafeName` refuses. The name is printed quoted, so
+    that it cannot inject anything into the log either. -/
+private def checkName (srcDir : Path) (name : String) : IO Unit :=
+  unless isSafeName name do
+    throw <| IO.userError s!"unsupported test name {name.quote} in {srcDir.toString}: \
+      names must start with a letter and contain only letters, digits, '_', '-' and '+'"
+
 mutual
   partial def walkBranch (cfg : Config) (srcDir : Path)
       (srcPathRel mp : List String) (subdirs : List String) : IO Unit := do
@@ -295,6 +312,7 @@ mutual
     let allSorted := (subdirs.toArray.qsort (fun a b => lower a < lower b)).toList
     let sortedSubs := allSorted.filter fun sub => ¬ isExcluded cfg (srcPathRel ++ [sub])
     for sub in sortedSubs do
+      checkName srcDir sub
       let childMp := mp ++ [toLeanName sub]
       let childSrc := srcPathRel ++ [sub]
       walk cfg (srcDir / sub) childSrc childMp
@@ -318,6 +336,7 @@ mutual
         uplcStem := some (name.dropRight ".uplc".length)
     match uplcStem with
     | some stem =>
+        checkName srcDir stem
         let expectedPath := srcDir / s!"{stem}.uplc.expected"
         let budgetPath   := srcDir / s!"{stem}.uplc.budget.expected"
         let expectedContent ← IO.FS.readFile expectedPath

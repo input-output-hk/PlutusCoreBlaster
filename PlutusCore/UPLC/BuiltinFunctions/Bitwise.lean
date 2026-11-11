@@ -39,11 +39,23 @@ def integerToByteString (Vs : List CekValue) : Option CekValue :=
       tryCatchSome (PLC.integerToByteString e w n) (fun r => .VCon (.ByteString ⟨r⟩))
   | _ => none
 
+/-- Opaque alias of `byteStringToInteger`, used only by the ByteStringToInteger builtin.
+    Declared `opaque` so symbolic tools (e.g. Blaster) treat it as an uninterpreted
+    function of the whole string instead of unfolding `bstoi_be_loop`, whose fold of
+    `Char.toNat` over the `List Char` reaches `Char`'s `UInt32`, a `BitVec` they cannot
+    translate. It returns the `Nat` that `byteStringToInteger` wraps, so the builtin's
+    result stays known to be non-negative. Compiled evaluation (CEK execution,
+    `native_decide`, conformance tests) is unchanged: the provided value IS
+    `byteStringToInteger`'s, and `PlutusCore.Bitwise.byteStringToInteger` itself stays a
+    plain def for direct use and proofs. -/
+opaque byteStringToIntegerOpaque (e : Bool) (s : String) : Nat :=
+  (PLC.byteStringToInteger e s).toNat
+
 -- Define byteStringToInteger: args reversed as [bs, e]
 def byteStringToInteger (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [.VCon (.ByteString bs), .VCon (.Bool e)] =>
-      some (.VCon (.Integer (PLC.byteStringToInteger e bs.data)))
+      some (.VCon (.Integer (.ofNat (byteStringToIntegerOpaque e bs.data))))
   | _ => none
 
 -- Define andByteString: args reversed as [op2, op1, e]

@@ -1,3 +1,15 @@
 -- This module serves as the root of the `Tests` library.
 -- Import modules here that should be built as part of the library.
 import Tests.Basic
+import Tests.BlueprintCodegen.Tests
+import Tests.BlueprintCodegen.SchemaCodecs
+import Tests.BlueprintCodegen.Hygiene
+import Tests.BlueprintCodegen.Validation
+import Tests.BlueprintVerify.Tests
+
+-- Self-contained encoding tests; generated Game templates use the local integration runners.
+import Tests.BlueprintVerify.NativeEncoding
+import Tests.BlueprintVerify.BooleanCase
+import Tests.BlueprintVerify.RecursiveSchema
+
+import Tests.BlueprintVerify.Regression

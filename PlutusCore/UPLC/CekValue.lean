@@ -9,14 +9,13 @@ open PlutusCore.UPLC.Builtins
 inductive CekValue
 | VCon     : Const → CekValue
 | VDelay   : Term → List CekValue → CekValue
-| VLam     : String → Term → List CekValue → CekValue
+| VLam     : Term → List CekValue → CekValue
 | VConstr  : Nat → List CekValue → CekValue
 | VBuiltin : BuiltinFun → List CekValue → ExpectedBuiltinArgs → CekValue
 deriving Repr
 
 /-- Positional environment for de Bruijn terms: the head is the value of
-    index 0 (the innermost binder), so `ρ[i]?` is de Bruijn lookup.
-    The `String` on `VLam` is display-only metadata, as on `Term.Lam`. -/
+    index 0 (the innermost binder), so `ρ[i]?` is de Bruijn lookup. -/
 abbrev Environment := List CekValue
 
 end PlutusCore.UPLC.CekValue

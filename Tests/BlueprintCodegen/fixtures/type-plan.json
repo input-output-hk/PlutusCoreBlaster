@@ -1,0 +1,150 @@
+{
+  "preamble": {
+    "title": "type_plan_regression",
+    "version": "1.0.0",
+    "plutusVersion": "v3"
+  },
+  "validators": [
+    {
+      "title": "types.spend",
+      "datum": {
+        "schema": {
+          "$ref": "#/definitions/ReviewDatum"
+        }
+      },
+      "redeemer": {
+        "schema": {
+          "$ref": "#/definitions/Tree"
+        }
+      },
+      "parameters": [
+        {
+          "schema": {
+            "$ref": "#/definitions/Holder"
+          }
+        }
+      ]
+    }
+  ],
+  "definitions": {
+    "Action": {
+      "title": "Action",
+      "anyOf": [
+        {
+          "title": "Cancel",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        }
+      ]
+    },
+    "DirectUnit": {
+      "title": "NotLeanUnit",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": []
+    },
+    "Tagged": {
+      "title": "Tagged",
+      "dataType": "constructor",
+      "index": 7,
+      "fields": []
+    },
+    "WrappedTagged": {
+      "title": "WrappedTagged",
+      "oneOf": [
+        {
+          "title": "Stop",
+          "dataType": "constructor",
+          "index": 5,
+          "fields": []
+        }
+      ]
+    },
+    "Mixed": {
+      "title": "Mixed",
+      "anyOf": [
+        {
+          "dataType": "integer"
+        },
+        {
+          "dataType": "bytes"
+        }
+      ]
+    },
+    "ReferencedSum": {
+      "title": "ReferencedSum",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Tagged"
+        },
+        {
+          "$ref": "#/definitions/DirectUnit"
+        }
+      ]
+    },
+    "ReviewDatum": {
+      "title": "ReviewDatum",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "action",
+          "$ref": "#/definitions/Action"
+        },
+        {
+          "title": "direct",
+          "$ref": "#/definitions/DirectUnit"
+        },
+        {
+          "title": "tagged",
+          "$ref": "#/definitions/Tagged"
+        },
+        {
+          "title": "wrapped",
+          "$ref": "#/definitions/WrappedTagged"
+        },
+        {
+          "title": "mixed",
+          "$ref": "#/definitions/Mixed"
+        },
+        {
+          "title": "referenced",
+          "$ref": "#/definitions/ReferencedSum"
+        }
+      ]
+    },
+    "Tree": {
+      "title": "Tree",
+      "anyOf": [
+        {
+          "title": "Leaf",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "Next",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/Tree"
+            }
+          ]
+        }
+      ]
+    },
+    "Holder": {
+      "title": "Holder",
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "tree",
+          "$ref": "#/definitions/Tree"
+        }
+      ]
+    }
+  }
+}
