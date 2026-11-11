@@ -66,7 +66,8 @@ def fromStringTermElaborator {α} [ToExpr α] (fn : String → Except String α)
 /-- Decodes an UPLC program from it's single-cbor-encoded hexadecimal representation. -/
 def singleCborEncodedScriptFromHex? (s : String) : Except String Program := do
   let hexDecoded       ← Option.toExcept (hexStringToString s.data [])             "Could not hexdecode input!"
-  let (_, decodedCbor) ← Option.toExcept (decodeLargeBytestring ⟨hexDecoded⟩)      "Could not cbor decode input!"
+  let (remaining, decodedCbor) ← Option.toExcept (decodeLargeBytestring ⟨hexDecoded⟩) "Could not cbor decode input!"
+  unless remaining.isEmpty do throw "Trailing CBOR script bytes"
   let program          ← Option.toExcept (decodeProgramFromByteString decodedCbor) "Could not decode program!"
   return program
 
@@ -307,9 +308,13 @@ def importUplcImp : CommandElab := fun stx => do
 end Internal
 
 export Internal
-  ( singleCborEncodedScriptFromHex!
+  ( singleCborEncodedScriptFromHex?
+    singleCborEncodedScriptFromHex!
+    doubleCborEncodedScriptFromHex?
     doubleCborEncodedScriptFromHex!
+    flatEncodedScriptFromBytestring?
     flatEncodedScriptFromBytestring!
+    flatEncodedScriptFromHex?
     flatEncodedScriptFromHex!
   )
 

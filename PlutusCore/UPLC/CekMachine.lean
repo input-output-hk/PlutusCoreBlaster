@@ -35,10 +35,11 @@ abbrev Stack := List Frame
 
 -- Define State
 inductive State where
-  | Eval    : Stack → Environment → Term → State
-  | Return  : Stack → CekValue → State
-  | Error   : State
-  | Halt    : CekValue → State
+  | Eval            : Stack → Environment → Term → State
+  | Return          : Stack → CekValue → State
+  | Error           : State
+  | BudgetExhausted : State
+  | Halt            : CekValue → State
 deriving Repr
 
 -- Result type for budget aware execution
@@ -80,7 +81,7 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
            | some V => State.Return s V
            | none => State.Error
       | Term.Term.Const c => State.Return s (CekValue.VCon c)
-      | Term.Lam x M => State.Return s (CekValue.VLam x M ρ)
+      | Term.Lam M => State.Return s (CekValue.VLam M ρ)
       | Term.Delay M => State.Return s (CekValue.VDelay M ρ)
       | Term.Force M => State.Eval (Frame.ForceFrame :: s) ρ M
       | Term.Apply M N => State.Eval (Frame.LeftApplicationToTerm N ρ :: s) ρ M
@@ -100,7 +101,7 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
 
          | Frame.LeftApplicationToValue V =>
              match Vr with
-             | CekValue.VLam _ M ρ =>
+             | CekValue.VLam M ρ =>
                   State.Eval s (V :: ρ) M
              | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgV ⊙ η) =>
                   State.Return s (CekValue.VBuiltin b (V :: Vs) η)
@@ -110,7 +111,7 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
 
          | Frame.RightApplicationOfValue Va =>
              match Va with
-             | CekValue.VLam _ M ρ =>
+             | CekValue.VLam M ρ =>
                    State.Eval s (Vr :: ρ) M
              | CekValue.VBuiltin b Vs (ExpectedBuiltinArg.ArgV ⊙ η) =>
                    State.Return s (CekValue.VBuiltin b (Vr :: Vs) η)
@@ -151,6 +152,7 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
                   | some mi => State.Eval s ρ mi
                   | none => State.Error
 
+             -- Match the Bool constructor once so symbolic payloads reduce.
              | CekValue.VCon (Const.Bool b) =>
                   if b then
                     if Ms.length == 2 then
@@ -238,7 +240,9 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
 
              | _ => State.Error
 
-  | _ => State.Error
+  | State.Halt V => State.Halt V
+  | State.Error => State.Error
+  | State.BudgetExhausted => State.BudgetExhausted
 
   where
     folding (xs : List CekValue) (init : Stack) : Stack :=
@@ -251,8 +255,16 @@ def runSteps (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : N
   match n, Sigma with
   | _, State.Halt V => Sigma
   | _, State.Error => Sigma
-  | 0, _ => State.Error -- change to error when num steps exhausted
+  | _, State.BudgetExhausted => Sigma
+  | 0, _ => State.BudgetExhausted
   | Nat.succ n, _ => runSteps semanticsVariant (step semanticsVariant Sigma) n
+
+/-- Similar to runSteps but retain state when script budget exhausted -/
+def runStepsPreservingState (semanticsVariant : BuiltinSemanticsVariant) (state : State) (n : Nat) : State :=
+  match n, state with
+  | _, .Halt _ | _, .Error | _, .BudgetExhausted => state
+  | 0, _ => state
+  | n + 1, _ => runStepsPreservingState semanticsVariant (step semanticsVariant state) n
 
 -- Define Apply Params
 def applyParams (body : Term) (params : List Term) : Term :=
@@ -269,6 +281,11 @@ def cekExecuteProgramWithSemanticVariant (semanticVariant : BuiltinSemanticsVari
   | Program.Program _ body =>
       runSteps semanticVariant (initialState (applyParams body params)) n
 
+def cekExecuteStateRetention (semanticVariant : BuiltinSemanticsVariant) (p : Program) (params : List Term) (n : Nat) : State :=
+  match p with
+  | Program.Program _ body =>
+      runStepsPreservingState semanticVariant (initialState (applyParams body params)) n
+
 -- Define CEK Execution
 def cekExecuteProgram : Program → List Term →  Nat → State := cekExecuteProgramWithSemanticVariant default
 
@@ -279,7 +296,7 @@ def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
   match Sigma with
     | State.Eval _ _ (Term.Var _)           => costs.stepCostVar
     | State.Eval _ _ (Term.Term.Const _)    => costs.stepCostConst
-    | State.Eval _ _ (Term.Lam _ _)         => costs.stepCostLam
+    | State.Eval _ _ (Term.Lam _)           => costs.stepCostLam
     | State.Eval _ _ (Term.Delay _)         => costs.stepCostDelay
     | State.Eval _ _ (Term.Force _)         => costs.stepCostForce
     | State.Eval _ _ (Term.Apply _ _)       => costs.stepCostApply
@@ -289,6 +306,7 @@ def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
     | State.Eval _ _ Term.Error             => ExBudget.zero
     | State.Return _ _                      => ExBudget.zero
     | State.Error                           => ExBudget.zero
+    | State.BudgetExhausted                 => ExBudget.zero
     | State.Halt _                          => ExBudget.zero
 
 def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) : ExBudget :=
@@ -326,6 +344,7 @@ def runStepsWithBudget
     match Sigma with
     | State.Halt V  => EvaluationResult.Success V (initialBudget - budget)
     | State.Error   => EvaluationResult.EvaluationError
+    | State.BudgetExhausted => EvaluationResult.BudgetExhausted ExBudget.zero
     | _ =>
         match stepWithBudget semanticsVariant costs Sigma budget with
         | none => EvaluationResult.BudgetExhausted budget

@@ -27,9 +27,7 @@ example : decodeNat ([true]  ++ [false, false, false, false, false, false, false
 #guard_msgs in
 #eval decodeProgramFromHexString "0500023371C911071A5F783625EE8C004838B40181"
 
-/-- info: some
-  (Program.Program (Version.Version 1 0 0)
-    (Term.Lam "dbi_0" (Term.Lam "dbi_1" (Term.Lam "dbi_2" (Term.Lam "dbi_3" (Term.Var 0)).Delay)))) -/
+/-- info: some (Program.Program (Version.Version 1 0 0) (Term.Var 0).Lam.Delay.Lam.Lam.Lam) -/
 #guard_msgs in
 #eval decodeProgramFromHexString "0100002221200101"
 
@@ -42,32 +40,28 @@ example : decodeNat ([true]  ++ [false, false, false, false, false, false, false
 
 /-- info: some
   (Program.Program (Version.Version 1 0 0)
-    (Term.Lam "dbi_0"
-      (((Term.Builtin BuiltinFun.AddInteger).Apply (Term.Term.Const (Const.Integer 16))).Apply (Term.Var 0)))) -/
+    (((Term.Builtin BuiltinFun.AddInteger).Apply (Term.Term.Const (Const.Integer 16))).Apply (Term.Var 0)).Lam) -/
 #guard_msgs in
 #eval decodeProgramFromHexString "01000023370090100009"
 
 /-- info: some
   (Program.Program (Version.Version 1 0 0)
-    (Term.Lam "dbi_0"
-      (((Term.Builtin BuiltinFun.AddInteger).Apply (Term.Term.Const (Const.Integer 16))).Apply
-            (Term.Var 0)).Delay.Force)) -/
+    (((Term.Builtin BuiltinFun.AddInteger).Apply (Term.Term.Const (Const.Integer 16))).Apply
+            (Term.Var 0)).Delay.Force.Lam) -/
 #guard_msgs in
 #eval decodeProgramFromHexString "0100002513370090100009"
 
-/-- info: some (Program.Program (Version.Version 1 0 0) (Term.Lam "dbi_0" Term.Error.Delay.Force)) -/
+/-- info: some (Program.Program (Version.Version 1 0 0) Term.Error.Delay.Force.Lam) -/
 #guard_msgs in
 #eval decodeProgramFromHexString "010000251601"
 
 /-- info: some
   (Program.Program (Version.Version 1 0 0)
-    ((Term.Lam "dbi_0" ((Term.Var 0).Apply (Term.Var 0))).Apply (Term.Lam "dbi_0" ((Term.Var 0).Apply (Term.Var 0))))) -/
+    (((Term.Var 0).Apply (Term.Var 0)).Lam.Apply ((Term.Var 0).Apply (Term.Var 0)).Lam)) -/
 #guard_msgs in
 #eval decodeProgramFromHexString "010000323001001230010011"
 
-/-- info: some
-  (Program.Program (Version.Version 1 0 0)
-    (Term.Lam "dbi_0" (Term.Lam "dbi_1" (Term.Lam "dbi_2" (Term.Lam "dbi_3" (Term.Lam "dbi_4" (Term.Var 0))))))) -/
+/-- info: some (Program.Program (Version.Version 1 0 0) (Term.Var 0).Lam.Lam.Lam.Lam.Lam) -/
 #guard_msgs in
 #eval decodeProgramFromHexString "0100002222200101"
 

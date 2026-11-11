@@ -1,0 +1,23 @@
+{
+  "preamble": { "title": "pair_fixture", "version": "1.0.0", "plutusVersion": "v3" },
+  "validators": [
+    {
+      "title": "pv.pv.spend",
+      "datum": { "title": "datum", "schema": { "$ref": "#/definitions/PairDatum" } }
+    }
+  ],
+  "definitions": {
+    "PairDatum": {
+      "title": "PairDatum",
+      "anyOf": [
+        {
+          "title": "PairDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [ { "title": "pt", "$ref": "#/definitions/P" } ]
+        }
+      ]
+    },
+    "P": { "dataType": "pair", "left": { "dataType": "bytes" }, "right": { "dataType": "integer" } }
+  }
+}

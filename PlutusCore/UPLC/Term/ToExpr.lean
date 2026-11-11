@@ -157,7 +157,7 @@ partial def termToExpr : PlutusCore.UPLC.Term.Term → Expr
   | .Var     i   =>  .app  (.const ``Term.Var     []) (mkRawNatLit i)
   | .Const   c   =>  .app  (.const ``Term.Const   []) (toExpr c)
   | .Builtin b   =>  .app  (.const ``Term.Builtin []) (toExpr b)
-  | .Lam     x b => mkApp2 (.const ``Term.Lam     []) (toExpr x)     (termToExpr b)
+  | .Lam b       =>  .app (.const ``Term.Lam     []) (termToExpr b)
   | .Apply   f x => mkApp2 (.const ``Term.Apply   []) (termToExpr f) (termToExpr x)
   | .Delay   t   =>  .app  (.const ``Term.Delay   []) (termToExpr t)
   | .Force   t   =>  .app  (.const ``Term.Force   []) (termToExpr t)

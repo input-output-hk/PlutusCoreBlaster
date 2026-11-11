@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -o pipefail
 
 exec_found=0
 if [[ $# -ge 1 ]]
@@ -25,7 +26,9 @@ then
   fi
   for i in $LEAN_FILES
   do
-   LEAN_MODULE=`echo $i | sed 's/\.\///g' | sed 's/\//./g' | sed 's/.lean//g'`
+   LEAN_MODULE=${i#./}
+   LEAN_MODULE=${LEAN_MODULE%.lean}
+   LEAN_MODULE=${LEAN_MODULE//\//.}
    RES=`cat build.log | grep -o "Built $LEAN_MODULE"`
    for j in $EXEC_FILES
     do

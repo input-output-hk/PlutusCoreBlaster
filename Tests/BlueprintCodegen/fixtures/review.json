@@ -1,0 +1,79 @@
+{
+  "preamble": {
+    "title": "review",
+    "version": "1",
+    "plutusVersion": "v3"
+  },
+  "validators": [
+    {
+      "title": "review",
+      "datum": {
+        "schema": {
+          "$ref": "#/definitions/Review"
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "Option$Int": {
+      "title": "Optional",
+      "anyOf": [
+        {
+          "title": "Some",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "dataType": "integer"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option$ByteArray": {
+      "title": "Optional",
+      "anyOf": [
+        {
+          "title": "Some",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "dataType": "bytes"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Review": {
+      "dataType": "constructor",
+      "index": 0,
+      "fields": [
+        {
+          "title": "until",
+          "$ref": "#/definitions/Option$Int"
+        },
+        {
+          "title": "review_token",
+          "$ref": "#/definitions/Option$ByteArray"
+        },
+        {
+          "title": "Type",
+          "dataType": "integer"
+        }
+      ]
+    }
+  }
+}
