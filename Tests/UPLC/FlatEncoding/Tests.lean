@@ -91,7 +91,7 @@ example : decodeNat ([true]  ++ [false, false, false, false, false, false, false
 
 /-- info: some (Program.Program (Version.Version 1 0 0) (Term.Term.Const (Const.ConstArray [Const.Integer 16]))) -/
 #guard_msgs in
-#eval decodeProgramFromHexString "0100004bf20d0001"
+#eval decodeProgramFromHexString "0100004bf20901"
 
 /-- info: some
   (Program.Program (Version.Version 1 0 0)

@@ -13,9 +13,6 @@ mutual
     | []      , []       => true
     | _       , _        => false
 
-  private def arrayBeq (a b : Array Const) : Bool := listBeq (Array.toList a) (Array.toList b)
-
-  -- BEq for Const (manual, partial due to recursive ConstList and Pair constructors)
   private def constBeq : Const → Const → Bool
     | .Integer a             , .Integer b              => a == b
     | .ByteString a          , .ByteString b           => a == b
@@ -72,11 +69,6 @@ mutual
     intro a b h
     cases a <;> cases b <;> simp_all [listBeq]
     case cons.cons => exact ⟨constBeq_true_imp_eq _ _ h.1, listBeq_true_imp_eq _ _ h.2⟩
-
-  theorem arrayBeq_true_imp_eq : ∀ (a b : Array Const), arrayBeq a b = true → a = b := by
-    intro ⟨a⟩ ⟨b⟩ h
-    simp only [arrayBeq] at h
-    exact congrArg Array.mk (listBeq_true_imp_eq a b h)
 end
 
 mutual
@@ -91,11 +83,6 @@ mutual
     intro a
     cases a <;> simp [listBeq]
     case cons => exact ⟨constBeq_refl _, listBeq_refl _⟩
-
-  theorem arrayBeq_refl : ∀ a : Array Const, arrayBeq a a = true := by
-    intro ⟨a⟩
-    simp only [arrayBeq]
-    exact listBeq_refl a
 end
 
 instance : LawfulBEq Const where

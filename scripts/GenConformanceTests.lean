@@ -232,8 +232,9 @@ private def leafScopeErrorContent
   let p1 := leafEmbedPath cfg srcPathRel stem ".uplc"
   s!"\
 {header}
-import Tests.Conformance.ConformanceUtils
+
 import PlutusCore.UPLC.ScriptEncoding.Basic
+import Tests.Conformance.ConformanceUtils
 
 namespace {ns}
 
@@ -254,8 +255,9 @@ private def leafParseErrorContent
   let p1 := leafEmbedPath cfg srcPathRel stem ".uplc"
   s!"\
 {header}
-import Tests.Conformance.ConformanceUtils
+
 import PlutusCore.UPLC.ScriptEncoding.Basic
+import Tests.Conformance.ConformanceUtils
 
 namespace {ns}
 
