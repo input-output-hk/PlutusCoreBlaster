@@ -43,10 +43,9 @@ instance : ToExpr TypeOperator where
   toTypeExpr := .const ``TypeOperator []
   toExpr     := TypeOperator.toExpr
 
-/-- Emits the Lean expression
-    `PlutusCore.Value.fromList! <assoc-list>`, where the assoc list is
-    obtained from `PlutusCore.Value.toAssocList`. `fromList!` is total and
-    round-trips for any normalised `Value`. -/
+/-- Emits a `Value` as its nested list literal (from
+    `PlutusCore.Value.toAssocList`). A `Value` is already a canonical sorted
+    `List`, so the literal is exact and needs no re-normalisation. -/
 private def valueToExpr (v : Value) : Expr :=
   let bsType        : Expr := .const ``ByteString []
   let intType       : Expr := .const ``Int []
@@ -56,12 +55,10 @@ private def valueToExpr (v : Value) : Expr :=
   let assetsExpr : List (ByteString × Integer) → Expr :=
     listToExpr (α := ByteString × Integer) assetPairType
       (pairToExpr (α := ByteString) (β := Integer) bsType intType toExpr integerToExpr)
-  let assocListExpr : Expr :=
-    listToExpr (α := ByteString × List (ByteString × Integer)) entryType
-      (fun p => pairToExpr (α := ByteString) (β := List (ByteString × Integer))
-                  bsType assetsType toExpr assetsExpr p)
-      (PlutusCore.Value.toAssocList v)
-  .app (.app (.const ``PlutusCore.Value.fromListD []) assocListExpr) (.const ``PlutusCore.Value.empty [])
+  listToExpr (α := ByteString × List (ByteString × Integer)) entryType
+    (fun p => pairToExpr (α := ByteString) (β := List (ByteString × Integer))
+                bsType assetsType toExpr assetsExpr p)
+    (PlutusCore.Value.toAssocList v)
 
 partial def constToExpr : Const → Expr
   | .Integer              i => .app (.const ``Const.Integer              []) (toExpr i)

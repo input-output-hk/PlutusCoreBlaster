@@ -47,10 +47,11 @@ value-entry  ::= "(" "#" hexdigits "," value-assets ")"  -- currency ≤ 32 byte
 value-assets ::= "[" (value-asset ",")* "]"
 value-asset  ::= "(" "#" hexdigits "," integer ")"       -- token ≤ 32 bytes; quantity in signed Int128
 ```
-After parsing, `value-val` is normalised in the same way as the Haskell parser:
-duplicate `(currency, token)` pairs have their quantities summed (and the sum
-is re-checked against the signed Int128 bound), zero quantities and empty
-currency entries are dropped, and entries are sorted lexicographically by key.
+After parsing, `value-val` is normalised in the same way as the Haskell 1.64
+parser: duplicate `(currency, token)` pairs have their quantities summed (only
+the final sum is checked against the signed Int128 bound), zero quantities and
+empty currency entries are dropped, and entries are sorted lexicographically by
+key.
 -/
 
 namespace PlutusCore.UPLC.TextEncoding
@@ -516,9 +517,9 @@ def parseValueEntry : Parser (ByteString × List (ByteString × Integer)) :=
 /-- Parse `(con value ...)` payload. The outer `[ entry, ... ]` is parsed
     verbatim and then handed to `PlutusCore.Value.fromList`, which performs
     the Haskell-equivalent normalisation: key-length checks, signed-Int128
-    range checks (also re-checked on summed duplicates), merging of duplicate
-    `(currency, token)` pairs, dropping of zero quantities, dropping of empty
-    currency entries, and key-sorting. -/
+    range checks (on each literal and on the final merged sums), merging of
+    duplicate `(currency, token)` pairs, dropping of zero quantities, dropping
+    of empty currency entries, and key-sorting. -/
 def parseConstValue : Parser Const := do
   let raw ← brackets (sepBy parseValueEntry (ws *> char ',' *> ws))
   match PlutusCore.Value.fromList raw with

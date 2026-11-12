@@ -14,11 +14,12 @@ nested map `currency → (token → quantity)` where:
 * no quantity is zero.
 
 The smart constructor `fromList` is what the textual parser uses: it merges
-duplicate `(currency, token)` pairs by summing quantities (re-checking the
-128-bit bound for the sum), drops zero quantities and empty currencies, and
-sorts by key. The builtin operations (`insertCoin`, `lookupCoin`,
-`unionValue`, `valueContains`, `scaleValue`, `valueData`, `unValueData`)
-preserve those invariants.
+duplicate `(currency, token)` pairs by summing quantities (checking only the
+final merged sums against the 128-bit bound), drops zero quantities and empty
+currencies, and sorts by key. `fromCanonicalList` is the strict counterpart
+used by the Flat decoder: it accepts only input that is already canonical. The
+builtin operations (`insertCoin`, `lookupCoin`, `unionValue`, `valueContains`,
+`scaleValue`, `valueData`, `unValueData`) preserve those invariants.
 
 ### Representation note
 
@@ -187,6 +188,10 @@ def toAssocList (v : Value) : List (ByteString × List (ByteString × Integer)) 
 -- fromList — smart constructor used by the parser
 -- ---------------------------------------------------------------------------
 
+-- Duplicates are summed without a bounds check: like Haskell's `fromList`
+-- (`unsafeAddQuantity`), only the final merged quantities are validated, by
+-- `fromList` below. A running sum may therefore leave the 128-bit range as long
+-- as the final sum is back inside it.
 private def fromListAddAssets : Tokens → List (ByteString × Integer) → Except String Tokens
   | inner, []                 => pure inner
   | inner, (tok, amt) :: rest => do
@@ -194,10 +199,7 @@ private def fromListAddAssets : Tokens → List (ByteString × Integer) → Exce
         throw "Token name exceeds maximum length of 32 bytes"
       if ¬ validQuantity amt then
         throw "Token quantity out of signed 128-bit integer bounds"
-      let summed := AList.getD tok inner 0 + amt
-      if ¬ validQuantity summed then
-        throw "Token quantity out of signed 128-bit integer bounds after merging duplicates"
-      fromListAddAssets (insertOrErase inner tok summed) rest
+      fromListAddAssets (insertOrErase inner tok (AList.getD tok inner 0 + amt)) rest
 
 private def fromListAddEntries : Value → List (ByteString × List (ByteString × Integer)) → Except String Value
   | outer, []                   => pure outer
@@ -207,16 +209,29 @@ private def fromListAddEntries : Value → List (ByteString × List (ByteString 
       let inner ← fromListAddAssets (AList.getD cur outer []) assets
       fromListAddEntries (setOrPrune outer cur inner) rest
 
-/-- Build a `Value` from an unnormalised association list. Validates lengths
-    and quantity ranges, sums duplicate `(currency, token)` quantities (and
-    re-checks the bound), and drops zero quantities and empty currencies.
-    Mirrors Haskell's `Value.fromList`. -/
-def fromList (entries : List (ByteString × List (ByteString × Integer))) : Except String Value :=
-  fromListAddEntries [] entries
+private def tokensInBounds : Tokens → Bool
+  | []             => true
+  | (_, q) :: rest => validQuantity q && tokensInBounds rest
+
+private def allInBounds : Value → Bool
+  | []              => true
+  | (_, ts) :: rest => tokensInBounds ts && allInBounds rest
+
+/-- Build a `Value` from an unnormalised association list. Validates key
+    lengths and the range of every literal quantity, sums duplicate
+    `(currency, token)` quantities, checks the merged sums against the
+    signed 128-bit bound, and drops zero quantities and empty currencies.
+    Mirrors the Haskell text parser (`conValue`) together with `Value.fromList`. -/
+def fromList (entries : List (ByteString × List (ByteString × Integer))) : Except String Value := do
+  let v ← fromListAddEntries [] entries
+  if ¬ allInBounds v then
+    throw "Token quantity out of signed 128-bit integer bounds after merging duplicates"
+  pure v
 
 /-- Like `fromList`, but returns `default` on any validation failure. Intended
-    for round-tripping `toAssocList`/`ToExpr`, where the input is guaranteed
-    valid. -/
+    for building `value` constants from raw literals in tests and proofs (e.g.
+    `cValRaw` in `Tests/BlasterProofs/Value.lean`), where the input is known to
+    be valid. -/
 @[inline] def fromListD (entries : List (ByteString × List (ByteString × Integer))) (default : Value) : Value :=
   match fromList entries with
   | .ok v    => v
@@ -362,7 +377,7 @@ private def checkAscending (prev : Option ByteString) (k : ByteString) : Except 
   match prev with
   | some p => match keyCmp p k with
               | .lt => .ok ()
-              | _   => .error "unValueData: keys not strictly ascending"
+              | _   => .error "Value: keys not strictly ascending"
   | none   => .ok ()
 
 -- Walk an outer entry of the nested `Map`-of-`Map` form into an inner map,
@@ -403,6 +418,42 @@ def unValueData (d : Data) : Except String Value :=
   | .Map outer => unValueDataOuter none outer
   | _          => throw "unValueData: non-Map constructor"
 
+-- ---------------------------------------------------------------------------
+-- fromCanonicalList — strict constructor used by the Flat decoder
+-- ---------------------------------------------------------------------------
+
+private def checkCanonicalTokens : Option ByteString → List (ByteString × Integer) → Except String Unit
+  | _   , []               => .ok ()
+  | prev, (tok, q) :: rest => do
+      if ¬ validKey tok then
+        throw "Value: invalid token name"
+      if ¬ validQuantity q then
+        throw "Value: quantity out of bounds"
+      if q == 0 then
+        throw "Value: zero quantity"
+      let _ ← checkAscending prev tok
+      checkCanonicalTokens (some tok) rest
+
+private def checkCanonical : Option ByteString → List (ByteString × List (ByteString × Integer)) → Except String Unit
+  | _   , []                  => .ok ()
+  | prev, (cur, toks) :: rest => do
+      if ¬ validKey cur then
+        throw "Value: invalid currency symbol"
+      let _ ← checkAscending prev cur
+      let _ ← checkCanonicalTokens none toks
+      if toks.isEmpty then
+        throw "Value: empty inner map"
+      checkCanonical (some cur) rest
+
+/-- Accept an already-canonical nested list as a `Value`, failing unless keys
+    are at most 32 bytes, currencies and tokens are strictly ascending, every
+    quantity is non-zero and within the signed 128-bit range, and no inner map
+    is empty. Unlike `fromList`, nothing is merged, sorted or dropped. Mirrors
+    Haskell's `buildValueWith`, which backs the Flat `Value` decoder. -/
+def fromCanonicalList (entries : List (ByteString × List (ByteString × Integer))) : Except String Value := do
+  let _ ← checkCanonical none entries
+  pure entries
+
 end Internal
 
 export Internal
@@ -410,6 +461,7 @@ export Internal
     -- basic functions
     anyNegativeAmounts
     empty
+    fromCanonicalList
     fromList
     fromListD
     isEmpty

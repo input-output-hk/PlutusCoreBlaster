@@ -467,7 +467,7 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
-  -- Value builtins (Batch 7) — cost models match Haskell `builtinCostModel*`.
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
   -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
   -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
   | BuiltinFun.LookupCoin =>
@@ -761,7 +761,7 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
-  -- Value builtins (Batch 7) — cost models match Haskell `builtinCostModel*`.
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
   -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
   -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
   | BuiltinFun.LookupCoin =>
@@ -1059,7 +1059,7 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
-  -- Value builtins (Batch 7) — cost models match Haskell `builtinCostModel*`.
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
   -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
   -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
   | BuiltinFun.LookupCoin =>
@@ -1319,7 +1319,7 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
-  -- Value builtins (Batch 7) — cost models match Haskell `builtinCostModel*`.
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
   -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
   -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
   | BuiltinFun.LookupCoin =>
@@ -1582,7 +1582,7 @@ def builtinCostsE (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
-  -- Value builtins (Batch 7) — cost models match Haskell `builtinCostModel*`.
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
   -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
   -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
   | BuiltinFun.LookupCoin =>

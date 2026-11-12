@@ -2618,3 +2618,33 @@ example : programFromString? "-- Tag cannot exceeed 2^64-1 = maxBound :: Word64\
 
 -- term/constr/constr-10
 example : programFromString? "-- Version check fails before tag check\n(program 1.0.0\n    (constr 18446744073709551616 (con string \"Maximum tag plus one\") (con unit ()))\n)" |> Option.isNone := by native_decide
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- `value` literals: Haskell 1.64 parity checks that the conformance corpus
+-- does not cover. Expected results were checked with the Plutus 1.64.0.0
+-- `uplc` executable. Each literal quantity must fit in Int128, duplicates are
+-- then summed unchecked, and only the final sums are bounds-checked.
+-- ─────────────────────────────────────────────────────────────────────────
+
+private def parsedValue? (s : String) : Option PlutusCore.Value.Value :=
+  match programFromString? s with
+  | some (.Program _ (.Const (.Value v))) => some v
+  | _ => none
+
+-- A running sum may pass 2^127 - 1 if the final sum is back in range.
+#guard parsedValue? "(program 1.0.0 (con value [(#, [(#, 170141183460469231731687303715884105727), (#, 1), (#, -1)])]))"
+  == some [(⟨""⟩, [(⟨""⟩, 170141183460469231731687303715884105727)])]
+
+-- The same, with the duplicates split across repeated currency entries.
+#guard parsedValue? "(program 1.0.0 (con value [(#, [(#, 170141183460469231731687303715884105727)]), (#, [(#, 1)]), (#, [(#, -1)])]))"
+  == some [(⟨""⟩, [(⟨""⟩, 170141183460469231731687303715884105727)])]
+
+-- A running sum may pass -2^127 too; a zero entry for another token is dropped.
+#guard parsedValue? "(program 1.0.0 (con value [(#aa, [(#01, -170141183460469231731687303715884105728), (#01, -1), (#01, 1)]), (#aa, [(#02, 0)])]))"
+  == some [(⟨"\xaa"⟩, [(⟨"\x01"⟩, -170141183460469231731687303715884105728)])]
+
+-- A final sum outside Int128 is still rejected.
+#guard (programFromString? "(program 1.0.0 (con value [(#, [(#, 170141183460469231731687303715884105727), (#, 1)])]))").isNone
+
+-- So is an out-of-range literal, even when the final sum would fit.
+#guard (programFromString? "(program 1.0.0 (con value [(#, [(#, 170141183460469231731687303715884105728), (#, -1)])]))").isNone
