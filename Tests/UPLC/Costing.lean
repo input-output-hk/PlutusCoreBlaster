@@ -35,3 +35,14 @@ example (args : List PlutusCore.UPLC.CekValue.CekValue) (i : Nat) :
 #blaster [∀ n : Int, argSize [.VCon (.Integer n)] 1 = 1]
 #blaster [∀ cs : List PlutusCore.UPLC.Term.Const,
   argListLen [.VCon (.ConstList cs)] 1 = 0]
+
+-- Lists are measured by length (`ExMemoryUsage [a]`), whatever their elements, so
+-- `listToArray` costs the same for every list form of the same length.
+#blaster [∀ cs : List PlutusCore.UPLC.Term.Const,
+  argSize [.VCon (.ConstList cs)] 0 = cs.length]
+#blaster [∀ cs : List PlutusCore.UPLC.Term.Const,
+  builtinCostsE .ListToArray [.VCon (.ConstList cs)] = ⟨⟨1000 + 24838 * cs.length⟩, ⟨7 + cs.length⟩⟩]
+#blaster [∀ ds : List PlutusCore.Data.Data,
+  builtinCostsE .ListToArray [.VCon (.ConstDataList ds)] = ⟨⟨1000 + 24838 * ds.length⟩, ⟨7 + ds.length⟩⟩]
+#blaster [∀ ps : List (PlutusCore.Data.Data × PlutusCore.Data.Data),
+  builtinCostsE .ListToArray [.VCon (.ConstPairDataList ps)] = ⟨⟨1000 + 24838 * ps.length⟩, ⟨7 + ps.length⟩⟩]
