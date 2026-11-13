@@ -159,6 +159,14 @@ def expectedArgs (b : BuiltinFun) : ExpectedBuiltinArgs :=
   | LengthOfArray                   => ArgQ ⊙ One ArgV
   | ListToArray                     => ArgQ ⊙ One ArgV
   | IndexArray                      => ArgQ ⊙ ArgV ⊙ One ArgV
+  -- Value builtins
+  | InsertCoin                      => ArgV ⊙ ArgV ⊙ ArgV ⊙ One ArgV
+  | LookupCoin                      => ArgV ⊙ ArgV ⊙ One ArgV
+  | UnionValue                      => ArgV ⊙ One ArgV
+  | ValueContains                   => ArgV ⊙ One ArgV
+  | ValueData                       => One ArgV
+  | UnValueData                     => One ArgV
+  | ScaleValue                      => ArgV ⊙ One ArgV
 
 namespace BuiltinNotations
 

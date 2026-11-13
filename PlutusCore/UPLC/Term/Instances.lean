@@ -26,6 +26,7 @@ mutual
     | .Pair (a1, a2)         , .Pair (b1, b2)          => constBeq a1 b1 && constBeq a2 b2
     | .PairData a            , .PairData b             => a == b
     | .Data a                , .Data b                 => a == b
+    | .Value                a, .Value                b => a == b
     | .Bls12_381_G1_element a, .Bls12_381_G1_element b => decide (a = b)
     | .Bls12_381_G2_element a, .Bls12_381_G2_element b => decide (a = b)
     | .Bls12_381_MlResult   a, .Bls12_381_MlResult   b => a == b
@@ -139,6 +140,7 @@ instance : Repr AtomicType where
     | .TypeBool                 => "Bool"
     | .TypeUnit                 => "Unit"
     | .TypeData                 => "Data"
+    | .TypeValue                => "Value"
     | .TypeBls12_381_G1_element => "Bls12_381_G1_element"
     | .TypeBls12_381_G2_element => "Bls12_381_G2_element"
     | .TypeBls12_381_MlResult   => "Bls12_381_MlResult"

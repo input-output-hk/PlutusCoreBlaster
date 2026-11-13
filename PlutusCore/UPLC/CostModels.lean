@@ -115,6 +115,32 @@ mutual
     | (k, v) :: kvs => dataSize k + dataSize v + dataSizeMap kvs
 end
 
+-- Count of constructor nodes in a `Data` tree. Matches Haskell's
+-- `DataNodeCount` wrapper used to cost `unValueData`.
+mutual
+  def dataNodeCount (d : Data) : Nat :=
+    match d with
+    | Data.Constr _ ds => 1 + dataNodeCountList ds
+    | Data.Map kvs     => 1 + dataNodeCountMap kvs
+    | Data.List ds     => 1 + dataNodeCountList ds
+    | Data.I _         => 1
+    | Data.B _         => 1
+
+  def dataNodeCountList : List Data → Nat
+    | [] => 0
+    | d :: ds => dataNodeCount d + dataNodeCountList ds
+
+  def dataNodeCountMap : List (Data × Data) → Nat
+    | [] => 0
+    | (k, v) :: kvs => dataNodeCount k + dataNodeCount v + dataNodeCountMap kvs
+end
+
+/-- Look up `args[i]`, return `dataNodeCount` for `Const.Data`; 0 otherwise. -/
+def dataNodeCountArg (args : List CekValue) (i : Nat) : Nat :=
+  match args[i]? with
+  | some (.VCon (.Data d)) => dataNodeCount d
+  | _                      => 0
+
 /-- Size of a const value-/
 def constSize (c : Const) : Nat :=
   match c with
@@ -135,6 +161,9 @@ def constSize (c : Const) : Nat :=
   | Const.Bls12_381_G1_element _ => 48
   | Const.Bls12_381_G2_element _ => 96
   | Const.Bls12_381_MlResult _ => 576
+  -- Cost-model size for `value` is `totalSize` (sum of inner-map sizes),
+  -- matching the Haskell `MemUsage Value` instance.
+  | Const.Value v => PlutusCore.Value.totalSize v
 
 def cekValueSize (v : CekValue) : Nat :=
   match v with
@@ -164,6 +193,19 @@ def minArgSize (args : List CekValue) : Nat :=
   match args.map cekValueSize with
   | [] => 1 -- 1?
   | sizes => sizes.foldl min (sizes.head!)
+
+/-- `ValueMaxDepth` size from Haskell: `floor(log2 outerSize) + 1` plus
+    `floor(log2 maxInnerSize) + 1`, with each clamped to 0 when the
+    corresponding size is 0. Used to cost `lookupCoin` and `insertCoin`. -/
+def valueMaxDepth (args : List CekValue) (i : Nat) : Nat :=
+  match args[i]? with
+  | some (.VCon (.Value v)) =>
+      let outerSize := v.length
+      let innerSize := PlutusCore.Value.maxInnerSize v
+      let logOuter := if outerSize == 0 then 0 else Nat.log2 outerSize + 1
+      let logInner := if innerSize == 0 then 0 else Nat.log2 innerSize + 1
+      logOuter + logInner
+  | _ => 0
 
 def addedArgSize (args : List CekValue) : Nat :=
   args.foldl (fun acc arg => acc + cekValueSize arg) 0
@@ -425,6 +467,44 @@ def builtinCostsA (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
+  -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
+  -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
+  | BuiltinFun.LookupCoin =>
+    -- Source: lookupCoin cur tok v; CEK args = [v, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    ⟨⟨219951 + 9444 * valueMaxDepth args 0⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueContains =>
+    -- Source: valueContains a b; CEK args = [b, a].
+    -- x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    let cpu : Nat := if x < y then 213283 else 618401 + 1998 * x + 28258 * y
+    ⟨⟨cpu⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueData =>
+    -- Source: valueData v; CEK args = [v]. linear_in_x → size(v) = argSize args 0.
+    let x := argSize args 0
+    ⟨⟨1000 + 38159 * x⟩, ⟨2 + 22 * x⟩⟩
+  | BuiltinFun.UnValueData =>
+    -- Source: unValueData d; CEK args = [d].
+    -- Cost uses `DataNodeCount(d)` (number of constructor nodes).
+    let x := dataNodeCountArg args 0
+    ⟨⟨1000 + 95933 * x + x * x⟩, ⟨1 + 11 * x⟩⟩
+  | BuiltinFun.InsertCoin =>
+    -- Source: insertCoin cur tok amt v; CEK args = [v, amt, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    let u := valueMaxDepth args 0
+    ⟨⟨356924 + 18413 * u⟩, ⟨45 + 21 * u⟩⟩
+  | BuiltinFun.UnionValue =>
+    -- Source: unionValue a b; CEK args = [b, a].
+    -- with_interaction_in_x_and_y → x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    ⟨⟨1000 + 172116 * x + 183150 * y + 6 * x * y⟩, ⟨24 + 21 * (x + y)⟩⟩
+  | BuiltinFun.ScaleValue =>
+    -- Source: scaleValue c v; CEK args = [v, c]. linear_in_y → size(v) = argSize args 0.
+    let y := argSize args 0
+    ⟨⟨1000 + 277577 * y⟩, ⟨12 + 21 * y⟩⟩
 
 def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match b with
@@ -681,6 +761,44 @@ def builtinCostsB (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
+  -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
+  -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
+  | BuiltinFun.LookupCoin =>
+    -- Source: lookupCoin cur tok v; CEK args = [v, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    ⟨⟨219951 + 9444 * valueMaxDepth args 0⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueContains =>
+    -- Source: valueContains a b; CEK args = [b, a].
+    -- x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    let cpu : Nat := if x < y then 213283 else 618401 + 1998 * x + 28258 * y
+    ⟨⟨cpu⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueData =>
+    -- Source: valueData v; CEK args = [v]. linear_in_x → size(v) = argSize args 0.
+    let x := argSize args 0
+    ⟨⟨1000 + 38159 * x⟩, ⟨2 + 22 * x⟩⟩
+  | BuiltinFun.UnValueData =>
+    -- Source: unValueData d; CEK args = [d].
+    -- Cost uses `DataNodeCount(d)` (number of constructor nodes).
+    let x := dataNodeCountArg args 0
+    ⟨⟨1000 + 95933 * x + x * x⟩, ⟨1 + 11 * x⟩⟩
+  | BuiltinFun.InsertCoin =>
+    -- Source: insertCoin cur tok amt v; CEK args = [v, amt, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    let u := valueMaxDepth args 0
+    ⟨⟨356924 + 18413 * u⟩, ⟨45 + 21 * u⟩⟩
+  | BuiltinFun.UnionValue =>
+    -- Source: unionValue a b; CEK args = [b, a].
+    -- with_interaction_in_x_and_y → x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    ⟨⟨1000 + 172116 * x + 183150 * y + 6 * x * y⟩, ⟨24 + 21 * (x + y)⟩⟩
+  | BuiltinFun.ScaleValue =>
+    -- Source: scaleValue c v; CEK args = [v, c]. linear_in_y → size(v) = argSize args 0.
+    let y := argSize args 0
+    ⟨⟨1000 + 277577 * y⟩, ⟨12 + 21 * y⟩⟩
 
 
 def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
@@ -941,6 +1059,44 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
+  -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
+  -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
+  | BuiltinFun.LookupCoin =>
+    -- Source: lookupCoin cur tok v; CEK args = [v, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    ⟨⟨219951 + 9444 * valueMaxDepth args 0⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueContains =>
+    -- Source: valueContains a b; CEK args = [b, a].
+    -- x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    let cpu : Nat := if x < y then 213283 else 618401 + 1998 * x + 28258 * y
+    ⟨⟨cpu⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueData =>
+    -- Source: valueData v; CEK args = [v]. linear_in_x → size(v) = argSize args 0.
+    let x := argSize args 0
+    ⟨⟨1000 + 38159 * x⟩, ⟨2 + 22 * x⟩⟩
+  | BuiltinFun.UnValueData =>
+    -- Source: unValueData d; CEK args = [d].
+    -- Cost uses `DataNodeCount(d)` (number of constructor nodes).
+    let x := dataNodeCountArg args 0
+    ⟨⟨1000 + 95933 * x + x * x⟩, ⟨1 + 11 * x⟩⟩
+  | BuiltinFun.InsertCoin =>
+    -- Source: insertCoin cur tok amt v; CEK args = [v, amt, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    let u := valueMaxDepth args 0
+    ⟨⟨356924 + 18413 * u⟩, ⟨45 + 21 * u⟩⟩
+  | BuiltinFun.UnionValue =>
+    -- Source: unionValue a b; CEK args = [b, a].
+    -- with_interaction_in_x_and_y → x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    ⟨⟨1000 + 172116 * x + 183150 * y + 6 * x * y⟩, ⟨24 + 21 * (x + y)⟩⟩
+  | BuiltinFun.ScaleValue =>
+    -- Source: scaleValue c v; CEK args = [v, c]. linear_in_y → size(v) = argSize args 0.
+    let y := argSize args 0
+    ⟨⟨1000 + 277577 * y⟩, ⟨12 + 21 * y⟩⟩
 
 -- BuiltinCostsD
 -- Based on builtinCostModelD.json (plutus 1.64.0.0 / Van Rossem era, PlutusV1/V2 post-Conway).
@@ -1163,6 +1319,44 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
+  -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
+  -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
+  | BuiltinFun.LookupCoin =>
+    -- Source: lookupCoin cur tok v; CEK args = [v, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    ⟨⟨219951 + 9444 * valueMaxDepth args 0⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueContains =>
+    -- Source: valueContains a b; CEK args = [b, a].
+    -- x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    let cpu : Nat := if x < y then 213283 else 618401 + 1998 * x + 28258 * y
+    ⟨⟨cpu⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueData =>
+    -- Source: valueData v; CEK args = [v]. linear_in_x → size(v) = argSize args 0.
+    let x := argSize args 0
+    ⟨⟨1000 + 38159 * x⟩, ⟨2 + 22 * x⟩⟩
+  | BuiltinFun.UnValueData =>
+    -- Source: unValueData d; CEK args = [d].
+    -- Cost uses `DataNodeCount(d)` (number of constructor nodes).
+    let x := dataNodeCountArg args 0
+    ⟨⟨1000 + 95933 * x + x * x⟩, ⟨1 + 11 * x⟩⟩
+  | BuiltinFun.InsertCoin =>
+    -- Source: insertCoin cur tok amt v; CEK args = [v, amt, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    let u := valueMaxDepth args 0
+    ⟨⟨356924 + 18413 * u⟩, ⟨45 + 21 * u⟩⟩
+  | BuiltinFun.UnionValue =>
+    -- Source: unionValue a b; CEK args = [b, a].
+    -- with_interaction_in_x_and_y → x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    ⟨⟨1000 + 172116 * x + 183150 * y + 6 * x * y⟩, ⟨24 + 21 * (x + y)⟩⟩
+  | BuiltinFun.ScaleValue =>
+    -- Source: scaleValue c v; CEK args = [v, c]. linear_in_y → size(v) = argSize args 0.
+    let y := argSize args 0
+    ⟨⟨1000 + 277577 * y⟩, ⟨12 + 21 * y⟩⟩
 
 -- BuiltinCostsE
 -- Based on builtinCostModelE.json (plutus 1.64.0.0 / Van Rossem era, PlutusV3 post-Conway).
@@ -1388,6 +1582,44 @@ def builtinCostsE (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 24838 * n⟩, ⟨7 + n⟩⟩
   | BuiltinFun.IndexArray =>
     ⟨⟨232010⟩, ⟨32⟩⟩
+  -- Value builtins (Batch 6) — cost models match Haskell `builtinCostModel*`.
+  -- CEK args arrive in reverse order, so the Haskell "x" (1st arg) is Lean's
+  -- args[N-1], "y" is args[N-2], ..., "u" is args[N-4].
+  | BuiltinFun.LookupCoin =>
+    -- Source: lookupCoin cur tok v; CEK args = [v, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    ⟨⟨219951 + 9444 * valueMaxDepth args 0⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueContains =>
+    -- Source: valueContains a b; CEK args = [b, a].
+    -- x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    let cpu : Nat := if x < y then 213283 else 618401 + 1998 * x + 28258 * y
+    ⟨⟨cpu⟩, ⟨1⟩⟩
+  | BuiltinFun.ValueData =>
+    -- Source: valueData v; CEK args = [v]. linear_in_x → size(v) = argSize args 0.
+    let x := argSize args 0
+    ⟨⟨1000 + 38159 * x⟩, ⟨2 + 22 * x⟩⟩
+  | BuiltinFun.UnValueData =>
+    -- Source: unValueData d; CEK args = [d].
+    -- Cost uses `DataNodeCount(d)` (number of constructor nodes).
+    let x := dataNodeCountArg args 0
+    ⟨⟨1000 + 95933 * x + x * x⟩, ⟨1 + 11 * x⟩⟩
+  | BuiltinFun.InsertCoin =>
+    -- Source: insertCoin cur tok amt v; CEK args = [v, amt, tok, cur].
+    -- Cost uses `ValueMaxDepth(v)` = logOuter + logInner.
+    let u := valueMaxDepth args 0
+    ⟨⟨356924 + 18413 * u⟩, ⟨45 + 21 * u⟩⟩
+  | BuiltinFun.UnionValue =>
+    -- Source: unionValue a b; CEK args = [b, a].
+    -- with_interaction_in_x_and_y → x = size(a) = argSize args 1, y = size(b) = argSize args 0.
+    let x := argSize args 1
+    let y := argSize args 0
+    ⟨⟨1000 + 172116 * x + 183150 * y + 6 * x * y⟩, ⟨24 + 21 * (x + y)⟩⟩
+  | BuiltinFun.ScaleValue =>
+    -- Source: scaleValue c v; CEK args = [v, c]. linear_in_y → size(v) = argSize args 0.
+    let y := argSize args 0
+    ⟨⟨1000 + 277577 * y⟩, ⟨12 + 21 * y⟩⟩
 
 def builtinCostSelected (semVar: BuiltinSemanticsVariant) (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   match semVar with

@@ -5,7 +5,10 @@ namespace PlutusCore.UPLC.Term
 
 open Lean
 
+open PlutusCore.ByteString (ByteString)
 open PlutusCore.Data
+open PlutusCore.Integer (Integer)
+open PlutusCore.Value (Value)
 
 instance : ToExpr AtomicType where
   toTypeExpr := .const ``AtomicType []
@@ -16,6 +19,7 @@ instance : ToExpr AtomicType where
     | .TypeBool                 => .const ``AtomicType.TypeBool                 []
     | .TypeUnit                 => .const ``AtomicType.TypeUnit                 []
     | .TypeData                 => .const ``AtomicType.TypeData                 []
+    | .TypeValue                => .const ``AtomicType.TypeValue                []
     | .TypeBls12_381_G1_element => .const ``AtomicType.TypeBls12_381_G1_element []
     | .TypeBls12_381_G2_element => .const ``AtomicType.TypeBls12_381_G2_element []
     | .TypeBls12_381_MlResult   => .const ``AtomicType.TypeBls12_381_MlResult   []
@@ -39,6 +43,23 @@ instance : ToExpr TypeOperator where
   toTypeExpr := .const ``TypeOperator []
   toExpr     := TypeOperator.toExpr
 
+/-- Emits a `Value` as its nested list literal (from
+    `PlutusCore.Value.toAssocList`). A `Value` is already a canonical sorted
+    `List`, so the literal is exact and needs no re-normalisation. -/
+private def valueToExpr (v : Value) : Expr :=
+  let bsType        : Expr := .const ``ByteString []
+  let intType       : Expr := .const ``Int []
+  let assetPairType : Expr := mkApp2 (.const ``Prod [.zero, .zero]) bsType intType
+  let assetsType    : Expr := .app  (.const ``List [.zero]) assetPairType
+  let entryType     : Expr := mkApp2 (.const ``Prod [.zero, .zero]) bsType assetsType
+  let assetsExpr : List (ByteString × Integer) → Expr :=
+    listToExpr (α := ByteString × Integer) assetPairType
+      (pairToExpr (α := ByteString) (β := Integer) bsType intType toExpr integerToExpr)
+  listToExpr (α := ByteString × List (ByteString × Integer)) entryType
+    (fun p => pairToExpr (α := ByteString) (β := List (ByteString × Integer))
+                bsType assetsType toExpr assetsExpr p)
+    (PlutusCore.Value.toAssocList v)
+
 partial def constToExpr : Const → Expr
   | .Integer              i => .app (.const ``Const.Integer              []) (toExpr i)
   | .ByteString           b => .app (.const ``Const.ByteString           []) (toExpr b)
@@ -52,6 +73,7 @@ partial def constToExpr : Const → Expr
   | .Pair                 p => .app (.const ``Const.Pair                 []) (pairToExpr (α := Const) (β := Const) (.const ``Const []) (.const ``Const []) constToExpr constToExpr p)
   | .PairData             p => .app (.const ``Const.PairData             []) (toExpr p)
   | .Data                 d => .app (.const ``Const.Data                 []) (toExpr d)
+  | .Value                v => .app (.const ``Const.Value                []) (valueToExpr v)
   | .Bls12_381_G1_element p => .app (.const ``Const.Bls12_381_G1_element []) (toExpr p)
   | .Bls12_381_G2_element q => .app (.const ``Const.Bls12_381_G2_element []) (toExpr q)
   | .Bls12_381_MlResult   r => .app (.const ``Const.Bls12_381_MlResult   []) (toExpr r)
@@ -157,6 +179,13 @@ instance : ToExpr BuiltinFun where
     | .LengthOfArray                   => .const ``BuiltinFun.LengthOfArray []
     | .ListToArray                     => .const ``BuiltinFun.ListToArray []
     | .IndexArray                      => .const ``BuiltinFun.IndexArray []
+    | .InsertCoin                      => .const ``BuiltinFun.InsertCoin []
+    | .LookupCoin                      => .const ``BuiltinFun.LookupCoin []
+    | .UnionValue                      => .const ``BuiltinFun.UnionValue []
+    | .ValueContains                   => .const ``BuiltinFun.ValueContains []
+    | .ValueData                       => .const ``BuiltinFun.ValueData []
+    | .UnValueData                     => .const ``BuiltinFun.UnValueData []
+    | .ScaleValue                      => .const ``BuiltinFun.ScaleValue []
 
 partial def termToExpr : PlutusCore.UPLC.Term.Term → Expr
   -- Raw literal keeps the Expr shallow: huge decoded scripts contain many

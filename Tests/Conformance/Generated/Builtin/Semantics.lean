@@ -53,6 +53,7 @@ import Tests.Conformance.Generated.Builtin.Semantics.IData
 import Tests.Conformance.Generated.Builtin.Semantics.IfThenElse
 import Tests.Conformance.Generated.Builtin.Semantics.IndexArray
 import Tests.Conformance.Generated.Builtin.Semantics.IndexByteString
+import Tests.Conformance.Generated.Builtin.Semantics.InsertCoin
 import Tests.Conformance.Generated.Builtin.Semantics.IntegerToByteString
 import Tests.Conformance.Generated.Builtin.Semantics.Keccak_256
 import Tests.Conformance.Generated.Builtin.Semantics.LengthOfArray
@@ -65,6 +66,7 @@ import Tests.Conformance.Generated.Builtin.Semantics.ListData
 import Tests.Conformance.Generated.Builtin.Semantics.ListOfList
 import Tests.Conformance.Generated.Builtin.Semantics.ListOfPair
 import Tests.Conformance.Generated.Builtin.Semantics.ListToArray
+import Tests.Conformance.Generated.Builtin.Semantics.LookupCoin
 import Tests.Conformance.Generated.Builtin.Semantics.MapData
 import Tests.Conformance.Generated.Builtin.Semantics.MkCons
 import Tests.Conformance.Generated.Builtin.Semantics.MkNilData
@@ -81,6 +83,7 @@ import Tests.Conformance.Generated.Builtin.Semantics.RemainderInteger
 import Tests.Conformance.Generated.Builtin.Semantics.ReplicateByte
 import Tests.Conformance.Generated.Builtin.Semantics.Ripemd_160
 import Tests.Conformance.Generated.Builtin.Semantics.RotateByteString
+import Tests.Conformance.Generated.Builtin.Semantics.ScaleValue
 import Tests.Conformance.Generated.Builtin.Semantics.Sha2_256
 import Tests.Conformance.Generated.Builtin.Semantics.Sha3_256
 import Tests.Conformance.Generated.Builtin.Semantics.ShiftByteString
@@ -93,8 +96,12 @@ import Tests.Conformance.Generated.Builtin.Semantics.Trace
 import Tests.Conformance.Generated.Builtin.Semantics.UnBData
 import Tests.Conformance.Generated.Builtin.Semantics.UnConstrData
 import Tests.Conformance.Generated.Builtin.Semantics.UnIData
+import Tests.Conformance.Generated.Builtin.Semantics.UnionValue
 import Tests.Conformance.Generated.Builtin.Semantics.UnListData
 import Tests.Conformance.Generated.Builtin.Semantics.UnMapData
+import Tests.Conformance.Generated.Builtin.Semantics.UnValueData
+import Tests.Conformance.Generated.Builtin.Semantics.ValueContains
+import Tests.Conformance.Generated.Builtin.Semantics.ValueData
 import Tests.Conformance.Generated.Builtin.Semantics.VerifyEcdsaSecp256k1Signature
 import Tests.Conformance.Generated.Builtin.Semantics.VerifyEd25519Signature
 import Tests.Conformance.Generated.Builtin.Semantics.VerifySchnorrSecp256k1Signature
