@@ -1,6 +1,7 @@
 import PlutusCore.ByteString
 import PlutusCore.Cbor
 import PlutusCore.Data
+import PlutusCore.Default
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Utils
@@ -31,9 +32,14 @@ namespace PLC
   export PlutusCore.Cbor (
     encodeData
   )
+  open PlutusCore.Default
+  export PlutusCore.Default (
+    BuiltinSemanticsVariant
+  )
 end PLC
 
 open PlutusCore.ByteString (ByteString)
+open PlutusCore.Integer (Integer)
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.BuiltinFunctions.Utils
@@ -48,10 +54,19 @@ def chooseData (Vs : List CekValue) : Option CekValue :=
   | _ => none
 
 -- Define constrData
-def constrData (Vs : List CekValue) : Option CekValue :=
+-- Word64 max, i.e. 2^64 - 1. Under semantics variants D/E the constructor
+-- index must unlift as a Word64; under A/B/C it stays an unbounded Integer.
+private def word64Max : Integer := 18446744073709551615
+
+def constrData (semanticsVariant : PLC.BuiltinSemanticsVariant) (Vs : List CekValue) : Option CekValue :=
   match Vs with
   | [CekValue.VCon (Const.ConstDataList xs), CekValue.VCon (Const.Integer i)] =>
-      some (CekValue.VCon (Const.Data (PLC.constrData i xs)))
+      match semanticsVariant with
+      | .defaultFunSemanticsVariantD | .defaultFunSemanticsVariantE =>
+          if 0 ≤ i ∧ i ≤ word64Max then
+            some (CekValue.VCon (Const.Data (PLC.constrData i xs)))
+          else none
+      | _ => some (CekValue.VCon (Const.Data (PLC.constrData i xs)))
   | _ => none
 
 -- Define mapData

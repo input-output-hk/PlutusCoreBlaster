@@ -10,9 +10,9 @@ open PlutusCore.UPLC.Term (Program Term)
 
 /-! ### Iteration of `step` -/
 
-def stepN (sv : BuiltinSemanticsVariant) (s : State) : Nat → State
+def stepN (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (s : State) : Nat → State
   | 0 => s
-  | (n + 1) => stepN sv (step sv s) n
+  | (n + 1) => stepN sv pv (step sv pv s) n
 
 /-! ### Terminal states -/
 
@@ -28,8 +28,8 @@ instance : DecidablePred terminal := fun s =>
   | State.Return _ _ => isFalse (by rintro (⟨V, h⟩ | h) <;> cases h <;> contradiction)
 
 /-- `step` fixes exactly the terminal states. -/
-theorem step_fix_iff (sv : BuiltinSemanticsVariant) (s : State) :
-    step sv s = s ↔ terminal s := by
+theorem step_fix_iff (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (s : State) :
+    step sv pv s = s ↔ terminal s := by
   refine ⟨fun h => ?_, fun h => by
            rcases h with ⟨V, rfl⟩
            . rfl
@@ -48,36 +48,37 @@ theorem step_fix_iff (sv : BuiltinSemanticsVariant) (s : State) :
 /-! ### Fuel composition -/
 
 /-- Fuel composition for `stepN`, with no side condition. -/
-theorem stepN_add (sv : BuiltinSemanticsVariant) (s : State) (n m : Nat) :
-    stepN sv s (n + m) = stepN sv (stepN sv s n) m := by
+theorem stepN_add (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (s : State) (n m : Nat) :
+    stepN sv pv s (n + m) = stepN sv pv (stepN sv pv s n) m := by
   induction n generalizing s with
   | zero => simp [stepN]
-  | succ p ih => rw [Nat.succ_add]; exact ih (step sv s)
+  | succ p ih => rw [Nat.succ_add]; exact ih (step sv pv s)
 
 /-- A terminal state is the state at every index of the run from it. -/
-theorem stepN_of_terminal (sv : BuiltinSemanticsVariant) (s : State) (h : terminal s)
-    (n : Nat) : stepN sv s n = s := by
+theorem stepN_of_terminal (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (s : State)
+    (h : terminal s) (n : Nat) : stepN sv pv s n = s := by
   induction n with
   | zero => rfl
   | succ p ih =>
-      show stepN sv (step sv s) p = s
-      rw [(step_fix_iff sv s).mpr h]
+      show stepN sv pv (step sv pv s) p = s
+      rw [(step_fix_iff sv pv s).mpr h]
       exact ih
 
 /-- A run whose state at `n` is terminal is at that state at every index past `n`. -/
-theorem stepN_fix (sv : BuiltinSemanticsVariant) (s : State) (n : Nat)
-    (h : terminal (stepN sv s n)) (m : Nat) :
-    stepN sv s (n + m) = stepN sv s n := by
+theorem stepN_fix (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (s : State) (n : Nat)
+    (h : terminal (stepN sv pv s n)) (m : Nat) :
+    stepN sv pv s (n + m) = stepN sv pv s n := by
   rw [stepN_add]
-  exact stepN_of_terminal sv _ h m
+  exact stepN_of_terminal sv pv _ h m
 
 /-! ### `runSteps` in terms of `stepN` -/
 
-/-- `runSteps` returns the state at index `n` when that state is a `Halt` state, and
-`State.Error` otherwise. -/
-theorem runSteps_eq_stepN (sv : BuiltinSemanticsVariant) (s : State) (n : Nat) :
-    runSteps sv s n =
-      match stepN sv s n with
+/-- `runSteps` returns the state at index `n` when that state is a `Halt` or `Error`
+state, and `State.BudgetExhausted` otherwise. -/
+theorem runSteps_eq_stepN (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (s : State)
+    (n : Nat) :
+    runSteps sv pv s n =
+      match stepN sv pv s n with
       | State.Halt V => State.Halt V
       | State.Error => State.Error
       | _ => State.BudgetExhausted := by
@@ -85,43 +86,44 @@ theorem runSteps_eq_stepN (sv : BuiltinSemanticsVariant) (s : State) (n : Nat) :
   | zero => cases s <;> rfl
   | succ p ih =>
       cases s with
-      | Halt V => rw [stepN_of_terminal sv _ (Or.inl ⟨V, rfl⟩)]; rfl
-      | Error => rw [stepN_of_terminal sv _ (Or.inr (Or.inl rfl))]; rfl
-      | BudgetExhausted => rw [stepN_of_terminal sv _ (Or.inr (Or.inr rfl))]; rfl
-      | Eval st rho t => exact ih (step sv (State.Eval st rho t))
-      | Return st v => exact ih (step sv (State.Return st v))
+      | Halt V => rw [stepN_of_terminal sv pv _ (Or.inl ⟨V, rfl⟩)]; rfl
+      | Error => rw [stepN_of_terminal sv pv _ (Or.inr (Or.inl rfl))]; rfl
+      | BudgetExhausted => rw [stepN_of_terminal sv pv _ (Or.inr (Or.inr rfl))]; rfl
+      | Eval st rho t => exact ih (step sv pv (State.Eval st rho t))
+      | Return st v => exact ih (step sv pv (State.Return st v))
 
 /-- The assurance runner retains unfinished states at the same step index as `stepN`. -/
-theorem runStepsPreservingState_eq_stepN (sv : BuiltinSemanticsVariant) (s : State)
-    (n : Nat) : runStepsPreservingState sv s n = stepN sv s n := by
+theorem runStepsPreservingState_eq_stepN (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion)
+    (s : State) (n : Nat) : runStepsPreservingState sv pv s n = stepN sv pv s n := by
   induction n generalizing s with
   | zero => cases s <;> rfl
   | succ n ih =>
       cases s with
       | Halt V =>
           simp only [runStepsPreservingState, stepN, step]
-          exact (stepN_of_terminal sv (State.Halt V) (Or.inl ⟨V, rfl⟩) n).symm
+          exact (stepN_of_terminal sv pv (State.Halt V) (Or.inl ⟨V, rfl⟩) n).symm
       | Error =>
           simp only [runStepsPreservingState, stepN, step]
-          exact (stepN_of_terminal sv State.Error (Or.inr (Or.inl rfl)) n).symm
+          exact (stepN_of_terminal sv pv State.Error (Or.inr (Or.inl rfl)) n).symm
       | BudgetExhausted =>
           simp only [runStepsPreservingState, stepN, step]
-          exact (stepN_of_terminal sv State.BudgetExhausted (Or.inr (Or.inr rfl)) n).symm
-      | Eval st rho t => exact ih (step sv (State.Eval st rho t))
-      | Return st v => exact ih (step sv (State.Return st v))
+          exact (stepN_of_terminal sv pv State.BudgetExhausted (Or.inr (Or.inr rfl)) n).symm
+      | Eval st rho t => exact ih (step sv pv (State.Eval st rho t))
+      | Return st v => exact ih (step sv pv (State.Return st v))
 
 /-! ### Program execution -/
 
 /-- A program's halt result does not depend on how much fuel it was given, past enough. -/
 theorem cekExecuteProgramWithSemanticVariant_halt_stable
-    (sv : BuiltinSemanticsVariant) (p : Program) (params : List Term) (V : CekValue) (n m : Nat)
-    (h : cekExecuteProgramWithSemanticVariant sv p params n = State.Halt V) :
-    cekExecuteProgramWithSemanticVariant sv p params (n + m) = State.Halt V := by
+    (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (p : Program) (params : List Term)
+    (V : CekValue) (n m : Nat)
+    (h : cekExecuteProgramWithSemanticVariant sv pv p params n = State.Halt V) :
+    cekExecuteProgramWithSemanticVariant sv pv p params (n + m) = State.Halt V := by
   cases p with
   | Program ver body =>
       simp only [cekExecuteProgramWithSemanticVariant, runSteps_eq_stepN] at h ⊢
-      have hs : stepN sv (initialState (applyParams body params)) n = State.Halt V := by
+      have hs : stepN sv pv (initialState (applyParams body params)) n = State.Halt V := by
         split at h <;> simp_all
-      rw [stepN_fix sv _ n (Or.inl ⟨V, hs⟩) m, hs]
+      rw [stepN_fix sv pv _ n (Or.inl ⟨V, hs⟩) m, hs]
 
 end PlutusCore.UPLC.CekMachine

@@ -192,7 +192,7 @@ def countSteps (σ : PlutusCore.UPLC.CekMachine.State) (n fuel : Nat) : Nat × S
   match σ with
   | .Halt _ => (n, "halt")
   | .Error  => (n, "error")
-  | _       => if n < fuel then countSteps (step default σ) (n + 1) fuel else (n, "exhausted")
+  | _       => if n < fuel then countSteps (step default default σ) (n + 1) fuel else (n, "exhausted")
 termination_by fuel - n
 
 /-- How a closed script runs natively. -/

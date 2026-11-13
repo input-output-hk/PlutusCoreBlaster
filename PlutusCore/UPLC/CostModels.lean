@@ -158,9 +158,13 @@ def constSize (c : Const) : Nat :=
   | Const.Pair (c1, c2) => constSize c1 + constSize c2
   | Const.PairData (d1, d2) => dataSize d1 + dataSize d2
   | Const.Data d => dataSize d
-  | Const.Bls12_381_G1_element _ => 48
-  | Const.Bls12_381_G2_element _ => 96
-  | Const.Bls12_381_MlResult _ => 576
+  -- Sizes are in 8-byte words of blst's in-memory representation, matching
+  -- ExMemoryUsage.hs (`memSizeBytes / 8`): G1 = 144 bytes = 18 words, G2 = 288
+  -- bytes = 36 words, MlResult = 576 bytes = 72 words. Not the compressed
+  -- serialization lengths (48/96 bytes for G1/G2).
+  | Const.Bls12_381_G1_element _ => 18
+  | Const.Bls12_381_G2_element _ => 36
+  | Const.Bls12_381_MlResult _ => 72
   -- Cost-model size for `value` is `totalSize` (sum of inner-map sizes),
   -- matching the Haskell `MemUsage Value` instance.
   | Const.Value v => PlutusCore.Value.totalSize v
@@ -1099,7 +1103,7 @@ def builtinCostsC (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 277577 * y⟩, ⟨12 + 21 * y⟩⟩
 
 -- BuiltinCostsD
--- Based on builtinCostModelD.json (plutus 1.64.0.0 / Van Rossem era, PlutusV1/V2 post-Conway).
+-- Based on builtinCostModelD.json (plutus 1.64.0.0 / Van Rossem era, PlutusV1/V2 from protocol version 11).
 -- Differences from B:
 --   equalsByteString: intercept 28755, slope 75, constant 30623
 --   divideInteger: above_and_below_diagonal (always formula with x=max(sizes), y=min(sizes))
@@ -1359,7 +1363,7 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     ⟨⟨1000 + 277577 * y⟩, ⟨12 + 21 * y⟩⟩
 
 -- BuiltinCostsE
--- Based on builtinCostModelE.json (plutus 1.64.0.0 / Van Rossem era, PlutusV3 post-Conway).
+-- Based on builtinCostModelE.json (plutus 1.64.0.0 / Van Rossem era, PlutusV3 from protocol version 11).
 -- Differences from C:
 --   equalsByteString: intercept 28755, slope 75, constant 30623
 --   remainderInteger: c11 549 → 960
