@@ -265,6 +265,16 @@ def validateSemantics (version sem : String) : Except String Unit := do
   unless allowed.contains sem do
     throw s!"semantics variant '{sem}' is incompatible with Plutus {version}"
 
+/-- The `ProtocolVersion` constructor an applied wrapper runs at, matched to its
+    builtin variant. Plutus 1.64 uses A–C only before van Rossem (protocol
+    version 11) and D/E only from it, so the variant also decides whether `case`
+    on constants is available (see `MachineParameters.hs` and the per-language
+    `EvaluationContext.hs`). -/
+def protocolVersionForSemantics : String → String
+  | "A"       => "preConway"
+  | "B" | "C" => "postConwayPreVanRossem"
+  | _         => "postVanRossem"
+
 /-- Legacy step-only budgets use the current (post-Van-Rossem) default for their language. -/
 def defaultSemantics (version : String) : Except String String := do
   let language ← match version with
@@ -1213,7 +1223,9 @@ private def argToTermStr (varName : String) (ptype : PlutusType) : String :=
 
 /-- Emit `<ns>.<wrapperName> : … → State`, applying the program of the
     already-emitted `<ns>.<scriptName> : PlutusScript` to its encoded arguments
-    and running the CEK machine for `steps` steps.
+    and running the CEK machine for `steps` steps, under builtin variant
+    `semantics` at the protocol version that variant implies
+    (`protocolVersionForSemantics`).
 
     Callers must have checked `wrapperBlocker` first. Data arguments use schema-directed codecs;
     native arguments use their declared builtin constant representation. -/
@@ -1238,7 +1250,8 @@ to its declared `arguments` and run on the CEK machine for " ++ toString steps +
     "def " ++ escapeIdent wrapperName ++ binders ++ " : _root_.PlutusCore.UPLC.CekMachine.State :=\n" ++
     "  _root_.PlutusCore.UPLC.CekMachine.cekExecuteProgramWithSemanticVariant " ++
       "_root_.PlutusCore.Default.Internal.BuiltinSemanticsVariant.defaultFunSemanticsVariant" ++ semantics ++ " " ++
-      "_root_.PlutusCore.Default.Internal.ProtocolVersion.postVanRossem " ++ escapeIdent scriptName ++
+      "_root_.PlutusCore.Default.Internal.ProtocolVersion." ++ protocolVersionForSemantics semantics ++ " " ++
+      escapeIdent scriptName ++
       ".script [" ++ terms ++ "] " ++ toString steps
   withTempNamespace ns do
     -- Bring `IsData` / `Data` / `Integer` / `ByteString` short names into scope

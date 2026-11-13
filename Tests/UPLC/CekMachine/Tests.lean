@@ -38,8 +38,8 @@ example : step testSemanticsVariant testProtocolVersion State.Error = State.Erro
 -- At zero fuel `stepN` is the identity.
 example (s : State) : stepN testSemanticsVariant testProtocolVersion s 0 = s := rfl
 
--- Splitting through `runSteps` turns a halting run into an `Error`. Splitting
--- through `stepN` does not.
+-- Splitting through `runSteps` turns a halting run into `BudgetExhausted`.
+-- Splitting through `stepN` does not.
 example : runSteps testSemanticsVariant testProtocolVersion testStart 1 = State.BudgetExhausted := rfl
 example : runSteps testSemanticsVariant testProtocolVersion testStart 2
     = State.Halt testResult := rfl

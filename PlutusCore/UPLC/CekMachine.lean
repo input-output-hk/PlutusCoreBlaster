@@ -347,11 +347,12 @@ def runStepsWithBudget
         sorry
 
 -- Map semantics variant to the corresponding CEK machine step costs.
--- See: https://github.com/IntersectMBO/plutus/blob/master/plutus-ledger-api/src/PlutusLedgerApi/MachineParameters.hs
---   PlutusV1/V2, pre-Conway   → VariantA (defaultCekMachineCostsA)
---   PlutusV1/V2, post-Conway  → VariantD (defaultCekMachineCostsD, same step costs as C)
---   PlutusV3,    pre-Conway   → VariantC (defaultCekMachineCostsC)
---   PlutusV3,    post-Conway  → VariantE (defaultCekMachineCostsE, same step costs as C)
+-- See: https://github.com/IntersectMBO/plutus/blob/1.64.0.0/plutus-ledger-api/src/PlutusLedgerApi/MachineParameters.hs
+--   PlutusV1/V2, PV 5–8   → VariantA (defaultCekMachineCostsA)
+--   PlutusV1/V2, PV 9–10  → VariantB (defaultCekMachineCostsB, same step costs as C)
+--   PlutusV1/V2, PV ≥ 11  → VariantD (defaultCekMachineCostsD, same step costs as C)
+--   PlutusV3,    PV 9–10  → VariantC (defaultCekMachineCostsC)
+--   PlutusV3,    PV ≥ 11  → VariantE (defaultCekMachineCostsE, same step costs as C)
 def semVarToCosts : BuiltinSemanticsVariant → CekMachineCosts
   | .defaultFunSemanticsVariantA => defaultCekMachineCostsA
   | .defaultFunSemanticsVariantB => defaultCekMachineCostsB

@@ -73,8 +73,8 @@ theorem stepN_fix (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (s : Sta
 
 /-! ### `runSteps` in terms of `stepN` -/
 
-/-- `runSteps` returns the state at index `n` when that state is a `Halt` state, and
-`State.Error` otherwise. -/
+/-- `runSteps` returns the state at index `n` when that state is a `Halt` or `Error`
+state, and `State.BudgetExhausted` otherwise. -/
 theorem runSteps_eq_stepN (sv : BuiltinSemanticsVariant) (pv : ProtocolVersion) (s : State)
     (n : Nat) :
     runSteps sv pv s n =

@@ -38,4 +38,21 @@ example :
       = State.Halt (CekValue.VCon (Const.Integer 111)) := by
   blaster
 
+-- `case (constr 1 []) [111, 222]`: the gate covers only constants, so `case`
+-- on a `constr` value selects branch 1 at every protocol version.
+def caseOnConstrProgram : Program :=
+  Program.Program (Version.Version 1 1 0)
+    (Term.Case (Term.Constr 1 [])
+      [Term.Const (Const.Integer 111), Term.Const (Const.Integer 222)])
+
+example :
+    cekExecuteProgramWithSemanticVariant default .preConway caseOnConstrProgram [] 10
+      = State.Halt (CekValue.VCon (Const.Integer 222)) := by
+  blaster
+
+example :
+    cekExecuteProgramWithSemanticVariant default .postConwayPreVanRossem caseOnConstrProgram [] 10
+      = State.Halt (CekValue.VCon (Const.Integer 222)) := by
+  blaster
+
 end Tests.Issue32
