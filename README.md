@@ -98,6 +98,42 @@ def answerScript : PlutusScript :=
 
 The final number is a **step limit**, not a CPU or memory `ExBudget`. Programs that take inputs can provide an input-conversion function before that number; see the syntax and example in [`PreProcess.lean`](PlutusCore/UPLC/PreProcess.lean).
 
+### Builtins that read or write bytes
+
+`ByteString` and `String` values are Lean `String`s, which Blaster maps to SMT strings. The builtins
+that read or write single bytes do so through three primitives in
+[`PlutusCore.Bytes`](PlutusCore/ByteString/Bytes.lean), which Blaster treats as uninterpreted
+functions: `uncons` and `cpStr` read and rebuild characters, and `byteStr` writes a byte. These
+builtins are `byteStringToInteger`, `integerToByteString`, `consByteString`, `sliceByteString`,
+`indexByteString`, `decodeUtf8`, `encodeUtf8`, `serialiseData`, `replicateByte` and the logical and
+bitwise builtins (`andByteString`, `orByteString`, `xorByteString`, `complementByteString`,
+`shiftByteString`, `rotateByteString`, `countSetBits`, `findFirstSetBit`, `readBit` and
+`writeBits`).
+
+A goal that depends on the bytes these builtins read or write needs the facts about the primitives,
+`PlutusCore.Bytes.Spec`, as a premise, because Blaster does not use theorems. With it, the solver
+reads back a byte that was written, on symbolic byte strings:
+
+```lean
+import Blaster
+import PlutusCore.ByteString
+
+open PlutusCore.ByteString (ByteString indexByteString)
+open PlutusCore.Bytes (Spec byteStr)
+
+example : Spec → ∀ (k : Nat) (bs : ByteString), k < 256 →
+    indexByteString ⟨byteStr k ++ bs.data⟩ 0 = .ok k := by
+  blaster
+```
+
+`Spec` also lists the value of `byteStr` at every byte. Blaster no longer evaluates these builtins
+on literals by itself, but with `Spec` as a premise it works them out from that table. For example,
+the optimizer alone proves `Spec → encodeData (.List []) = some "\x80"`. A module that only needs
+evaluation on literals can instead lift the seal with
+`attribute [local semireducible] PlutusCore.Bytes.instByteViewString`.
+
+`PlutusCore.Bytes.spec` proves `Spec` without axioms. See the module documentation for details.
+
 ## Testing
 
 ```sh
@@ -105,7 +141,7 @@ lake test
 # or: make build_tests
 ```
 
-The standard `Tests` target covers encoding and CBOR, bitwise operations, CEK execution, preprocessing, cryptographic vectors, and equality. It includes textual UPLC parser tests. It does **not** run the generated conformance suite.
+The standard `Tests` target covers encoding and CBOR, bitwise operations, byte-level builtins (checked against their original definitions, and translated and solved by Blaster), CEK execution, preprocessing, cryptographic vectors, and equality. It includes textual UPLC parser tests. It does **not** run the generated conformance suite.
 
 ## Conformance testing
 

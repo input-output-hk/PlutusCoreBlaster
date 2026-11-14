@@ -9,7 +9,7 @@ open PlutusCore.Integer (Integer)
 -- =  Encoding  =
 -- ==============
 
-example : e₈ 7234295460216005990 = "deadbeef".toList := rfl
+example : e₈ 7234295460216005990 = "deadbeef" := by decide +kernel
 
 def encode_example_1 : Prop := splitToChunks "" = []
 example : encode_example_1 := by simp [encode_example_1]; native_decide
@@ -60,8 +60,8 @@ example : encode_example_7 := by simp [encode_example_7]; native_decide
 def encode_example_8 : Prop := encodeData (.I 12) = .some "\x0c"
 def encode_example_9 : Prop := encodeData (.I 42) = .some "\x18\x2a"
 
-example : encode_example_8 := by simp [encode_example_8, encodeData, encodeInt, encodeHead]
-example : encode_example_9 := by simp [encode_example_9, encodeData, encodeInt, encodeHead]
+example : encode_example_8 := by simp [encode_example_8, encodeData, encodeInt, encodeHead]; decide +kernel
+example : encode_example_9 := by simp [encode_example_9, encodeData, encodeInt, encodeHead]; decide +kernel
 
 
 def encode_example_10 : Prop :=
@@ -282,6 +282,11 @@ example : decodeData "\x9f\x01\x02\xff" = .some ("", .List [.I 1, .I 2]) := by n
 
 set_option warn.sorry false
 
+section Concrete
+-- These evaluate the encoder on literals with the optimizer alone. Splitting a byte string reads it
+-- through the sealed `PlutusCore.Bytes.uncons`, which Blaster does not unfold unless the seal is lifted.
+attribute [local semireducible] PlutusCore.Bytes.instByteViewString
+
 #blaster (only-optimize: 1) [encode_example_1]
 #blaster (only-optimize: 1) [encode_example_2]
 #blaster (only-optimize: 1) [encode_example_3]
@@ -314,19 +319,25 @@ set_option warn.sorry false
 #blaster (only-optimize: 1) [encode_example_30]
 #blaster (only-optimize: 1) [encode_example_31]
 
-example : encodeData (.List []) = some "\x80" := by blaster
+end Concrete
+
+-- The byte comes from the sealed `byteStr`; `Spec`'s table of byte values gives it.
+example : PlutusCore.Bytes.Spec → encodeData (.List []) = some "\x80" := by blaster
 example : encodeData (.List [.I 1]) ≠ none := by blaster
 
 def cex_encode_int_leq_2_pow_64_minus_one : Prop := ∀ (i : Integer), 0 ≤ i ∧ i ≤ 18446744073709551615 → (encodeInt i).length = 1
--- NOTE: remove solver options once Char opacified or BitVec supported
+-- NOTE: `encodeInt` no longer goes through `Char`, so this translates now; drop the solver options
+-- once the counterexample is confirmed with the CI solver.
 #blaster (only-optimize: 1) (solve-result: 2) [cex_encode_int_leq_2_pow_64_minus_one]
 
 def cex_encode_int_geq_2_pow_64 : Prop := ∀ (i : Integer), 18446744073709551616 ≤ i → (encodeInt i).length = 1
--- NOTE: remove solver options once Char opacified or BitVec supported
+-- NOTE: `encodeInt` no longer goes through `Char`, so this translates now; drop the solver options
+-- once the counterexample is confirmed with the CI solver.
 #blaster (only-optimize: 1) (solve-result: 2) [cex_encode_int_geq_2_pow_64]
 
 def example_split_chunks : Prop := ∀ (s : String), s ≠ "" → (splitToChunks s).head!.length ≤ 64
--- NOTE: remove solver options once Char opacified or BitVec supported
+-- NOTE: splitting reads bytes through `PlutusCore.Bytes`, so this translates now; with a
+-- `PlutusCore.Bytes.Spec` premise, drop the solver options once it is confirmed with the CI solver.
 #blaster (only-optimize: 1) (solve-result: 2) [example_split_chunks]
 
 end PlutusCore.Cbor
