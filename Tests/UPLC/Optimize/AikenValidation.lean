@@ -93,7 +93,7 @@ elab "#check_validation_optimization " budget:num : command => do
   runTermElabM fun _ => do
     let e ← elabTerm (← `(fun (xs : List Data) => runSteps default (entry xs) $budget)) none
     let (out, _) ← (Blaster.Optimize.Optimize.main e).run default
-    unless out.getUsedConstants.any (fun n => n.toString.startsWith "PlutusCore.UPLC.Optimize.Aiken.ValidationPlan" || n == ``validationSummary || n == ``validationPlan) do
+    unless out.getUsedConstants.any (fun n => n.toString.startsWith "PlutusCore.UPLC.Optimize.traversalPlan" || n.toString.startsWith "PlutusCore.UPLC.Optimize.Aiken.ValidationPlan" || n == ``validationSummary || n == ``validationPlan) do
       throwError "compiled validation rule did not leave a compact plan"
     unless distinctNodes out < 1000 do
       throwError "validation residual unexpectedly large: {distinctNodes out}"

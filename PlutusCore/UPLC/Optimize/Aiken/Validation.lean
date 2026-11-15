@@ -1,8 +1,9 @@
 import PlutusCore.UPLC.Optimize.Aiken.ValidationCode
-import PlutusCore.UPLC.Optimize.RunSteps
+import PlutusCore.UPLC.Optimize.ListTraversal
 
 namespace PlutusCore.UPLC.Optimize.Aiken
 open PlutusCore.Default
+open PlutusCore.UPLC.Optimize
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.CekMachine
 open PlutusCore.UPLC.CekValue
@@ -40,17 +41,20 @@ inductive ValidationPlan where
   | invalid (cost : Nat)
 deriving Repr, BEq
 
-/-- A compact, total account of the compiled traversal. Invalid prefixes do
-    not pay for pending list reconstruction; successful traversals do. -/
-def validationPlan : List Data → ValidationPlan
-  | [] => .valid 16
-  | .B b :: xs =>
-    if validKey b then
-      match validationPlan xs with
-      | .valid c => .valid (c + 81)
-      | .invalid c => .invalid (c + 80)
-    else .invalid 56
-  | _ :: _ => .invalid 27
+/-- This adapter describes the old fixture's element check; the list induction
+    itself lives in the validator-independent `Traversal` theorem. -/
+def validationInspect : Data → TraversalStep
+  | .B b => if validKey b then .descend 80 1 else .reject 55
+  | _ => .reject 26
+
+def validationGenericPlan (xs : List Data) : Plan CekValue :=
+  traversalPlan (fun xs => .VCon (.ConstDataList xs)) 16 validationInspect xs
+
+/-- Retain the original experiment's public result type. -/
+def validationPlan (xs : List Data) : ValidationPlan :=
+  match validationGenericPlan xs with
+  | .done cost _ => .valid cost
+  | .error before => .invalid (before + 1)
 
 def validationSummary (sem : BuiltinSemanticsVariant) (k : Stack)
     (xs : List Data) (fuel : Nat) : State :=
@@ -153,53 +157,61 @@ theorem validation_badlength_error (sem : BuiltinSemanticsVariant) (k : Stack)
     PlutusCore.Integer.equalsInteger, PlutusCore.Bool.ifThenElse,
     PlutusCore.List.tailList, PlutusCore.List.mkCons, PlutusCore.Data.bData, h]
 
-theorem validation_plan_correct (sem : BuiltinSemanticsVariant) (k : Stack)
-    (xs : List Data) :
-    PlanCorrect sem (validationEntry k caps xs) k xs (validationPlan xs) := by
-  induction xs generalizing k with
-  | nil => exact validation_nil_block a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k
-  | cons d xs ih =>
+/-- Only bounded compiler blocks are specific to this fixture. -/
+def validationTraversal (sem : BuiltinSemanticsVariant) : Traversal sem Data where
+  entry := fun k xs => validationEntry k caps xs
+  render := fun xs => .VCon (.ConstDataList xs)
+  frame := fun d => match d with | .B b => prependFrame b | _ => .ForceFrame
+  nilCost := 16
+  inspect := validationInspect
+  empty := validation_nil_block a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem
+  descend := by
+    intro k d xs before after h
     cases d with
     | B b =>
       by_cases hb : validKey b = true
-      · have block := validation_cons_block a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k b xs hb
-        have tailCorrect := ih (prependFrame b :: k)
-        cases hp : validationPlan xs with
-        | valid cost =>
-          simp only [hp, PlanCorrect] at tailCorrect
-          simp only [validationPlan, hb, ↓reduceIte, hp, PlanCorrect]
-          have hc : cost + 81 = (80 + cost) + 1 := by omega
-          rw [hc, preserving_add, preserving_add, block, tailCorrect]
-          exact prepend_block sem k b xs
-        | invalid cost =>
-          simp only [hp, PlanCorrect] at tailCorrect
-          have hpos : 0 < cost := by
-            cases cost with
-            | zero => simp [validationEntry] at tailCorrect
-            | succ c => omega
-          simp only [validationPlan, hb, ↓reduceIte, hp, PlanCorrect]
-          constructor
-          · have hc : cost + 80 - 1 = 80 + (cost - 1) := by omega
-            rw [hc, preserving_add, block]
-            exact tailCorrect.1
-          · rw [Nat.add_comm cost 80, preserving_add, block]
-            exact tailCorrect.2
-      · have hf : validKey b = false := by cases h : validKey b <;> simp_all
-        simp only [validationPlan, hf, Bool.false_eq_true, ↓reduceIte, PlanCorrect]
+      · simp [validationInspect, hb] at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact validation_cons_block a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k b xs hb
+      · simp [validationInspect, hb] at h
+    | _ => simp [validationInspect] at h
+  unwind := by
+    intro k d xs before after h
+    cases d with
+    | B b =>
+      by_cases hb : validKey b = true
+      · simp [validationInspect, hb] at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact prepend_block sem k b xs
+      · simp [validationInspect, hb] at h
+    | _ => simp [validationInspect] at h
+  reject := by
+    intro k d xs n h
+    cases d with
+    | B b =>
+      by_cases hb : validKey b = true
+      · simp [validationInspect, hb] at h
+      · have hf : validKey b = false := by cases hv : validKey b <;> simp_all
+        simp [validationInspect, hf] at h; subst n
         exact ⟨validation_badlength_live a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k b xs hf,
           validation_badlength_error a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k b xs hf⟩
-    | Constr i fields =>
-      exact ⟨validation_nonbyte_live a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k (.Constr i fields) xs,
-        validation_nonbyte_error a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k (.Constr i fields) xs rfl⟩
-    | Map entries =>
-      exact ⟨validation_nonbyte_live a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k (.Map entries) xs,
-        validation_nonbyte_error a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k (.Map entries) xs rfl⟩
-    | List entries =>
-      exact ⟨validation_nonbyte_live a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k (.List entries) xs,
-        validation_nonbyte_error a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k (.List entries) xs rfl⟩
-    | I i =>
-      exact ⟨validation_nonbyte_live a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k (.I i) xs,
-        validation_nonbyte_error a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k (.I i) xs rfl⟩
+    | _ =>
+      simp [validationInspect] at h; subst n
+      exact ⟨validation_nonbyte_live a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k _ xs,
+        validation_nonbyte_error a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem k _ xs rfl⟩
+
+theorem validation_plan_correct (sem : BuiltinSemanticsVariant) (k : Stack)
+    (xs : List Data) :
+    PlanCorrect sem (validationEntry k caps xs) k xs (validationPlan xs) := by
+  have correct := (validationTraversal a0 a1 a2 a3 a4 a5 a6 a7 p q tail sem).correct k xs
+  change Plan.Correct sem (validationEntry k caps xs) k (validationGenericPlan xs) at correct
+  cases hp : validationGenericPlan xs with
+  | done cost value =>
+    have hv := traversalPlan_done_value (fun xs => .VCon (.ConstDataList xs))
+      16 validationInspect xs cost value hp
+    simpa [validationPlan, hp, PlanCorrect, Plan.Correct, hv] using correct
+  | error before =>
+    simpa [validationPlan, hp, PlanCorrect, Plan.Correct] using correct
 
 /-- Exact finite-fuel equivalence for arbitrary encoded lists, including every
     malformed-data, invalid-length and insufficient-fuel case. -/

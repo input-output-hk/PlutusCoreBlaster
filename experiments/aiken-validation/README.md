@@ -4,12 +4,18 @@ This opt-in experiment proves and registers an exact summary of a real
 Aiken-compiled UPLC validation/reconstruction loop. It uses ordinary Blaster
 optimization and SMT solving, without Horn clauses or new axioms.
 
-**Result:** the isolated traversal leaves 58 distinct residual expression nodes
-at CEK fuel 1,000, 10,000 and 100,000. The false diagnostic property still
+**Original result at `77d7fa2`:** the isolated traversal left 58 distinct residual
+expression nodes at CEK fuel 1,000, 10,000 and 100,000. After moving the induction
+to the shared traversal framework, this compatibility wrapper leaves 113 at
+all three budgets. The false diagnostic property still
 produces an SMT counterexample, replayed through the original CEK machine.
-**Limit:** full-validator `#prep_uplc` did not improve within the measured
+**Original limit:** full-validator `#prep_uplc` did not improve within the measured
 30-second deadline. This is a working loop-summary experiment, not a completed
 solution to arbitrary-context preparation or a production speedup claim.
+
+The subsequent [generic optimization experiment](../generic-optimizations/README.md)
+adds reusable traversal/search families, arbitrary capture layouts and
+continuation rules. Its measurements are separate from the historical table below.
 
 ## Revisions and fixture
 
