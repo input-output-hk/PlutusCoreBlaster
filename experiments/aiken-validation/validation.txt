@@ -1,0 +1,13 @@
+Command: lake build Tests.UPLC.Optimize.AikenValidation Tests.UPLC.CekMachine.Tests Tests.UPLC.PreProcess.Tests
+Z3: 5.4.1
+
+info: Tests/UPLC/Optimize/AikenValidation.lean:49:0: recognizer guards: accepted compiled body, rejected wrong capture/body
+info: Tests/UPLC/Optimize/AikenValidation.lean:68:0: kernel proof audit PlutusCore.UPLC.Optimize.Aiken.validation_run_summary: [propext, Quot.sound, Classical.choice]
+info: Tests/UPLC/Optimize/AikenValidation.lean:68:0: kernel proof audit PlutusCore.UPLC.Optimize.Aiken.compiled_validation_rule: [propext, Quot.sound, Classical.choice]
+info: Tests/UPLC/Optimize/AikenValidation.lean:102:0: validation fuel 1000: 58 distinct residual nodes
+info: Tests/UPLC/Optimize/AikenValidation.lean:103:0: validation fuel 10000: 58 distinct residual nodes
+info: Tests/UPLC/Optimize/AikenValidation.lean:104:0: validation fuel 100000: 58 distinct residual nodes
+info: Tests/UPLC/Optimize/AikenValidation.lean:109:42: ✅ Expected Falsified
+info: Tests/UPLC/Optimize/AikenValidation.lean:109:42: Counterexample:
+info: Tests/UPLC/Optimize/AikenValidation.lean:109:42: - n: 0
+Build completed successfully (578 jobs).

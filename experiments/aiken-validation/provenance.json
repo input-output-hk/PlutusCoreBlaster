@@ -1,0 +1,10 @@
+{
+  "aiken": "v1.1.24+bacbeb3",
+  "stdlib": "v3.0.0",
+  "uplc": "1.1.0",
+  "compiled_uplc_sha256": "df4a0a7721eb2d1042eaf64897644b0d020e77975f77f6b31fdf50fae9835133",
+  "blaster_pr": 472,
+  "blaster_commit": "fe7a8fbe001594d8275ebb1783af8dea305f2bdd",
+  "base_plutuscore_commit": "79fce4ac2c74d376c2576edab19a9ba2e7dd5c1b",
+  "loop_body_parser_node": 138
+}
