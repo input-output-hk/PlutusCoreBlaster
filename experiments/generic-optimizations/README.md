@@ -25,7 +25,9 @@ Blaster remains pinned to PR #472 revision
 | `Optimize/Composition.lean` | Compose identity, constant-return and Boolean-assertion consumers; discharge the empty continuation and terminal conditional |
 | `Optimize/ScalarSearch.lean` | Six scalar predicate instances of the search scheme, with arbitrary needles and capture layouts |
 | `Optimize/ByteTraversal.lean` | Checked byte-list reconstruction with a parameterized length relation, bound and capture layout |
-| `Optimize/Extension.lean` | Structural recognition, builtin-binding certificates and PR472 registrations |
+| `Optimize/Extension/Recognize.lean` | Shared structural and builtin-binding checks |
+| `Optimize/Extension/{Administrative,Composition,Search,Traversal,Prefix}.lean` | Independent rule registrations and recognizers for ablation |
+| `Optimize/Extension.lean` | Imports all five rule families for normal use |
 
 There is no beneficiary, Cardano context field, script purpose, 28-byte
 requirement, or fixed environment offset in the new extension's rules.
@@ -33,9 +35,9 @@ The byte traversal supports `bound = length`, `bound < length` and
 `bound ≤ length`; operand order is preserved from the compiled code.
 The search supports integer/byte-string equality and ordering comparisons.
 
-The original Aiken experiment now also uses the shared traversal induction.
-Its old public API and opt-in matcher remain for comparison; the generic
-extension does not depend on them.
+The independently compiled Aiken fixture exercises both generic loop families
+in a complete spending program. The historical fixture-specific adapter is
+outside this extension.
 
 The traversal execution rule preserves its known returned-value shape. This
 matters when continuing after decoding: replacing that value by an arbitrary
@@ -108,16 +110,14 @@ benchmark timings.
 
 Isolated symbolic searches retain 136–143 distinct expression nodes at fuel
 1,000, 10,000 and 100,000 across three predicates and three continuations.
-Checked byte traversals retain 97–99 nodes at all three budgets. The old
-Aiken compatibility wrapper retains 113 nodes after the shared-proof refactor;
-the original specialized implementation retained 58 at commit `77d7fa2`.
-The added abstraction has fixed overhead, rather than expansion with fuel.
+Checked byte traversals retain 97–99 nodes at all three budgets. The added
+abstraction has fixed overhead, rather than expansion with fuel.
 
 The existing cost-budget runner's unrelated termination `sorry` is outside
 these proofs' dependencies.
 
 ```sh
-lake build Tests.UPLC.Optimize.Generic Tests.UPLC.Optimize.AikenValidation \
+lake build Tests.UPLC.Optimize.Generic \
   Tests.UPLC.CekMachine.Tests Tests.UPLC.PreProcess.Tests
 ```
 
@@ -128,12 +128,16 @@ injecting a loop-entry state. The cases are three UPLC programs (integer
 membership, byte-string membership, and an integer threshold with an assertion
 consumer) and the independently Aiken-compiled eager spending validator.
 
-`results.json` records completed runs, timeouts, residual node counts,
+`bench.py` writes `.work/results.json` with completed runs, timeouts, residual node counts,
 summary presence and remaining evaluator calls. A non-baseline run retaining
 the evaluator is marked `residual_evaluator`, not counted as an optimization
 success. Baseline imports no optimization extension; generic imports
-only the new shared extension. `combined` additionally imports the old adapter
-and is available for optional comparisons.
+only the new shared extension.
+
+The five `without-*` modes import every rule family except the named one.
+They allow the same complete-program preparation to reveal whether a family
+is needed for a given case. A run only counts as successful when Lean finishes
+and the residual contains no CEK evaluator call.
 
 | Complete program | Generic nodes at 1k / 10k / 100k fuel | Baseline at 100k | Generic at 100k |
 | --- | --- | --- | --- |
@@ -143,6 +147,31 @@ and is available for optional comparisons.
 | Aiken eager spending validator | 303 / 303 / 303 | 20 s timeout | 2.33 s |
 
 All twelve generic runs completed with no residual evaluator call.
+
+### Rule-family ablation
+
+At fuel 100,000, the benchmark also imports all but one rule family at a time.
+The Aiken fixture requires all five families to eliminate the CEK evaluator:
+
+| Omitted family | Integer / bytes membership | Threshold assertion | Aiken eager validator |
+| --- | --- | --- | --- |
+| Administrative | 137 / 133 nodes; no evaluator | 179 nodes; no evaluator | 373 nodes; evaluator remains |
+| Composition | 151 / 147 nodes; no evaluator | 226 nodes; evaluator remains | 406 nodes; evaluator remains |
+| Search | 20 s timeout for both | 20 s timeout | 382 nodes; evaluator remains |
+| Traversal | 137 / 133 nodes; no evaluator | 179 nodes; no evaluator | 20 s timeout |
+| Prefix | 137 / 133 nodes; no evaluator | 179 nodes; no evaluator | 385 nodes; evaluator remains |
+
+These are complete-program observations, not a claim that every individual
+rule within a family is necessary. The Aiken results justify retaining each
+family in the opt-in extension; the simpler cases show which families they
+exercise. The ablation run used macOS, one Lean worker and a 20-second deadline;
+macOS did not apply the Linux-only 3 GiB virtual-address cap.
+
+```sh
+python3 experiments/generic-optimizations/bench.py --budgets 100000 \
+  --modes generic without-administrative without-composition without-search \
+  without-traversal without-prefix --timeout 20
+```
 
 Each warm child uses one Lean worker, a 3 GiB virtual-address cap and a
 20-second wall deadline in the recorded run. Wall times include Lake startup,

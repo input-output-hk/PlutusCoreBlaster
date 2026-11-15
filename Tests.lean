@@ -14,6 +14,5 @@ import Tests.BlueprintVerify.RecursiveSchema
 
 import Tests.BlueprintVerify.Regression
 
--- Optional proof-backed CEK optimization experiment, pinned to Blaster PR #472.
-import Tests.UPLC.Optimize.AikenValidation
+-- Opt-in proof-backed CEK optimization tests, pinned to Blaster PR #472.
 import Tests.UPLC.Optimize.Generic
