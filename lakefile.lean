@@ -54,5 +54,9 @@ lean_exe «gen_conformance_tests» where
 -- `Tests.UPLC.ScriptEncoding.Tests`, whose native code would then have to be built.
 lean_lib «Benchmark»
 
+-- Experimental full-context corpus; independent of the normal test target.
+lean_lib «ContextCorpus» where
+  srcDir := "experiments/context-corpus/lean"
+
 lean_exe «bench_prep_uplc» where
   root := `Benchmark.PrepUplc.Driver.Main

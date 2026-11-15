@@ -1,0 +1,48 @@
+{
+  "aiken": "v1.1.24+bacbeb3",
+  "aiken_archive_sha256": "c378acccdaf9533f3375ea623c948d3dcb21f7e8c5ecbb741162c53653470b13",
+  "stdlib": "v3.0.0",
+  "stdlib_commit": "95e58c6c400eaf38ed213728c92f8e545e49967e",
+  "blaster": "fe7a8fbe001594d8275ebb1783af8dea305f2bdd",
+  "optimization_rules": "1d13b91934e74a021497b5ba8ff9932d481a9839",
+  "transaction_fields": [
+    "inputs",
+    "reference_inputs",
+    "outputs",
+    "fee",
+    "mint",
+    "certificates",
+    "withdrawals",
+    "validity_range",
+    "extra_signatories",
+    "redeemers",
+    "datums",
+    "id",
+    "votes",
+    "proposal_procedures",
+    "current_treasury_amount",
+    "treasury_donation"
+  ],
+  "validators": 34,
+  "unique_programs": 34,
+  "blueprint_definitions": 68,
+  "field_values_fixed_in_raw_or_view_modes": false,
+  "validity_scope": "WellShaped is only an outer-shape consequence; actual isValidContext remains a required contract.",
+  "lean": "4.24.0",
+  "z3": "5.4.1",
+  "benchmark": {
+    "fuel_matrix": 1000,
+    "fuel_scaling": 10000,
+    "wall_timeout_seconds": 8,
+    "address_space_GiB": 3,
+    "lean_workers": 1,
+    "native_compilation": "development LEAN_CC override: bundled clang at O0; repository release flags unchanged",
+    "imports": "prebuilt",
+    "timings": "wall_seconds includes process startup; optimization_ms is optimizer interval only",
+    "proof_claims": "preparation completion alone never counts as proof"
+  },
+  "harness_sha256": {
+    "run.py": "2d2acff2b8c95b2332d89202898abefe082796cf737e17c6139aca57e46edbb2",
+    "validate.py": "76b95c79fc3a1f67f8eac8cc443fef093e4bd1cae1d124b35d8beef144fea6f6"
+  }
+}

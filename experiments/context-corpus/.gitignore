@@ -1,0 +1,5 @@
+build/
+artifacts/
+plutus.json
+.work/
+__pycache__/
