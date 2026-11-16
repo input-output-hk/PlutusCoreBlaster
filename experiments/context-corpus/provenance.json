@@ -43,6 +43,20 @@
   },
   "harness_sha256": {
     "run.py": "2d2acff2b8c95b2332d89202898abefe082796cf737e17c6139aca57e46edbb2",
-    "validate.py": "76b95c79fc3a1f67f8eac8cc443fef093e4bd1cae1d124b35d8beef144fea6f6"
+    "validate.py": "0f8c784c6b97c4c0e45e45681ff8cfeb2d30673d4ee1495e206602f6bd76c9c9"
+  },
+  "kernel_properties": {
+    "date": "2026-11-16",
+    "module": "ContextCorpus.CountTheorems",
+    "cases": [
+      "inputs_count",
+      "outputs_count",
+      "certificates_count",
+      "proposals_count"
+    ],
+    "kernel_audit": "only propext, Quot.sound, Classical.choice",
+    "solver_used": false,
+    "scope": "all encoded spending parameters, unbounded lists, every fuel; raw validity conditional on representation coverage",
+    "missing": "concrete ledger validity instance and other-purpose/nested-fold proofs"
   }
 }

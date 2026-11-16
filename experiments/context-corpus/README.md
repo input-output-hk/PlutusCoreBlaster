@@ -7,6 +7,13 @@ from PR93, at `1d13b91934e74a021497b5ba8ff9932d481a9839`, are unchanged.
 
 ## What was actually checked
 
+- **New kernel proofs (16 November):** `CountTheorems.lean` proves the original
+  Aiken-compiled inputs/outputs/certificates/proposals count validators for every
+  finite fuel and arbitrary-length lists. Every outer transaction field,
+  redeemer, datum option and spending reference stays free. One length induction
+  and two generic consumers are shared across the four programs. No SMT axiom
+  or `sorry` is used. The exact result distinguishes acceptance, rejection and
+  budget exhaustion; see the acceptance theorems below.
 - 34 distinct validators compiled from independent Aiken source programs.
   They touch all 16 V3 transaction fields, the redeemer, spending datum and
   reference, and all six purpose constructors. Compiler and dependency pins
@@ -26,11 +33,37 @@ from PR93, at `1d13b91934e74a021497b5ba8ff9932d481a9839`, are unchanged.
   original CEK executable, with only the standard Lean axioms. This strengthens
   the calibration without depending on SMT or preparation equivalence. Neither
   calibration supplies the full raw-context validity theorem for arbitrary
-  purposes. All entries in `cases.json` retain
-  `proof_status: not_attempted` for that full target.
+  purposes. The count cases now record conditional raw-context theorems;
+  instantiation with a concrete ledger validity definition remains pending.
 
 No list bound or fixed value for unrelated transaction fields is used in the
 symbolic experiments. The concrete placeholder is used only for replay.
+
+### Proven count properties
+
+The kernel-checked `inputs_acceptance`, `outputs_acceptance`,
+`certificates_acceptance` and `proposals_acceptance` theorems establish:
+
+| Compiled validator | Accepts iff | Exact last-live-state cost |
+| --- | --- | --- |
+| inputs_count | inputs.length ≤ 4 and cost < fuel | 234 + 37 × inputs.length |
+| outputs_count | outputs.length ≤ 8 and cost < fuel | 242 + 37 × outputs.length |
+| certificates_count | certificates.length ≤ 3 and cost < fuel | 254 + 37 × certificates.length |
+| proposals_count | 0 < proposals.length and cost < fuel | 286 + 37 × proposals.length |
+
+The length constraints are acceptance conditions, never restrictions on the
+quantifier domain. `execution` proves all three outcomes for **every** fuel;
+`eventually_accepts_iff` removes fuel by existentially quantifying a sufficient
+budget. `valid_raw_acceptance` and `valid_raw_eventually_accepts` transport these
+properties to `∀ ctx, isValidContext ctx → ...`, conditional on the validity
+predicate's spending-encoding coverage proof. They do not assume execution
+correctness to obtain that result, and do not claim to handle other purposes.
+
+`Fold.lean` additionally proves a generic accumulator/short-circuit scheme,
+including errors, exact costs and arbitrary continuations. Its Aiken sum/nested
+fold adapters remain to be implemented. These proofs do not automatically
+register new recognizers in `#prep_uplc`; the earlier benchmark matrix remains
+an unchanged measurement of the old rule set.
 
 ## Coverage
 
@@ -193,6 +226,7 @@ stdlib v3.0.0. From the repository root, with those executables on PATH:
 ```sh
 lake build Blaster PlutusCore.UPLC.Optimize.Extension ContextCorpus.Native
 python3 experiments/context-corpus/validate.py --compile --proofs
+python3 experiments/context-corpus/validate.py --kernel-proofs
 python3 experiments/context-corpus/run.py --modes raw view --fuel 1000 --timeout 8
 python3 experiments/context-corpus/run.py --cases inputs_count outputs_sum outputs_asset mint_quantity mint_fold signatories_find votes_nested redeemer_fold --modes view --fuel 10000 --timeout 8 --output scaling.jsonl
 python3 experiments/context-corpus/run.py --cases inputs_count fee_control --modes raw view assumed --fuel 1000 --timeout 8 --output pilot.jsonl

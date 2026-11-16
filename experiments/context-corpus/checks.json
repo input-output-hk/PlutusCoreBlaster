@@ -1,19 +1,20 @@
 {
   "compiled_manifest_sha256": "0c66ae3b08c7a0626cd444796324bd1d7e2217469a6f0f239ee3303b92262e4e",
-  "validation_harness_sha256": "76b95c79fc3a1f67f8eac8cc443fef093e4bd1cae1d124b35d8beef144fea6f6",
+  "validation_harness_sha256": "0f8c784c6b97c4c0e45e45681ff8cfeb2d30673d4ee1495e206602f6bd76c9c9",
   "concrete_fixture": "typed stdlib placeholder, not asserted ledger-valid",
   "concrete_agreements": 34,
   "universal_validity_goals_proved": 0,
   "checked_modules": [
     "ContextCorpus.Probe",
     "ContextCorpus.WireWitness",
-    "ContextCorpus.FeeProof",
-    "ContextCorpus.FeeKernel"
+    "ContextCorpus.FeeKernel",
+    "ContextCorpus.CountTheorems"
   ],
   "formal_scope": {
     "Probe": "kernel-checked representation laws and assumption-plumbing assertions",
     "WireWitness": "kernel-checked complete wire equality on one fixture",
     "FeeProof": "SMT criterion for all outer fields and arbitrary spending payload",
-    "FeeKernel": "same criterion on the original CEK, kernel-checked without new axioms"
+    "FeeKernel": "same criterion on the original CEK, kernel-checked without new axioms",
+    "CountTheorems": "four compiled spending validators: exact all-fuel semantics, unbounded lists, acceptance and adequacy; raw validity theorem conditional on encoding coverage"
   }
 }

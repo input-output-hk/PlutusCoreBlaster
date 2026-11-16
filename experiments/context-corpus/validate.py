@@ -26,6 +26,8 @@ def main():
     parser.add_argument("--compiler", default="aiken")
     parser.add_argument("--compile", action="store_true")
     parser.add_argument("--proofs", action="store_true")
+    parser.add_argument("--kernel-proofs", action="store_true",
+                        help="Check kernel proofs without the optional SMT calibration")
     args = parser.parse_args()
     WORK.mkdir(exist_ok=True)
     if args.compile or not (HERE / "plutus.json").exists():
@@ -87,9 +89,12 @@ def main():
     print(f"Concrete fixture: {len(cases)}/{len(cases)} interpreter results agree.", flush=True)
 
     checked = []
-    if args.proofs:
-        for target in ["ContextCorpus.Probe", "ContextCorpus.WireWitness",
-                       "ContextCorpus.FeeProof", "ContextCorpus.FeeKernel"]:
+    if args.proofs or args.kernel_proofs:
+        targets = ["ContextCorpus.Probe", "ContextCorpus.WireWitness",
+                   "ContextCorpus.FeeKernel", "ContextCorpus.CountTheorems"]
+        if args.proofs:
+            targets.append("ContextCorpus.FeeProof")
+        for target in targets:
             log = WORK / (target.rsplit(".", 1)[1] + ".log")
             command(["lake", "build", target], log)
             if target == "ContextCorpus.FeeProof" and "✅ Valid" not in log.read_text():
@@ -106,7 +111,8 @@ def main():
                       "Probe": "kernel-checked representation laws and assumption-plumbing assertions",
                       "WireWitness": "kernel-checked complete wire equality on one fixture",
                       "FeeProof": "SMT criterion for all outer fields and arbitrary spending payload",
-                      "FeeKernel": "same criterion on the original CEK, kernel-checked without new axioms"})
+                      "FeeKernel": "same criterion on the original CEK, kernel-checked without new axioms",
+                      "CountTheorems": "four compiled spending validators: exact all-fuel semantics, unbounded lists, acceptance and adequacy; raw validity theorem conditional on encoding coverage"})
     (HERE / "checks.json").write_text(json.dumps(checks, indent=2) + "\n")
 
 
