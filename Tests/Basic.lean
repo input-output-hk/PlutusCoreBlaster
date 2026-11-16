@@ -30,6 +30,7 @@ import Tests.BlasterProofs
 import Tests.Issues.Issue31
 import Tests.Issues.Issue32
 import Tests.Issues.Issue33
+import Tests.Issues.Issue86
 
 -- The conformance test suite (Tests.Conformance) is intentionally NOT imported
 -- here. It is built and run only by the manual `ci-conformance` workflow,

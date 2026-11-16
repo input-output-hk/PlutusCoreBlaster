@@ -18,8 +18,9 @@ open PlutusCore.UPLC.Term
 
   PlutusV3 is only available from protocol version 9.
 
-  `PlutusVersion.toSemanticsVariant` doesn't follow the middle column yet: it
-  returns D for V1/V2 and E for V3 there (#86).
+  `PlutusVersion.toSemanticsVariant` implements this table. For PlutusV3 at
+  `preConway` it returns C, which is what 1.64 picks for V3 at any protocol
+  version below 11.
   -/
 
 /-- Plutus version. -/
@@ -36,7 +37,8 @@ instance : Inhabited PlutusVersion where
     `Integer`/`Bool`/`List`/`Pair` value, as opposed to a `constr` value), from
     the major protocol version. Three ranges matter:
     - `preConway`: protocol versions 5–8;
-    - `postConwayPreVanRossem`: 9–10 (Chang and Plomin);
+    - `postConwayPreVanRossem`: 9–10 (Chang and Plomin). The Chang hard fork
+      switches V1/V2 from variant A to B; V3 uses C;
     - `postVanRossem`: 11 onward. The van Rossem hard fork switches V1/V2 to
       variant D and V3 to variant E, and enables `case` on constants. -/
 inductive ProtocolVersion
@@ -75,17 +77,17 @@ instance : Inhabited BuiltinSemanticsVariant where
   default := .defaultFunSemanticsVariantE
 
 /-- The builtin semantics variant the ledger uses for a language at a protocol
-    version. Known gap (#86): Plutus 1.64 uses B for V1/V2 and C for V3 at
-    `postConwayPreVanRossem`, but this still returns D and E there. -/
+    version, as in the table above (`machineParametersFor` in 1.64's
+    `MachineParameters.hs`). -/
 def PlutusVersion.toSemanticsVariant : PlutusVersion → ProtocolVersion → BuiltinSemanticsVariant
   | .plutusV1, .preConway              => .defaultFunSemanticsVariantA
-  | .plutusV1, .postConwayPreVanRossem => .defaultFunSemanticsVariantD
+  | .plutusV1, .postConwayPreVanRossem => .defaultFunSemanticsVariantB
   | .plutusV1, .postVanRossem          => .defaultFunSemanticsVariantD
   | .plutusV2, .preConway              => .defaultFunSemanticsVariantA
-  | .plutusV2, .postConwayPreVanRossem => .defaultFunSemanticsVariantD
+  | .plutusV2, .postConwayPreVanRossem => .defaultFunSemanticsVariantB
   | .plutusV2, .postVanRossem          => .defaultFunSemanticsVariantD
   | .plutusV3, .preConway              => .defaultFunSemanticsVariantC
-  | .plutusV3, .postConwayPreVanRossem => .defaultFunSemanticsVariantE
+  | .plutusV3, .postConwayPreVanRossem => .defaultFunSemanticsVariantC
   | .plutusV3, .postVanRossem          => .defaultFunSemanticsVariantE
 
 end Internal

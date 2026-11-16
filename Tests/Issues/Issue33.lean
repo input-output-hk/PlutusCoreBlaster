@@ -8,6 +8,11 @@ import PlutusCore.UPLC.BuiltinFunctions.Data
 -- version 11, read `ConstrData`'s constructor index as a Word64, so an index
 -- outside [0, 2^64 - 1] fails the builtin. Variants A–C, used before protocol
 -- version 11, accept any Integer.
+--
+-- These tests call the builtin directly with a chosen variant.
+-- `Tests/Issues/Issue86.lean` runs the same indices through
+-- `cekExecuteProgramWithBudget`, which picks the variant from the ledger
+-- language and the protocol version.
 namespace Tests.Issue33
 
 open PlutusCore.Default (BuiltinSemanticsVariant)
