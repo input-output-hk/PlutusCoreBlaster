@@ -65,4 +65,35 @@ run_cmd do
         throwError "wrong default semantics for {version}"
     finally IO.FS.removeFile path
 
+-- A wrapper runs at the protocol version its declared variant implies, so a
+-- pre-van-Rossem variant (A–C) cannot `case` on constants.
+run_cmd do
+  let original ← ofExcept (Json.parse (include_str "fixtures/applied.json"))
+  let validators ← ofExcept (original.getObjValAs? (Array Json) "validators")
+  let pv (c : String) := Name.mkStr ``PlutusCore.Default.Internal.ProtocolVersion c
+  let all := ["preConway", "postConwayPreVanRossem", "postVanRossem"].map pv
+  for (version, sem, expected) in [("v1", "A", pv "preConway"),
+                                   ("v2", "B", pv "postConwayPreVanRossem"),
+                                   ("v2", "D", pv "postVanRossem"),
+                                   ("v3", "C", pv "postConwayPreVanRossem"),
+                                   ("v3", "E", pv "postVanRossem")] do
+    let validator ← ofExcept (validators[0]!.getObj?)
+    let validator := (validator.erase "hash").insert "budget"
+      (Json.mkObj [("steps", toJson (2500 : Nat)), ("semantics", toJson sem)])
+    let preamble ← ofExcept ((← ofExcept (original.getObjVal? "preamble")).getObj?)
+    let doc := Json.mkObj [("preamble", .obj (preamble.insert "plutusVersion" (toJson version))),
+      ("definitions", Json.mkObj []), ("validators", toJson [Json.obj validator])]
+    let (handle, path) ← IO.FS.createTempFile
+    try
+      handle.putStr doc.compress
+      handle.flush
+      let ns := Name.mkStr `Tests.BlueprintCodegen.Validation (version ++ sem)
+      discard <| elabBlueprintImport ns path.toString
+      let some (.defnInfo wrapper) := (← getEnv).find? (Name.mkStr ns "applied_data")
+        | throwError "missing generated wrapper"
+      let used := wrapper.value.getUsedConstants
+      unless all.filter used.contains == [expected] do
+        throwError "wrong protocol version for {version}/{sem}"
+    finally IO.FS.removeFile path
+
 end Tests.BlueprintCodegen.Validation

@@ -6,7 +6,7 @@ open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.CekMachine
 
 def dispatch (branches : List Term) (b : Bool) : State :=
-  step .defaultFunSemanticsVariantE
+  step .defaultFunSemanticsVariantE .postVanRossem
     (.Return [.CaseScrutinee branches []] (.VCon (.Bool b)))
 
 def selected (state : State) (expected : Int) : Prop :=

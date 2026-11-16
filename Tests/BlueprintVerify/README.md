@@ -79,10 +79,15 @@ reported non-executable claims alongside executable ones.
 
 UAL 0.5 requires stable ids, explicit argument schemas, supported encodings, and
 `budget: {"steps": n, "semantics": "A" | "B" | "C" | "D" | "E"}`.
-Legacy step-only budgets default to post-Conway semantics D for V1/V2 and E for
-V3. Explicit variants must belong to the selected language: A/B/D for V1/V2,
-C/E for V3. UAL 0.5 and compiled-interface checking still require an explicit
-variant. A zero or insufficient step count is unfinished execution, not rejection.
+Legacy step-only budgets default to the van Rossem semantics (protocol version 11
+onward): D for V1/V2 and E for V3. Explicit variants must belong to the selected
+language: A/B/D for V1/V2, C/E for V3. The declared variant also fixes the
+protocol version the check runs at, as in Plutus 1.64: A runs at protocol
+versions 5–8, B and C at 9–10, and D and E from 11. `case` on constants
+(`Integer`, `Bool`, lists, pairs) exists only from protocol version 11, so
+scripts that use it need D or E. UAL 0.5 and compiled-interface checking still
+require an explicit variant. A zero or insufficient step count is unfinished
+execution, not rejection.
 The current implementation supports `asData` and step budgets. It rejects Scott
 encoding, ledger execution budgets, and unresolved or unguarded cyclic schemas.
 The step bound is not a ledger execution-cost proof. Interpreter termination alone
