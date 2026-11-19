@@ -44,8 +44,11 @@ def haltsWithBool (s : State) (b : Bool) : Prop :=
 theorem bstoi_nonnegative : ∀ (a : ByteString) (n : Int),
     haltsWithInteger (bstoiSymbolicOne.prop a) n → 0 ≤ n := by blaster
 
-/-- Equal bytestrings convert to equal integers. -/
-theorem bstoi_equal_inputs : ∀ (a b : ByteString), a = b →
+/-- Equal bytestrings convert to equal integers. Under variant E (PlutusV3 from protocol
+version 11) the builtin's input is at most 65,536 bytes long, and a longer one fails the run
+(#84). Without that premise the goal is false, and z3 does not find the counterexample: it
+grows without bound building a 65,537-character string. -/
+theorem bstoi_equal_inputs : ∀ (a b : ByteString), a = b → a.length ≤ 65536 →
     haltsWithBool (bstoiSymbolicTwo.prop a b) true := by blaster
 
 -- And unequal ones aren't known to convert to unequal integers: the function is uninterpreted,
@@ -62,7 +65,7 @@ theorem bstoi_nonnegative_cek : ∀ (a : ByteString) (n : Int),
     haltsWithInteger (cekExecuteProgram bstoiSymbolicOneScript.script (oneArg a) 200) n → 0 ≤ n := by
   blaster
 
-theorem bstoi_equal_inputs_cek : ∀ (a b : ByteString), a = b →
+theorem bstoi_equal_inputs_cek : ∀ (a b : ByteString), a = b → a.length ≤ 65536 →
     haltsWithBool (cekExecuteProgram bstoiSymbolicTwoScript.script (twoArgs a b) 200) true := by
   blaster
 
