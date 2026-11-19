@@ -13,3 +13,6 @@ import Tests.BlueprintVerify.BooleanCase
 import Tests.BlueprintVerify.RecursiveSchema
 
 import Tests.BlueprintVerify.Regression
+
+-- Regression tests for fixed issues.
+import Tests.FixedIssues.Issue62
