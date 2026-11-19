@@ -3,6 +3,7 @@ import PlutusCore.Cbor
 import PlutusCore.Data
 import PlutusCore.Integer
 import PlutusCore.String
+import PlutusCore.Value
 
 import PlutusCore.UPLC.Term
 
@@ -117,13 +118,38 @@ partial def decodeConstType : List Nat → Option (List Nat × BuiltinType)
   | 7 :: 5      :: l => do
       let (l', t) ← decodeConstType l
       .some (l', .TypeOperator (.TypeList t))
-  -- | 7 :: 12     :: l => sorry -- TODO: implement array for batch 6
+  | 7 :: 12     :: l => do
+      let (l', t) ← decodeConstType l
+      .some (l', .TypeOperator (.TypeArray t))
   | 7 :: 7 :: 6 :: l => do
       let (l₁, t₁) ← decodeConstType l
       let (l₂, t₂) ← decodeConstType l₁
       .some (l₂, .TypeOperator (.TypePair t₁ t₂))
   | 8           :: l => .some (l, .AtomicType .TypeData)
+  | 13          :: l => .some (l, .AtomicType .TypeValue)
   | _      => .none
+
+/- Decodes one `(token, quantity)` entry of a `value` constant. -/
+def decodeValueToken (s : List Bool) : Option (List Bool × (ByteString × Integer)) := do
+  let (s₁, tok) ← decodeBytestring s
+  let (s₂, q)   ← decodeInt s₁
+  .some (s₂, (ByteString.mk tok, q))
+
+/- Decodes one `(currency, [(token, quantity)])` entry of a `value` constant. -/
+def decodeValueEntry (s : List Bool) : Option (List Bool × (ByteString × List (ByteString × Integer))) := do
+  let (s₁, cur)  ← decodeBytestring s
+  let (s₂, toks) ← decodeList decodeValueToken s₁
+  .some (s₂, (ByteString.mk cur, toks))
+
+/- Decodes a `value` constant: a list of currency entries, each holding a list of
+   token entries (Haskell's `instance Flat Value`). The decoder is strict, unlike
+   the text parser: keys must be at most 32 bytes and strictly ascending,
+   quantities non-zero and within the signed 128-bit range, and inner maps
+   non-empty (`buildValueWith`). -/
+def decodeValue (s : List Bool) : Option (List Bool × Const) := do
+  let (s', entries) ← decodeList decodeValueEntry s
+  let v ← (PlutusCore.Value.fromCanonicalList entries).toOption
+  .some (s', .Value v)
 
 partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool × Const)
   | .AtomicType .TypeInteger        => Prod.map id .Integer                      <$> decodeInt s
@@ -151,6 +177,8 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
                | _ => none -- don't produce anything on type mismatched
              Prod.map id .ConstPairDataList <$> decodeList decodeConstPairData s
        | _ => Prod.map id Const.ConstList <$> decodeList (flip decodeConstValue t) s -- heterogenous list
+  | .TypeOperator (.TypeArray t)    =>
+      Prod.map id .ConstArray <$> decodeList (flip decodeConstValue t) s
   | .TypeOperator (.TypePair t₁ t₂) => do
       let (s₁, c₁) ← decodeConstValue s  t₁
       let (s₂, c₂) ← decodeConstValue s₁ t₂
@@ -160,6 +188,7 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
           | Const.Data d₁, Const.Data d₂ => some (s₂, Const.PairData (d₁, d₂))
           | _, _ => none
       | _, _ => some (s₂, Const.Pair (c₁, c₂))
+  | .AtomicType .TypeValue          => decodeValue s
   | .AtomicType .TypeBls12_381_G1_element -- BLS values are not serializable
   | .AtomicType .TypeBls12_381_G2_element
   | .AtomicType .TypeBls12_381_MlResult   => none
@@ -262,17 +291,18 @@ def builtinTable : List (Nat × BuiltinFun) :=
     (86, .Ripemd_160),
     (87, .ExpModInteger),
     (88, .DropList),
-    -- (89, .LengthOfArray),
-    -- (90, .ListToArray),
-    -- (91, .IndexArray),
+    (89, .LengthOfArray),
+    (90, .ListToArray),
+    (91, .IndexArray),
     (92, .Bls12_381_G1_multiScalarMul),
     (93, .Bls12_381_G2_multiScalarMul),
-    -- (94, .InsertCoin),
-    -- (95, .LookupCoin),
-    -- (96, .UnionValue),
-    -- (97, .ValueContains),
-    -- (98, .ValueData),
-    -- (99, .UnValueData),
+    (94, .InsertCoin),
+    (95, .LookupCoin),
+    (96, .UnionValue),
+    (97, .ValueContains),
+    (98, .ValueData),
+    (99, .UnValueData),
+    (100, .ScaleValue),
   ]
 
 def decodeBuiltinFun (_v : Version) (s : List Bool) : Option (List Bool × BuiltinFun) := do

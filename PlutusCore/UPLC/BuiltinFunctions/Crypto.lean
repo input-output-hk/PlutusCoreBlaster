@@ -111,9 +111,12 @@ def verifySchnorrSecp256k1Signature : List CekValue → Option CekValue
   | _ => none
 
 -- BLS12-381 functions
+-- A builtin's arguments arrive last-first (the CEK machine conses each onto the list),
+-- so `[y, x]` is the call `f x y`. That holds for the symmetric operations too: over the
+-- `opaque` builtins, symbolic tools see the operands' order.
 
 def bls12381G1Add : List CekValue → Option CekValue
-  | [.VCon (.Bls12_381_G1_element x), .VCon (.Bls12_381_G1_element y)] => PLC.bls12_381_G1_add x y |> .Bls12_381_G1_element |> .VCon |> .some
+  | [.VCon (.Bls12_381_G1_element y), .VCon (.Bls12_381_G1_element x)] => PLC.bls12_381_G1_add x y |> .Bls12_381_G1_element |> .VCon |> .some
   | _ => none
 
 def bls12381G1Neg : List CekValue → Option CekValue
@@ -125,7 +128,7 @@ def bls12381G1ScalarMul : List CekValue → Option CekValue
   | _ => none
 
 def bls12381G1Equal : List CekValue → Option CekValue
-  | [.VCon (.Bls12_381_G1_element x), .VCon (.Bls12_381_G1_element y)] => PLC.bls12_381_G1_equal x y |> .Bool |> .VCon |> .some
+  | [.VCon (.Bls12_381_G1_element y), .VCon (.Bls12_381_G1_element x)] => PLC.bls12_381_G1_equal x y |> .Bool |> .VCon |> .some
   | _ => none
 
 def bls12381G1HashToGroup : List CekValue → Option CekValue
@@ -141,7 +144,7 @@ def bls12381G1Uncompress : List CekValue → Option CekValue
   | _ => none
 
 def bls12381G2Add : List CekValue → Option CekValue
-  | [.VCon (.Bls12_381_G2_element x), .VCon (.Bls12_381_G2_element y)] => PLC.bls12_381_G2_add x y |> .Bls12_381_G2_element |> .VCon |> .some
+  | [.VCon (.Bls12_381_G2_element y), .VCon (.Bls12_381_G2_element x)] => PLC.bls12_381_G2_add x y |> .Bls12_381_G2_element |> .VCon |> .some
   | _ => none
 
 def bls12381G2Neg : List CekValue → Option CekValue
@@ -153,7 +156,7 @@ def bls12381G2ScalarMul : List CekValue → Option CekValue
   | _ => none
 
 def bls12381G2Equal : List CekValue → Option CekValue
-  | [.VCon (.Bls12_381_G2_element x), .VCon (.Bls12_381_G2_element y)] => PLC.bls12_381_G2_equal x y |> .Bool |> .VCon |> .some
+  | [.VCon (.Bls12_381_G2_element y), .VCon (.Bls12_381_G2_element x)] => PLC.bls12_381_G2_equal x y |> .Bool |> .VCon |> .some
   | _ => none
 
 def bls12381G2HashToGroup : List CekValue → Option CekValue
@@ -205,11 +208,11 @@ def bls12381MillerLoop : List CekValue → Option CekValue
   | _ => none
 
 def bls12381MulMlResult : List CekValue → Option CekValue
-  | [.VCon (.Bls12_381_MlResult x), .VCon (.Bls12_381_MlResult y)] => PLC.bls12_381_mulMlResult x y |> .Bls12_381_MlResult |> .VCon |> .some
+  | [.VCon (.Bls12_381_MlResult y), .VCon (.Bls12_381_MlResult x)] => PLC.bls12_381_mulMlResult x y |> .Bls12_381_MlResult |> .VCon |> .some
   | _ => none
 
 def bls12381FinalVerify : List CekValue → Option CekValue
-  | [.VCon (.Bls12_381_MlResult x), .VCon (.Bls12_381_MlResult y)] => PLC.bls12_381_finalVerify x y |> .Bool |> .VCon |> .some
+  | [.VCon (.Bls12_381_MlResult y), .VCon (.Bls12_381_MlResult x)] => PLC.bls12_381_finalVerify x y |> .Bool |> .VCon |> .some
   | _ => none
 
 end PlutusCore.UPLC.BuiltinFunctions.Crypto

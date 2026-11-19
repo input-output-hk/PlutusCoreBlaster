@@ -36,20 +36,7 @@ structure Config where
 /-- Source-relative path prefixes for test categories whose corresponding
     features are not yet implemented in this Lean formalization. Selected by
     `--exclude-not-implemented`. -/
-def notImplementedPaths : List (List String) := [
-  ["builtin", "constant", "array"],
-  ["builtin", "constant", "value"],
-  ["builtin", "semantics", "indexArray"],
-  ["builtin", "semantics", "insertCoin"],
-  ["builtin", "semantics", "lengthOfArray"],
-  ["builtin", "semantics", "listToArray"],
-  ["builtin", "semantics", "lookupCoin"],
-  ["builtin", "semantics", "scaleValue"],
-  ["builtin", "semantics", "unionValue"],
-  ["builtin", "semantics", "unValueData"],
-  ["builtin", "semantics", "valueContains"],
-  ["builtin", "semantics", "valueData"]
-]
+def notImplementedPaths : List (List String) := []
 
 /-- Source-relative path prefixes whose expected `evaluation failure` is caused by a free (unbound) variable.
 
@@ -172,8 +159,9 @@ private def leafSuccessContent
   let p2 := leafEmbedPath cfg srcPathRel stem ".uplc.expected"
   s!"\
 {header}
-import Tests.Conformance.ConformanceUtils
+
 import PlutusCore.UPLC.ScriptEncoding.Basic
+import Tests.Conformance.ConformanceUtils
 
 namespace {ns}
 
@@ -206,8 +194,9 @@ private def leafEvalFailureContent
   let p1 := leafEmbedPath cfg srcPathRel stem ".uplc"
   s!"\
 {header}
-import Tests.Conformance.ConformanceUtils
+
 import PlutusCore.UPLC.ScriptEncoding.Basic
+import Tests.Conformance.ConformanceUtils
 
 namespace {ns}
 
@@ -234,8 +223,9 @@ private def leafScopeErrorContent
   let p1 := leafEmbedPath cfg srcPathRel stem ".uplc"
   s!"\
 {header}
-import Tests.Conformance.ConformanceUtils
+
 import PlutusCore.UPLC.ScriptEncoding.Basic
+import Tests.Conformance.ConformanceUtils
 
 namespace {ns}
 
@@ -256,8 +246,9 @@ private def leafParseErrorContent
   let p1 := leafEmbedPath cfg srcPathRel stem ".uplc"
   s!"\
 {header}
-import Tests.Conformance.ConformanceUtils
+
 import PlutusCore.UPLC.ScriptEncoding.Basic
+import Tests.Conformance.ConformanceUtils
 
 namespace {ns}
 

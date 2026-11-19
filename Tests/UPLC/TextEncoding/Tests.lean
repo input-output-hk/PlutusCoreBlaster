@@ -24,9 +24,6 @@ example : programFromString? "-- This is a valid encoding with the sign bit set 
 -- builtin/constant/bls12-381/G2/zero
 example : programFromString? "-- A correct compressed encoding of the zero element of G2\n(program 1.0.0\n(con bls12_381_G2_element 0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)\n)" |> Option.isSome := by native_decide
 
--- Array type and functions not implemented yet
-/-
-
 -- builtin/constant/array/emptyArray
 example : programFromString? "(program 1.1.0 (con (array integer) []))" |> Option.isSome := by native_decide
 
@@ -35,8 +32,6 @@ example : programFromString? "(program 1.1.0 (con (array bool) [True, False, Tru
 
 -- builtin/constant/array/unitArray
 example : programFromString? "(program 1.1.0 (con (array unit) [(), (), (), (), ()]))" |> Option.isSome := by native_decide
-
--/
 
 -- builtin/constant/bool/False
 example : programFromString? "(program 1.0.0 (con bool False))" |> Option.isSome := by native_decide
@@ -164,9 +159,6 @@ example : programFromString? "(program 1.0.0 (con (pair integer bool) (12345, Tr
 -- builtin/constant/unit/unit
 example : programFromString? "(program 1.0.0 (con unit ()))" |> Option.isSome := by native_decide
 
--- Value type and functions not implemented yet
-/-
-
 -- builtin/constant/value/empty
 example : programFromString? "(program 1.0.0 (con value []))" |> Option.isSome := by native_decide
 
@@ -196,8 +188,6 @@ example : programFromString? "(program 1.0.0\n  (con value\n    [ (#,\n        [
 
 -- builtin/constant/value/max-key-length-2
 example : programFromString? "(program 1.0.0\n  (con value\n    [ (#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n        [ (#, 123)\n        , (#, 456)\n        ]\n      )\n    ]\n  )\n)" |> Option.isSome := by native_decide
-
--/
 
 -- builtin/interleaving/ite
 example : programFromString? "(program 1.0.0 (builtin ifThenElse))" |> Option.isSome := by native_decide
@@ -2524,17 +2514,11 @@ example : programFromString? "-- The compressed encoding of the zero element of 
 -- builtin/constant/bls12-381/G2/too-short
 example : programFromString? "-- The zero element of G2, but one byte short\n(program 1.0.0\n(con bls12_381_G2_element 0xc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)\n)" |> Option.isNone := by native_decide
 
--- Array type and functions not implemented yet.
-
-/-
-
 -- builtin/constant/array/illTypedArray-01
 example : programFromString? "(program 1.1.0 (con (array bool) [5])\n)" |> Option.isNone := by native_decide
 
 -- builtin/constant/array/illTypedArray-02
 example : programFromString? "(program 1.1.0 (con (array bool) [(lam x (lam y x))])\n)" |> Option.isNone := by native_decide
-
--/
 
 -- builtin/constant/bool/Maybe
 example : programFromString? "-- Should be either \"True\" or \"False\"\n(program 1.0.0 (con bool Maybe))" |> Option.isNone := by native_decide
@@ -2605,10 +2589,6 @@ example : programFromString? "(program 1.0.0 (con list(bool) [True, False, True]
 -- builtin/constant/list/unitList
 example : programFromString? "(program 1.0.0 (con list(unit) [(), (), (), (), ()]))" |> Option.isNone := by native_decide
 
--- Value type and functions not implemented yet
-
-/-
-
 -- builtin/constant/value/ill-formed
 example : programFromString? "(program 1.0.0 (con value [(\"CURRENCY\", [(\"TOKEN\", 123)])]))" |> Option.isNone := by native_decide
 
@@ -2624,8 +2604,6 @@ example : programFromString? "(program 1.0.0\n  (con value [ (#, [ (# , 17014118
 -- builtin/constant/value/underflow
 example : programFromString? "(program 1.0.0\n  (con value [ (#, [ (# , -170141183460469231731687303715884105729)]) ])\n)" |> Option.isNone := by native_decide
 
--/
-
 -- term/case/case-07
 example : programFromString? "-- case can't be used before 1.1.0\n(program 1.0.0\n    (case (con integer 1))\n)" |> Option.isNone := by native_decide
 
@@ -2640,3 +2618,33 @@ example : programFromString? "-- Tag cannot exceeed 2^64-1 = maxBound :: Word64\
 
 -- term/constr/constr-10
 example : programFromString? "-- Version check fails before tag check\n(program 1.0.0\n    (constr 18446744073709551616 (con string \"Maximum tag plus one\") (con unit ()))\n)" |> Option.isNone := by native_decide
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- `value` literals: Haskell 1.64 parity checks that the conformance corpus
+-- does not cover. Expected results were checked with the Plutus 1.64.0.0
+-- `uplc` executable. Each literal quantity must fit in Int128, duplicates are
+-- then summed unchecked, and only the final sums are bounds-checked.
+-- ─────────────────────────────────────────────────────────────────────────
+
+private def parsedValue? (s : String) : Option PlutusCore.Value.Value :=
+  match programFromString? s with
+  | some (.Program _ (.Const (.Value v))) => some v
+  | _ => none
+
+-- A running sum may pass 2^127 - 1 if the final sum is back in range.
+#guard parsedValue? "(program 1.0.0 (con value [(#, [(#, 170141183460469231731687303715884105727), (#, 1), (#, -1)])]))"
+  == some [(⟨""⟩, [(⟨""⟩, 170141183460469231731687303715884105727)])]
+
+-- The same, with the duplicates split across repeated currency entries.
+#guard parsedValue? "(program 1.0.0 (con value [(#, [(#, 170141183460469231731687303715884105727)]), (#, [(#, 1)]), (#, [(#, -1)])]))"
+  == some [(⟨""⟩, [(⟨""⟩, 170141183460469231731687303715884105727)])]
+
+-- A running sum may pass -2^127 too; a zero entry for another token is dropped.
+#guard parsedValue? "(program 1.0.0 (con value [(#aa, [(#01, -170141183460469231731687303715884105728), (#01, -1), (#01, 1)]), (#aa, [(#02, 0)])]))"
+  == some [(⟨"\xaa"⟩, [(⟨"\x01"⟩, -170141183460469231731687303715884105728)])]
+
+-- A final sum outside Int128 is still rejected.
+#guard (programFromString? "(program 1.0.0 (con value [(#, [(#, 170141183460469231731687303715884105727), (#, 1)])]))").isNone
+
+-- So is an out-of-range literal, even when the final sum would fit.
+#guard (programFromString? "(program 1.0.0 (con value [(#, [(#, 170141183460469231731687303715884105728), (#, -1)])]))").isNone

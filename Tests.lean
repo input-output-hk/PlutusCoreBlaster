@@ -7,7 +7,7 @@ import Tests.BlueprintCodegen.Hygiene
 import Tests.BlueprintCodegen.Validation
 import Tests.BlueprintVerify.Tests
 
--- Self-contained encoding tests; generated Game templates run in compiled-assurance.
+-- Self-contained encoding tests; generated Game templates use the local integration runners.
 import Tests.BlueprintVerify.NativeEncoding
 import Tests.BlueprintVerify.BooleanCase
 import Tests.BlueprintVerify.RecursiveSchema

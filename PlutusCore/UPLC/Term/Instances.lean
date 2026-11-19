@@ -21,10 +21,12 @@ mutual
     | .Bool a                , .Bool b                 => a == b
     | .ConstList a           , .ConstList b            => listBeq a b
     | .ConstDataList a       , .ConstDataList b        => a == b
+    | .ConstArray a          , .ConstArray b           => listBeq a b
     | .ConstPairDataList a   , .ConstPairDataList b    => a == b
     | .Pair (a1, a2)         , .Pair (b1, b2)          => constBeq a1 b1 && constBeq a2 b2
     | .PairData a            , .PairData b             => a == b
     | .Data a                , .Data b                 => a == b
+    | .Value                a, .Value                b => a == b
     | .Bls12_381_G1_element a, .Bls12_381_G1_element b => decide (a = b)
     | .Bls12_381_G2_element a, .Bls12_381_G2_element b => decide (a = b)
     | .Bls12_381_MlResult   a, .Bls12_381_MlResult   b => a == b
@@ -57,13 +59,14 @@ end
 instance : BEq Term := ⟨termBeq⟩
 
 mutual
-  theorem constBeq_true_imp_eq : ∀ a b : Const, constBeq a b = true → a = b := by
+  theorem constBeq_true_imp_eq : ∀ (a b : Const), constBeq a b = true → a = b := by
     intro a b h
     cases a <;> cases b <;> simp_all [constBeq]
     case ConstList.ConstList => exact listBeq_true_imp_eq _ _ h
     case Pair.Pair => exact Prod.ext (constBeq_true_imp_eq _ _ h.1) (constBeq_true_imp_eq _ _ h.2)
+    case ConstArray.ConstArray => exact listBeq_true_imp_eq _ _ h
 
-  theorem listBeq_true_imp_eq : ∀ a b : List Const, listBeq a b = true → a = b := by
+  theorem listBeq_true_imp_eq : ∀ (a b : List Const), listBeq a b = true → a = b := by
     intro a b h
     cases a <;> cases b <;> simp_all [listBeq]
     case cons.cons => exact ⟨constBeq_true_imp_eq _ _ h.1, listBeq_true_imp_eq _ _ h.2⟩
@@ -75,6 +78,7 @@ mutual
     cases a <;> simp [constBeq]
     case ConstList => exact listBeq_refl _
     case Pair => exact ⟨constBeq_refl _, constBeq_refl _⟩
+    case ConstArray => exact listBeq_refl _
 
   theorem listBeq_refl : ∀ a : List Const, listBeq a a = true := by
     intro a
@@ -136,6 +140,7 @@ instance : Repr AtomicType where
     | .TypeBool                 => "Bool"
     | .TypeUnit                 => "Unit"
     | .TypeData                 => "Data"
+    | .TypeValue                => "Value"
     | .TypeBls12_381_G1_element => "Bls12_381_G1_element"
     | .TypeBls12_381_G2_element => "Bls12_381_G2_element"
     | .TypeBls12_381_MlResult   => "Bls12_381_MlResult"

@@ -191,45 +191,6 @@ invalid scopes and exhausted fuel. It writes separate evidence-bearing output.
 Use a Z3 compatible with the loaded Blaster checkout; the environment manifest
 pins the selected binary rather than assuming a globally installed version.
 
-## Coordinated workspace command
-
-Use sibling checkouts named `PlutusCoreBlaster`, `Lean-blaster` and
-`CardanoLedgerApiBlaster`; the Plutus and CIPs locations are command arguments.
-Both Lean consumers resolve the same `../Lean-blaster` directory. The tested
-Blaster revision and toolchain versions are recorded in
-`../../scripts/assurance-workspace.json`. In the Plutus build environment
-(GHC 9.6.7, Cabal and its normal native dependencies), run from PlutusCoreBlaster:
-
-```sh
-python3 scripts/verify_assurance_workspace.py \
-  --plutus /path/to/plutus --cips /path/to/CIPs \
-  --z3 /path/to/compatible/z3 --output /path/to/results
-```
-
-Install the Python requirements in `CIP-XXXX/tests/requirements.txt` first.
-`--ghc /path/to/ghc` selects a wrapped compiler. Machine-specific Cabal flags
-belong in the ignored `cabal.assurance.project.local`, leaving the shared project
-portable. `--ual /path/to/UniversalAnnotationLanguage` includes the specification
-in source provenance. `--preflight-only` checks the
-layout, pinned Blaster revision, compiler versions and the Z3 `recfun-finder`
-capability. `--skip-build` is for an already-built workspace. No global PATH,
-Git branch or toolchain configuration is changed. The solver's source baseline
-is pinned in the lock file; each run additionally hashes the actual executable,
-so another build cannot inherit old evidence merely by reporting the same version.
-
-The command builds both Lean consumers, compiles all four Plutus generators,
-regenerates and checks Game, Data/native parameters, Auction and recursive Tree,
-and runs schema, encoding and negative regressions. Drivers share `runtime.py`,
-which passes the same native library to Lean and the environment manifest.
-`workspace-report.json` is written only after every required check passes and
-records repository revisions, modified source hashes, binaries and results.
-
-The `compiled-assurance` workflow checks out the current Core PR and exact sibling
-revisions from the lock file, builds the pinned solver, enters Plutus’s GHC 9.6.7
-Nix shell and runs this command. Its result bundle is uploaded even on failure.
-The workflow must pass before release; adding the workflow is not itself evidence
-that clean-checkout CI has passed. Update the dependency pins when companion PRs change.
-
 ## Recursive Data example
 
 `example-ual-recursive` uses `deriveRecursiveDefinitions` to retain a finite
@@ -244,7 +205,6 @@ they do not assert termination for every tree depth.
 
 - Scott ABI support and compiler/profile conformance vectors.
 - Establish ledger-valid fixtures for claims intended to cover real transactions.
-- Run the coordinated suite in clean-checkout CI once the local changes are integrated.
 
 Ledger-cost acceptance and helper-to-inlined-code equivalence remain separate
 proof capabilities; the current profile does not claim either.
