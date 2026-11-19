@@ -2,6 +2,7 @@
 import PlutusCore.UPLC.BuiltinFunctions.Array
 import PlutusCore.UPLC.BuiltinFunctions.Bitwise
 import PlutusCore.UPLC.BuiltinFunctions.Bool
+import PlutusCore.UPLC.BuiltinFunctions.Bounds
 import PlutusCore.UPLC.BuiltinFunctions.ByteString
 import PlutusCore.UPLC.BuiltinFunctions.Crypto
 import PlutusCore.UPLC.BuiltinFunctions.Data
