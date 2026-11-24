@@ -146,7 +146,10 @@ def constSize (c : Const) : Nat :=
   match c with
   | Const.Integer i => integerSize i
   | Const.ByteString bs => byteStringSize bs
-  | Const.String s => s.length / 4
+  -- The number of characters (`ExMemoryUsage Text`). Variants D and E cost the
+  -- string arguments of `appendString`, `equalsString` and `encodeUtf8`
+  -- differently (`textArgSize`).
+  | Const.String s => s.length
   | Const.Unit => 0
   | Const.Bool _ => 1
   -- Haskell measures lists and arrays by their length, not their contents
@@ -174,6 +177,22 @@ def argSize (args : List CekValue) (i : Nat) : Nat :=
   match args[i]? with
   | some arg => cekValueSize arg
   | none => 1
+
+/-- The size of a string under semantics variants D and E: its UTF-8 length in
+    bytes divided by 4, rounded down (`ExMemoryUsage TextCostedByByteLength` in
+    1.64's `ExMemoryUsage.hs`). -/
+def textByteLengthSize (s : String) : Nat :=
+  s.utf8ByteSize / 4
+
+/-- `argSize` for the string arguments of `appendString`, `equalsString` and
+    `encodeUtf8` under variants D and E, where their 1.64 denotations take
+    `TextCostedByByteLength`: a string is measured by `textByteLengthSize`.
+    Under A–C they take `Text`, measured by `constSize`. An argument that is
+    not a string is measured as by `argSize`; the builtin fails on it. -/
+def textArgSize (args : List CekValue) (i : Nat) : Nat :=
+  match args[i]? with
+  | some (.VCon (.String s)) => textByteLengthSize s
+  | _ => argSize args i
 
 /-- Length of the list constant at position i in the CEK args. -/
 def argListLen (args : List CekValue) (i : Nat) : Nat :=
@@ -1112,7 +1131,7 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.AppendByteString =>
     ⟨⟨1000 + 173 * addedArgSize args⟩, ⟨addedArgSize args⟩⟩
   | BuiltinFun.AppendString =>
-    ⟨⟨1000 + 59957 * addedArgSize args⟩, ⟨4 + 1 * addedArgSize args⟩⟩
+    ⟨⟨1000 + 59957 * (textArgSize args 0 + textArgSize args 1)⟩, ⟨4 + 1 * (textArgSize args 0 + textArgSize args 1)⟩⟩
   | BuiltinFun.BData =>
     ⟨⟨11183⟩, ⟨32⟩⟩
   | BuiltinFun.Blake2b_224 =>
@@ -1177,7 +1196,7 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     -- the `max` to mirror JSON semantics literally.
     ⟨⟨max 85848 (228465 + 122 * argSize args 0 * argSize args 1)⟩, ⟨max 1 (argSize args 1 - argSize args 0)⟩⟩
   | BuiltinFun.EncodeUtf8 =>
-    ⟨⟨1000 + 42921 * argSize args 0⟩, ⟨4 + 2 * argSize args 0⟩⟩
+    ⟨⟨1000 + 42921 * textArgSize args 0⟩, ⟨4 + 2 * textArgSize args 0⟩⟩
   | BuiltinFun.EqualsByteString =>
     ⟨⟨if argSize args 0 == argSize args 1 then 28755 + 75 * argSize args 0 else 30623⟩, ⟨1⟩⟩
   | BuiltinFun.EqualsData =>
@@ -1185,7 +1204,7 @@ def builtinCostsD (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.EqualsInteger =>
     ⟨⟨51775 + 558 * minArgSize args⟩, ⟨1⟩⟩
   | BuiltinFun.EqualsString =>
-    ⟨⟨if argSize args 0 == argSize args 1 then 1000 + 60594 * argSize args 0 else 39184⟩, ⟨1⟩⟩
+    ⟨⟨if textArgSize args 0 == textArgSize args 1 then 1000 + 60594 * textArgSize args 0 else 39184⟩, ⟨1⟩⟩
   | BuiltinFun.FstPair =>
     ⟨⟨141895⟩, ⟨32⟩⟩
   | BuiltinFun.HeadList =>
@@ -1373,7 +1392,7 @@ def builtinCostsE (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.AppendByteString =>
     ⟨⟨1000 + 173 * addedArgSize args⟩, ⟨addedArgSize args⟩⟩
   | BuiltinFun.AppendString =>
-    ⟨⟨1000 + 59957 * addedArgSize args⟩, ⟨4 + 1 * addedArgSize args⟩⟩
+    ⟨⟨1000 + 59957 * (textArgSize args 0 + textArgSize args 1)⟩, ⟨4 + 1 * (textArgSize args 0 + textArgSize args 1)⟩⟩
   | BuiltinFun.BData =>
     ⟨⟨11183⟩, ⟨32⟩⟩
   | BuiltinFun.Blake2b_224 =>
@@ -1439,7 +1458,7 @@ def builtinCostsE (b : BuiltinFun) (args : List CekValue) : ExBudget :=
     let yE := min (argSize args 1) (argSize args 0)
     ⟨⟨Int.toNat (max 85848 (123203 + 1716 * ↑xE + 7305 * ↑yE + 57 * ↑xE^2 + 960 * ↑xE * ↑yE - 900 * ↑yE^2))⟩, ⟨max 1 (argSize args 1 - argSize args 0)⟩⟩
   | BuiltinFun.EncodeUtf8 =>
-    ⟨⟨1000 + 42921 * argSize args 0⟩, ⟨4 + 2 * argSize args 0⟩⟩
+    ⟨⟨1000 + 42921 * textArgSize args 0⟩, ⟨4 + 2 * textArgSize args 0⟩⟩
   | BuiltinFun.EqualsByteString =>
     ⟨⟨if argSize args 0 == argSize args 1 then 28755 + 75 * argSize args 0 else 30623⟩, ⟨1⟩⟩
   | BuiltinFun.EqualsData =>
@@ -1447,7 +1466,7 @@ def builtinCostsE (b : BuiltinFun) (args : List CekValue) : ExBudget :=
   | BuiltinFun.EqualsInteger =>
     ⟨⟨51775 + 558 * minArgSize args⟩, ⟨1⟩⟩
   | BuiltinFun.EqualsString =>
-    ⟨⟨if argSize args 0 == argSize args 1 then 1000 + 60594 * argSize args 0 else 39184⟩, ⟨1⟩⟩
+    ⟨⟨if textArgSize args 0 == textArgSize args 1 then 1000 + 60594 * textArgSize args 0 else 39184⟩, ⟨1⟩⟩
   | BuiltinFun.FstPair =>
     ⟨⟨141895⟩, ⟨32⟩⟩
   | BuiltinFun.HeadList =>
