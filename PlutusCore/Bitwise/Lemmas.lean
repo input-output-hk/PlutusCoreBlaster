@@ -53,21 +53,132 @@ theorem itobs_be_loop_end_error (a : List Char) (n : Nat) (hn : 0 < n) :
     · contradiction
     · rfl
 
-theorem itobs_be_loop_correct_l (w n : Nat) (a : List Char) (hwn : n < 256 ^ w) :
-  itobs_be_loop w [] n = .ok a → repr256_be a = n := by sorry
+/-- Helper lemma: `Char.ofNat` is the identity on byte values. -/
+theorem Char.toNat_ofNat_of_lt (k : Nat) (hk : k < 256) : (Char.ofNat k).toNat = k := by
+  have hv : k.isValidChar := by simp [Nat.isValidChar]; omega
+  simp [Char.ofNat, hv, Char.ofNatAux, Char.toNat]
 
+/-- `repr256_be` peels off the most significant byte. -/
+theorem repr256_be_cons (c : Char) (a : List Char) :
+  repr256_be (c :: a) = c.toNat * 256 ^ a.length + repr256_be a :=
+    by
+      simp [repr256_be, repr256_le, List.mapIdx_append, List.sum_append_nat]
+      omega
 
-theorem itobs_be_loop_correct_r (w n : Nat) (a : List Char) (hwn : n < 256 ^ w) :
-  repr256_be a = n → itobs_be_loop w [] n = .ok a := by sorry
+/-- `bstoi_be_loop` computes `repr256_be`, shifted by the accumulator. -/
+theorem bstoi_be_loop_eq (a : List Char) (acc : Nat) :
+  bstoi_be_loop a acc = acc * 256 ^ a.length + repr256_be a :=
+    by
+      induction a generalizing acc with
+      | nil         => simp [bstoi_be_loop, repr256_be, repr256_le]
+      | cons c t ih =>
+          rw [bstoi_be_loop, ih, repr256_be_cons, List.length_cons, Nat.pow_succ, Nat.add_mul,
+              Nat.mul_assoc, Nat.mul_comm 256, Nat.add_assoc]
 
--- theorem
+theorem bstoi_be_loop_append (a b : List Char) (acc : Nat) :
+  bstoi_be_loop (a ++ b) acc = bstoi_be_loop b (bstoi_be_loop a acc) :=
+    by
+      induction a generalizing acc with
+      | nil => rfl
+      | cons c t ih => exact ih _
+
+theorem repr256_be_eq_bstoi (a : List Char) : repr256_be a = bstoi_be_loop a 0 := by
+  simp [bstoi_be_loop_eq]
+
+/-- `repr256_be` peels off the least significant byte. -/
+theorem repr256_be_concat (a : List Char) (c : Char) :
+  repr256_be (a ++ [c]) = repr256_be a * 256 + c.toNat :=
+    by
+      simp [repr256_be_eq_bstoi, bstoi_be_loop_append, bstoi_be_loop]
+
+/-- A sequence of `k` bytes represents a number below `256 ^ k`. -/
+theorem repr256_be_lt (a : List Char) (ha : ∀ c ∈ a, c.toNat < 256) :
+  repr256_be a < 256 ^ a.length :=
+    by
+      induction a with
+      | nil => simp [repr256_be, repr256_le]
+      | cons c t ih =>
+        rw [repr256_be_cons, List.length_cons, Nat.pow_succ]
+        have hc : c.toNat < 256 := ha c (by simp)
+        have ht : repr256_be t < 256 ^ t.length := ih (fun x hx => ha x (by simp [hx]))
+        have : c.toNat * 256 ^ t.length + 256 ^ t.length ≤ 256 ^ t.length * 256 := by
+          rw [← Nat.succ_mul, Nat.mul_comm]; exact Nat.mul_le_mul_left _ hc
+        omega
+
+/-- A successful `itobs_be_loop` prepends exactly `w` bytes, which represent `n`. -/
+theorem itobs_be_loop_ok (w : Nat) (acc r : List Char) (n : Nat) :
+  itobs_be_loop w acc n = .ok r →
+  ∃ d, r = d ++ acc ∧ d.length = w ∧ (∀ c ∈ d, c.toNat < 256) ∧ repr256_be d = n :=
+    by
+      induction w generalizing acc n with
+      | zero =>
+        intro h
+        cases n with
+        | zero =>
+            rw [itobs_be_loop_end] at h
+            cases h
+            exact ⟨[], rfl, rfl, by simp, rfl⟩
+        | succ k =>
+            rw [itobs_be_loop_end_error _ _ (Nat.succ_pos k)] at h
+            contradiction
+      | succ w ih =>
+          intro h
+          rw [itobs_be_loop_step] at h
+          obtain ⟨d, hr, hlen, hbytes, hrepr⟩ := ih _ _ h
+          have hc : (Char.ofNat (n % 256)).toNat = n % 256 :=
+            Char.toNat_ofNat_of_lt _ (Nat.mod_lt _ (by decide))
+          refine ⟨d ++ [Char.ofNat (n % 256)], by simp [hr], by simp [hlen], ?_, ?_⟩
+          · intro c hc'
+            simp only [List.mem_append, List.mem_singleton] at hc'
+            cases hc' with
+            | inl h => exact hbytes c h
+            | inr h => subst h; rw [hc]; exact Nat.mod_lt _ (by decide)
+          · rw [repr256_be_concat, hrepr, hc]; omega
+
+/-- `itobs_be_loop` reproduces any byte sequence from the number it represents. -/
+theorem itobs_be_loop_repr (d acc : List Char) (hd : ∀ c ∈ d, c.toNat < 256) :
+  itobs_be_loop d.length acc (repr256_be d) = .ok (d ++ acc) :=
+    by
+      generalize hw : d.length = w
+      induction w generalizing d acc with
+      | zero => rw [List.length_eq_zero_iff] at hw; subst hw; rfl
+      | succ w ih =>
+          rcases List.eq_nil_or_concat d with h | ⟨d, c, h⟩
+          · subst h; contradiction
+          subst h
+          rw [List.concat_eq_append] at hd hw ⊢
+          simp only [List.length_append, List.length_singleton, Nat.add_right_cancel_iff] at hw
+          have hc : c.toNat < 256 := hd c (by simp)
+          rw [itobs_be_loop_step, repr256_be_concat]
+          have h1 : (repr256_be d * 256 + c.toNat) % 256 = c.toNat := by omega
+          have h2 : (repr256_be d * 256 + c.toNat) / 256 = repr256_be d := by omega
+          rw [h1, h2, Char.ofNat_toNat, ih d _ (fun x hx => hd x (by simp [hx])) hw]
+          simp
+
+theorem itobs_be_loop_correct_l (w n : Nat) (a : List Char) :
+  itobs_be_loop w [] n = .ok a → repr256_be a = n :=
+    by
+      intro h
+      obtain ⟨d, hr, _, _, hrepr⟩ := itobs_be_loop_ok w [] a n h
+      rw [List.append_nil] at hr
+      rwa [hr]
+
+/-- `a` must consist of exactly `w` byte-valued characters: `itobs_be_loop` always emits `w`
+    bytes, so e.g. `a = []` represents `0` but `itobs_be_loop 1 [] 0 = .ok ['\x00']`. -/
+theorem itobs_be_loop_correct_r (w n : Nat) (a : List Char) (hlen : a.length = w) (hbytes : ∀ c ∈ a, c.toNat < 256) :
+  repr256_be a = n → itobs_be_loop w [] n = .ok a :=
+    by
+      intro h
+      subst hlen h
+      rw [itobs_be_loop_repr a [] hbytes, List.append_nil]
 
 /-- Lemma formalizing the correctness of the `itobs_be_loop` recursive function. -/
-theorem itobs_be_loop_correct (w n : Nat) (a : List Char) (hwn : n < 256 ^ w) :
-  itobs_be_loop w [] n = .ok a ↔ repr256_be a = n := by
-    constructor
-    · apply itobs_be_loop_correct_l <;> assumption
-    · apply itobs_be_loop_correct_r <;> assumption
+theorem itobs_be_loop_correct (w n : Nat) (a : List Char) (hlen : a.length = w) (hbytes : ∀ c ∈ a, c.toNat < 256) :
+  itobs_be_loop w [] n = .ok a ↔ repr256_be a = n :=
+    by
+      constructor
+      · apply itobs_be_loop_correct_l <;> assumption
+      · apply itobs_be_loop_correct_r <;> assumption
 
 /-- Lemma formalizing the error case for `itobs_be` and `itobs_le` in case `w < 0`. -/
 theorem integerToByteString_neg_w (e : Bool) (w n : Integer) : w < 0 →
@@ -249,25 +360,227 @@ theorem integerToByteString_nonzero_w_high_n (e : Bool) (w : Nat) (n : Integer) 
             split
             next _               => exfalso; exact (Int.lt_irrefl 0 hn0)
             next n' _ hwe0 _ _   => clear hn; norm_cast at hwe0; omega
-            next w' n' _ _ _ _ _ => sorry -- TODO: finish proof
-            next _               => sorry -- TODO: finish proof
+            next w' n' _ _ heq _ _ =>
+              have hw' : w = w' := Int.ofNat.inj heq
+              subst hw'
+              have hwn' : 256 ^ w ≤ n' := by
+                have h : ((256 ^ w : Nat) : Int) ≤ ((n' : Nat) : Int) := by rw [Int.natCast_pow]; exact hwn
+                exact Int.ofNat_le.mp h
+              rw [itobs_be_loop_high_n w n' [] hwn']
+              rfl
+            next m _ _ _ _ h _ _ =>
+              exact (h w m.toNat rfl (Int.toNat_of_nonneg (Int.le_of_lt hn0)).symm).elim
+
+/-- Helper lemma: moves a bound `2 ^ k ≤ n` from `Int` to `Nat` without evaluating `2 ^ k`
+    (the kernel unfolds `Int.pow` one step per exponent, so `omega` chokes on `(2 : Int) ^ 65536`). -/
+theorem Int.two_pow_le_natCast (k n : Nat) : (2 : Int) ^ k ≤ (n : Int) ↔ 2 ^ k ≤ n :=
+  by
+    rw [← Int.ofNat_le, Int.natCast_pow]
+    rfl
+
+/-- Within the length bounds, `integerToByteString` is a single `itobs_be_loop` run (of width
+    `integerWidth n` when `w = 0`) followed by the byte-order selection. -/
+theorem integerToByteString_nat (e : Bool) (w n : Nat) (hw8 : w ≤ 8192) (hwn : w = 0 → n < 2 ^ 65536) :
+  integerToByteString e w n =
+    (itobs_be_loop (if w = 0 then integerWidth n else w) [] n >>=
+      fun r => if e then pure ⟨r⟩ else pure ⟨r.reverse⟩) :=
+        by
+          simp only [integerToByteString, maxOutputLength, maxOutputBitsLength]
+          have h1 : ¬ ((w : Int) < 0) := by omega
+          have h2 : ¬ ((w : Int) > ((8192 : Nat) : Int)) := by omega
+          have h3 : ¬ ((w : Int) = 0 ∧ integerLog2 (n : Int) ≥ 8 * 8192) := by
+            intro ⟨hw0, hlog⟩
+            have hn := hwn (by omega)
+            change Nat.log2 n ≥ 8 * 8192 at hlog
+            by_cases hn0 : n = 0
+            · subst hn0; rw [Nat.log2_zero] at hlog; omega
+            · have := (Nat.log2_lt (k := 65536) hn0).mpr hn
+              omega
+          have h4 : ¬ ((n : Int) < 0) := by omega
+          rw [if_neg h1, if_neg h2, if_neg h3, if_neg h4]
+          split
+          next _ _ heqw heqn =>
+            have hw : w = 0 := Int.ofNat.inj heqw
+            have hn : n = 0 := Int.ofNat.inj heqn
+            subst hw hn
+            rfl
+          next _ _ n' _ heqw heqn =>
+            have hw : w = 0 := Int.ofNat.inj heqw
+            have hn : n = n' := Int.ofNat.inj heqn
+            subst hw hn
+            rfl
+          next _ _ w' n' _ hw0 heqw heqn =>
+            have hw : w = w' := Int.ofNat.inj heqw
+            have hn : n = n' := Int.ofNat.inj heqn
+            subst hw hn
+            rw [if_neg hw0]
+          next _ _ _ _ h =>
+            exact (h w n rfl rfl).elim
+
+/-- `byteStringToInteger` reads the big-endian byte sequence selected by `e`. -/
+theorem byteStringToInteger_eq (e : Bool) (s : String) :
+  byteStringToInteger e s = ((repr256_be (if e then s.data else s.data.reverse) : Nat) : Integer) :=
+    by cases e <;> simp [byteStringToInteger, bstoi_be_loop_eq]
+
+/-- Whatever `integerToByteString` produces reads back as the number it was given. -/
+theorem itobs_post_ok (e : Bool) (k m : Nat) (s : String) :
+  (itobs_be_loop k [] m >>= fun r => if e then pure ⟨r⟩ else pure ⟨r.reverse⟩) = (.ok s : Except String String)
+  → byteStringToInteger e s = m :=
+    by
+      intro h
+      cases hl : itobs_be_loop k [] m with
+      | error _ => rw [hl] at h; contradiction
+      | ok r =>
+        rw [hl] at h
+        obtain ⟨d, hr, _, _, hrepr⟩ := itobs_be_loop_ok k [] r m hl
+        rw [List.append_nil] at hr
+        subst hr
+        cases e <;>
+          (simp [bind, Except.bind, pure, Except.pure] at h; subst h; simp [byteStringToInteger_eq, hrepr])
+
+/-- A big-endian byte sequence without a leading zero byte is `integerWidth` bytes long. -/
+theorem integerWidth_repr256_be (d : List Char) (hd : ∀ c ∈ d, c.toNat < 256) (hmin : d.head? ≠ some '\x00') :
+  integerWidth (repr256_be d) = d.length :=
+    by
+      cases d with
+      | nil => rfl
+      | cons c t =>
+          have hc0 : c.toNat ≠ 0 := by
+            intro h0; apply hmin; simp; rw [← Char.ofNat_toNat c, h0]
+          have hlt := repr256_be_lt (c :: t) hd
+          have hpos : 0 < 256 ^ t.length := Nat.pow_pos (by decide)
+          rw [repr256_be_cons] at hlt ⊢
+          have hle : 256 ^ t.length ≤ c.toNat * 256 ^ t.length + repr256_be t := by
+            have := Nat.mul_le_mul_right (256 ^ t.length) (Nat.one_le_iff_ne_zero.mpr hc0)
+            omega
+          generalize c.toNat * 256 ^ t.length + repr256_be t = m at hlt hle
+          have hne : m ≠ 0 := by omega
+          rw [List.length_cons] at hlt ⊢
+          rw [← pow2_pow256] at hlt hle
+          have h1 := (Nat.le_log2 hne).mpr hle
+          have h2 := (Nat.log2_lt hne).mpr hlt
+          unfold integerWidth
+          split
+          · contradiction
+          · omega
+
+/-- `integerToByteString` rebuilds a bytestring from its integer value, provided the width it
+    selects (`w`, or `integerWidth` of the value when `w = 0`) is the length of `s`. -/
+theorem integerToByteString_bytes (e : Bool) (s : String) (w : Nat)
+    (hbytes : ∀ c ∈ s.data, c.toNat < 256) (hlen : String.length s ≤ 8192)
+    (hw : (if w = 0 then integerWidth (repr256_be (if e then s.data else s.data.reverse)) else w) = String.length s) :
+  integerToByteString e w (byteStringToInteger e s) = .ok s :=
+    by
+      obtain ⟨l⟩ := s
+      simp only [byteStringToInteger_eq, String.length_mk] at hbytes hlen hw ⊢
+      have hd : ∀ c ∈ (if e then l else l.reverse), c.toNat < 256 := by
+        cases e <;> simpa using hbytes
+      have hdlen : (if e then l else l.reverse).length = l.length := by
+        cases e <;> simp
+      have hw8 : w ≤ 8192 := by
+        by_cases hw0 : w = 0
+        · omega
+        · rw [if_neg hw0] at hw; omega
+      have hlt : repr256_be (if e then l else l.reverse) < 2 ^ 65536 := by
+        have h1 := repr256_be_lt _ hd
+        rw [hdlen, ← pow2_pow256] at h1
+        exact Nat.lt_of_lt_of_le h1 (Nat.pow_le_pow_right (n := 2) (j := 65536) (by decide) (by omega))
+      rw [integerToByteString_nat e w _ hw8 (fun _ => hlt), hw, ← hdlen,
+          itobs_be_loop_repr _ [] hd, List.append_nil]
+      cases e <;> simp [bind, Except.bind, pure, Except.pure]
 
 -- itobs_le (w, n) = itobs_be (w, n) = ×, if n < 0 or n ≥ 2 ^ 65536
 /-- Given `w` and `n`, if n < 0 or n > 2 ^ 65536, `integerToByteString` returns an error. -/
 theorem integerToByteString_n_bounds_err (e : Bool) (w n : Integer) : n < 0 ∨ n ≥ 2 ^ 65536 →
-  (integerToByteString e w n |> Except.isError) := sorry
+  (integerToByteString e w n |> Except.isError) :=
+    by
+      intro hn
+      unfold Integer at *
+      by_cases hw0 : w < 0
+      · rw [integerToByteString_neg_w e w n hw0]; rfl
+      by_cases hw8 : w > 8192
+      · rw [integerToByteString_high_w e w n hw8]; rfl
+      cases hn with
+      | inl hn =>
+          rw [integerToByteString_neg_n e w n (Int.not_lt.mp hw0) (Int.not_lt.mp hw8) hn]; rfl
+      | inr hn =>
+          by_cases hwz : w = 0
+          · subst hwz; rw [integerToByteString_zero_w_high_n e n hn]; rfl
+          · have hn0 : 0 ≤ n := Int.le_trans (Int.pow_nonneg (by decide)) hn
+            obtain ⟨w', rfl⟩ := Int.eq_ofNat_of_zero_le (by omega : 0 ≤ w)
+            obtain ⟨n', rfl⟩ := Int.eq_ofNat_of_zero_le hn0
+            have hn : 2 ^ 65536 ≤ n' := (Int.two_pow_le_natCast 65536 n').mp hn
+            have hw' : w' ≠ 0 := by omega
+            have hw8' : w' ≤ 8192 := by omega
+            have hn' : 256 ^ w' ≤ n' := by
+              rw [← pow2_pow256]
+              exact Nat.le_trans (Nat.pow_le_pow_right (n := 2) (j := 65536) (by decide) (by omega)) hn
+            rw [integerToByteString_nat e w' n' hw8' (fun h => absurd h hw'), if_neg hw',
+                itobs_be_loop_high_n w' n' [] hn']
+            rfl
 
 example : byteStringToInteger false "\x56\x34\x12\x00\x00" = 0x123456 := rfl
 example : byteStringToInteger true  "\x00\x00\x12\x34\x56" = 0x123456 := rfl
 
-theorem bstoi_itobs_roundtrip (e : Bool) (s : String) :
-  integerToByteString e (byteStringToInteger e s) (String.length s) = .ok s := sorry
+/-- `byteStringToInteger` followed by `integerToByteString` at the input's own length is the
+    identity on bytestrings (characters `< 256`) of at most 8192 bytes. -/
+theorem bstoi_itobs_roundtrip (e : Bool) (s : String) (hbytes : ∀ c ∈ s.data, c.toNat < 256) (hlen : String.length s ≤ 8192) :
+  integerToByteString e (String.length s) (byteStringToInteger e s) = .ok s :=
+    by
+      apply integerToByteString_bytes e s _ hbytes hlen
+      split
+      next h =>
+        obtain ⟨l⟩ := s
+        simp only [String.length_mk, List.length_eq_zero_iff] at h
+        subst h
+        cases e <;> rfl
+      next => rfl
 
+/-- A successful `integerToByteString` result reads back as `n`. -/
 theorem itobs_bstoi_equivalence (e : Bool) (s : String) (w n : Integer) :
-  integerToByteString e w n = .ok s → byteStringToInteger e s = n := sorry
+  integerToByteString e w n = .ok s → byteStringToInteger e s = n :=
+    by
+      intro h
+      unfold Integer at *
+      by_cases hw0 : w < 0
+      · rw [integerToByteString_neg_w e w n hw0] at h; cases h
+      by_cases hw8 : w > 8192
+      · rw [integerToByteString_high_w e w n hw8] at h; cases h
+      by_cases hn0 : n < 0
+      · rw [integerToByteString_neg_n e w n (Int.not_lt.mp hw0) (Int.not_lt.mp hw8) hn0] at h
+        cases h
+      by_cases hz : w = 0 ∧ n ≥ 2 ^ 65536
+      · obtain ⟨hw, hn⟩ := hz
+        subst hw
+        rw [integerToByteString_zero_w_high_n e n hn] at h; cases h
+      obtain ⟨w', rfl⟩ := Int.eq_ofNat_of_zero_le (by omega : 0 ≤ w)
+      obtain ⟨n', rfl⟩ := Int.eq_ofNat_of_zero_le (by omega : 0 ≤ n)
+      have hwn : w' = 0 → n' < 2 ^ 65536 := by
+        intro hw
+        have hn : ¬ (2 : Int) ^ 65536 ≤ (n' : Int) := fun hn => hz ⟨by subst hw; rfl, hn⟩
+        exact Nat.lt_of_not_le (mt (Int.two_pow_le_natCast 65536 n').mpr hn)
+      rw [integerToByteString_nat e w' n' (by omega) hwn] at h
+      exact itobs_post_ok e _ n' s h
 
-theorem bstoi_itobs_equivalence (e : Bool) (s : String) (w n : Integer) :
-  w = 0 ∨ String.length s ≤ w → byteStringToInteger e s = n → integerToByteString e w n = .ok s := sorry
+/-- `integerToByteString` inverts `byteStringToInteger` on a bytestring `s` (characters `< 256`,
+    at most 8192 bytes) either at width `String.length s`, or at width `0` when `s` has no
+    leading zero byte (`integerToByteString` with `w = 0` returns the minimal representation). -/
+theorem bstoi_itobs_equivalence (e : Bool) (s : String) (w n : Integer) (hbytes : ∀ c ∈ s.data, c.toNat < 256) (hlen : String.length s ≤ 8192) :
+  (w = 0 ∧ (if e then s.data else s.data.reverse).head? ≠ some '\x00') ∨ String.length s = w →
+  byteStringToInteger e s = n
+  → integerToByteString e w n = .ok s :=
+    by
+      intro hw hn
+      subst hn
+      rcases hw with ⟨rfl, hmin⟩ | hw
+      · apply integerToByteString_bytes e s 0 hbytes hlen
+        rw [if_pos rfl, integerWidth_repr256_be _ _ hmin]
+        · obtain ⟨l⟩ := s
+          cases e <;> simp
+        · obtain ⟨l⟩ := s
+          cases e <;> simpa using hbytes
+      · subst hw
+        exact bstoi_itobs_roundtrip e s hbytes hlen
 
 -- TODO: formalizations for writeBits
 
