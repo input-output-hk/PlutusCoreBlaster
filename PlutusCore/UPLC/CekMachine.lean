@@ -1,5 +1,6 @@
 import PlutusCore.Default
 import PlutusCore.UPLC.Builtins
+import PlutusCore.UPLC.BuiltinFunctions.Bounds
 import PlutusCore.UPLC.BuiltinFunctions.Evaluate
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
@@ -11,6 +12,7 @@ namespace PlutusCore.UPLC.CekMachine
 open PlutusCore.Default
 open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.Builtins
+open PlutusCore.UPLC.BuiltinFunctions.Bounds (argumentsInBounds)
 open PlutusCore.UPLC.BuiltinFunctions.Evaluate
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.ExBudget
@@ -288,17 +290,26 @@ def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
     | State.BudgetExhausted                 => ExBudget.zero
     | State.Halt _                          => ExBudget.zero
 
+/-- The cost of calling builtin `b` on `args` (last argument first).
+
+    Under variants D and E, a call with an argument out of bounds costs nothing:
+    1.64 rejects the argument when it reads it, before it costs the call
+    (`builtinRuntimeFailure` with an empty cost, `Builtin/Meaning.hs`).
+    `evaluateBuiltinFunction` then fails the step. -/
+def builtinCallCost (semVar : BuiltinSemanticsVariant) (b : BuiltinFun) (args : List CekValue) : ExBudget :=
+    if argumentsInBounds semVar b args then builtinCostSelected semVar b args else ExBudget.zero
+
 def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) : ExBudget :=
     match Sigma with
     -- Check Return states that will call evalBuiltin with final argument.
     -- Pass args in the same order evalBuiltin sees them (V :: Vs) — last-applied
     -- first, matching what the cost-model formulas in CostModels.lean assume.
     | State.Return (Frame.RightApplicationOfValue (CekValue.VBuiltin b Vs (a[_])) :: _) V =>
-        builtinCostSelected semVar b (V :: Vs)
+        builtinCallCost semVar b (V :: Vs)
     | State.Return (Frame.LeftApplicationToValue V :: _) (CekValue.VBuiltin b Vs (a[_])) =>
-        builtinCostSelected semVar b (V :: Vs)
+        builtinCallCost semVar b (V :: Vs)
     | State.Return (Frame.ForceFrame :: _) (CekValue.VBuiltin b Vs (a[_])) =>
-        builtinCostSelected semVar b Vs
+        builtinCallCost semVar b Vs
     | _ => ExBudget.zero
 
 def stepWithBudget

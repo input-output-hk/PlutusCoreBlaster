@@ -244,16 +244,46 @@ private def fails : EvaluationResult → Bool
   | .EvaluationError => true
   | _ => false
 
+private def exhausted : EvaluationResult → Bool
+  | .BudgetExhausted _ => true
+  | _ => false
+
+/-- The CPU and memory a successful run spent. -/
+private def spent : EvaluationResult → Option (Nat × Nat)
+  | .Success _ b => some (b.exBudgetCPU.unExCPU, b.exBudgetMemory.unExMemory)
+  | _ => none
+
 -- At the default (current mainnet) protocol version, V1/V2 run variant D and V3
--- runs E. At `.preConway`, V1/V2 run A and V3 runs C.
---
--- Only bytestrings here: costing an integer near 2^262143 does not finish,
--- because `costingLog2` recurses once per bit.
+-- runs E. At `.preConway`, V1/V2 run A and V3 runs C. The budgets spent are
+-- those of `uplc evaluate -c`.
 #guard fails (cekExecuteProgramWithBudget (sha3 tooManyBytes) .plutusV1 default [] budget)
 #guard fails (cekExecuteProgramWithBudget (sha3 tooManyBytes) .plutusV3 default [] budget)
 #guard succeeds (cekExecuteProgramWithBudget (sha3 maxBytes) .plutusV3 default [] budget)
 #guard succeeds (cekExecuteProgramWithBudget (sha3 tooManyBytes) .plutusV1 .preConway [] budget)
 #guard succeeds (cekExecuteProgramWithBudget (sha3 tooManyBytes) .plutusV3 .preConway [] budget)
+#guard fails (cekExecuteProgramWithBudget (addOne bound) .plutusV1 default [] budget)
+#guard fails (cekExecuteProgramWithBudget (addOne bound) .plutusV3 default [] budget)
+#guard spent (cekExecuteProgramWithBudget (addOne (bound - 1)) .plutusV3 default [] budget)
+  == some (1901208, 4697)
+#guard spent (cekExecuteProgramWithBudget (addOne bound) .plutusV1 .preConway [] budget)
+  == some (3646717, 4697)
+
+/-! An argument out of bounds fails the call before the builtin is costed. So
+the call fails even when the budget covers the machine steps but not the
+builtin, as with `smallBudget` here. In bounds, or under A–C, the same budget
+runs out instead. -/
+
+private def smallBudget : ExBudget := ⟨⟨1_000_000⟩, ⟨100_000⟩⟩
+
+#guard fails (cekExecuteProgramWithBudget (sha3 tooManyBytes) .plutusV1 default [] smallBudget)
+#guard fails (cekExecuteProgramWithBudget (sha3 tooManyBytes) .plutusV3 default [] smallBudget)
+#guard exhausted (cekExecuteProgramWithBudget (sha3 maxBytes) .plutusV3 default [] smallBudget)
+#guard exhausted (cekExecuteProgramWithBudget (sha3 tooManyBytes) .plutusV1 .preConway [] smallBudget)
+#guard exhausted (cekExecuteProgramWithBudget (sha3 tooManyBytes) .plutusV3 .preConway [] smallBudget)
+#guard fails (cekExecuteProgramWithBudget (addOne bound) .plutusV1 default [] smallBudget)
+#guard fails (cekExecuteProgramWithBudget (addOne bound) .plutusV3 default [] smallBudget)
+#guard exhausted (cekExecuteProgramWithBudget (addOne (bound - 1)) .plutusV3 default [] smallBudget)
+#guard exhausted (cekExecuteProgramWithBudget (addOne bound) .plutusV1 .preConway [] smallBudget)
 
 /-! ## Evaluation in proofs
 

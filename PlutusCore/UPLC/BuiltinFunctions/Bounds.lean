@@ -21,7 +21,9 @@ the bounds. Variants A–C bound nothing.
 
 `argumentsInBounds` lists the bounded arguments of each builtin, following the
 types of their 1.64 denotations. `evaluateBuiltinFunction` runs a builtin only
-if it returns `true`.
+if it returns `true`, and the budgeted machine charges the builtin's cost only
+then (`builtinCallCost` in `CekMachine.lean`), because 1.64 rejects the
+argument before it costs the call.
 -/
 
 namespace PlutusCore.UPLC.BuiltinFunctions.Bounds
