@@ -123,4 +123,29 @@ def testProgramOf (t : PlutusCore.UPLC.Term.Term) : PlutusCore.UPLC.Term.Program
     (testProgramOf (.Force (.Apply (.Builtin .AddInteger) (.Const (.Integer 1))))) [] 100).2
   == testBudget 64100 500
 
+-- Evaluation preserves the element type even when it removes the last item.
+#guard
+  let integerTy : PlutusCore.UPLC.Term.BuiltinType := .AtomicType .TypeInteger
+  let singleton : PlutusCore.UPLC.Term.Term := .Const (.ConstList integerTy [.Integer 1])
+  let tail : PlutusCore.UPLC.Term.Term := .Apply (.Force (.Builtin .TailList)) singleton
+  let drop : PlutusCore.UPLC.Term.Term := .Apply (.Apply (.Force (.Builtin .DropList)) (.Const (.Integer 1))) singleton
+  let fromCase : PlutusCore.UPLC.Term.Term := .Case singleton [.Lam (.Lam (.Var 0))]
+  [tail, drop, fromCase].all fun body =>
+    match cekExecuteProgramWithSemanticVariant .defaultFunSemanticsVariantE
+        (.Program (.Version 1 1 0) body) [] 100 with
+    | .Halt (.VCon value) => value == .ConstList integerTy []
+    | _ => false
+
+-- Consing onto an empty list still checks the full element type.
+#guard
+  let integerTy : PlutusCore.UPLC.Term.BuiltinType := .AtomicType .TypeInteger
+  let listTy : PlutusCore.UPLC.Term.BuiltinType := .TypeOperator (.TypeList integerTy)
+  let empty := CekValue.VCon (.ConstList listTy [])
+  let correct := CekValue.VCon (.ConstList integerTy [])
+  let incorrect := CekValue.VCon (.ConstList (.AtomicType .TypeBool) [])
+  (match PlutusCore.UPLC.BuiltinFunctions.List.mkCons [empty, correct] with
+    | some (.VCon value) => value == .ConstList listTy [.ConstList integerTy []]
+    | _ => false) &&
+  (PlutusCore.UPLC.BuiltinFunctions.List.mkCons [empty, incorrect]).isNone
+
 end PlutusCore.UPLC.CekMachine

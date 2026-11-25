@@ -148,6 +148,7 @@ example : programFromString? "(program 1.0.0 (con (pair integer bool) (12345, Tr
   Version 1.0.0
   (PlutusCore.UPLC.Term.Term.Const
     (PlutusCore.UPLC.Term.Const.ConstList
+      (PlutusCore.UPLC.Term.BuiltinType.AtomicType (PlutusCore.UPLC.Term.AtomicType.TypeString))
       [PlutusCore.UPLC.Term.Const.String "z ∈ ℝ ⇒ x² ≥ 0; z ∈ ℂ",
        PlutusCore.UPLC.Term.Const.String "x ∈ ℝ ⇒ x² ≥ 0; z ∈ ℂ\\ℝ ⇒ z² ∉ {x ∈ ℝ: x ≥ 0}.",
        PlutusCore.UPLC.Term.Const.String "\\",
@@ -2640,3 +2641,12 @@ example : programFromString? "-- Tag cannot exceeed 2^64-1 = maxBound :: Word64\
 
 -- term/constr/constr-10
 example : programFromString? "-- Version check fails before tag check\n(program 1.0.0\n    (constr 18446744073709551616 (con string \"Maximum tag plus one\") (con unit ()))\n)" |> Option.isNone := by native_decide
+
+-- Text decoding preserves the type recursively inside empty elements.
+example : programFromString? "(program 1.0.0 (con (list (list integer)) [[]]))" =
+    some (.Program (.Version 1 0 0) (.Const
+      (.ConstList (.TypeOperator (.TypeList (.AtomicType .TypeInteger)))
+        [.ConstList (.AtomicType .TypeInteger) []]))) := by native_decide
+
+example : programFromString? "(program 1.0.0 (con (list (list integer)) [[]]))" ≠
+    programFromString? "(program 1.0.0 (con (list (list bool)) [[]]))" := by native_decide

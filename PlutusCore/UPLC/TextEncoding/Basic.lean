@@ -497,7 +497,7 @@ mutual
           | .PairData p => pure p
           | _ => fail "pair data expected"
         return .ConstPairDataList pairElems
-    | _ => return .ConstList elems
+    | _ => return .ConstList elemTy elems
 
   /-- Parse `(v, v)` as a pair constant. -/
   partial def parseConstPair (t1 t2 : BuiltinType) : Parser Const :=

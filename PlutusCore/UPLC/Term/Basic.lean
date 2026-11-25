@@ -22,7 +22,7 @@ inductive AtomicType
   | TypeBls12_381_G1_element
   | TypeBls12_381_G2_element
   | TypeBls12_381_MlResult
-deriving BEq
+deriving BEq, Repr
 
 instance : LawfulBEq AtomicType where
   eq_of_beq {a b} h := by cases a <;> cases b <;> first | rfl | contradiction
@@ -34,11 +34,20 @@ mutual
   inductive BuiltinType
     | AtomicType : AtomicType → BuiltinType
     | TypeOperator : TypeOperator → BuiltinType
+  deriving DecidableEq, Repr
 
   inductive TypeOperator
     | TypeList : BuiltinType → TypeOperator
     | TypePair : BuiltinType → BuiltinType → TypeOperator
+  deriving DecidableEq, Repr
 end
+
+instance : BEq BuiltinType where
+  beq a b := decide (a = b)
+
+instance : LawfulBEq BuiltinType where
+  eq_of_beq := of_decide_eq_true
+  rfl := decide_eq_true rfl
 
 inductive Const
   | Integer               : Integer → Const
@@ -46,7 +55,7 @@ inductive Const
   | String                : String → Const
   | Unit                  : Const
   | Bool                  : Bool → Const
-  | ConstList             : List Const → Const
+  | ConstList             : BuiltinType → List Const → Const
   | ConstDataList         : List Data → Const          -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | ConstPairDataList     : List (Data × Data) → Const -- NOTE: Added to properly implement builtins evaluation and to avoid using List.map
   | Pair                  : Const × Const → Const
@@ -57,6 +66,23 @@ inductive Const
   | Bls12_381_MlResult    : BLS12_381_MlResult   → Const
 deriving Repr
 
+/-- The UPLC type of a constant, including the declared element type of empty lists. -/
+def Const.builtinType : Const → BuiltinType
+  | .Integer _ => .AtomicType .TypeInteger
+  | .ByteString _ => .AtomicType .TypeByteString
+  | .String _ => .AtomicType .TypeString
+  | .Unit => .AtomicType .TypeUnit
+  | .Bool _ => .AtomicType .TypeBool
+  | .ConstList elemTy _ => .TypeOperator (.TypeList elemTy)
+  | .ConstDataList _ => .TypeOperator (.TypeList (.AtomicType .TypeData))
+  | .ConstPairDataList _ =>
+    .TypeOperator (.TypeList (.TypeOperator (.TypePair (.AtomicType .TypeData) (.AtomicType .TypeData))))
+  | .Pair (a, b) => .TypeOperator (.TypePair a.builtinType b.builtinType)
+  | .PairData _ => .TypeOperator (.TypePair (.AtomicType .TypeData) (.AtomicType .TypeData))
+  | .Data _ => .AtomicType .TypeData
+  | .Bls12_381_G1_element _ => .AtomicType .TypeBls12_381_G1_element
+  | .Bls12_381_G2_element _ => .AtomicType .TypeBls12_381_G2_element
+  | .Bls12_381_MlResult _ => .AtomicType .TypeBls12_381_MlResult
 
 inductive BuiltinFun
 -- Batch 1

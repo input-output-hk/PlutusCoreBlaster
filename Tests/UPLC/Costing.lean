@@ -19,7 +19,7 @@ example (args : List PlutusCore.UPLC.CekValue.CekValue) (i : Nat) :
 example (args : List PlutusCore.UPLC.CekValue.CekValue) (i : Nat) :
     argListLen args i = (if h : i < args.length then
       match args.get ⟨i, h⟩ with
-      | .VCon (.ConstList cs) => cs.length
+      | .VCon (.ConstList _ cs) => cs.length
       | _ => 0
     else 0) := by
   unfold argListLen
@@ -30,8 +30,8 @@ example (args : List PlutusCore.UPLC.CekValue.CekValue) (i : Nat) :
 
 #blaster [∀ n : Int, argSize [.VCon (.Integer n)] 0 = integerSize n]
 #blaster [∀ n : Int, minArgSize [.VCon (.Integer n), .VCon (.Integer 0)] = 1]
-#blaster [∀ cs : List PlutusCore.UPLC.Term.Const,
-  argListLen [.VCon (.ConstList cs)] 0 = cs.length]
+#blaster [∀ elemTy : PlutusCore.UPLC.Term.BuiltinType, ∀ cs : List PlutusCore.UPLC.Term.Const,
+  argListLen [.VCon (.ConstList elemTy cs)] 0 = cs.length]
 #blaster [∀ n : Int, argSize [.VCon (.Integer n)] 1 = 1]
-#blaster [∀ cs : List PlutusCore.UPLC.Term.Const,
-  argListLen [.VCon (.ConstList cs)] 1 = 0]
+#blaster [∀ elemTy : PlutusCore.UPLC.Term.BuiltinType, ∀ cs : List PlutusCore.UPLC.Term.Const,
+  argListLen [.VCon (.ConstList elemTy cs)] 1 = 0]

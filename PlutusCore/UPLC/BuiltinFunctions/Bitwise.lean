@@ -116,7 +116,7 @@ def readBit (Vs : List CekValue) : Option CekValue :=
 -- Define writeBits: args reversed as [x, ixs, s]
 def writeBits (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [.VCon (.Bool x), .VCon (.ConstList ixs), .VCon (.ByteString s)] =>
+  | [.VCon (.Bool x), .VCon (.ConstList (.AtomicType .TypeInteger) ixs), .VCon (.ByteString s)] =>
       match ixs.mapM (fun c => match c with | .Integer i => some i | _ => none) with
       | some intList => tryCatchSome (PLC.writeBits s.data intList x) (fun r => .VCon (.ByteString ⟨r⟩))
       | none => none

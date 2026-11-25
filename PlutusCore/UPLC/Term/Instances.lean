@@ -19,7 +19,7 @@ mutual
     | .String a              , .String b               => a == b
     | .Unit                  , .Unit                   => true
     | .Bool a                , .Bool b                 => a == b
-    | .ConstList a           , .ConstList b            => listBeq a b
+    | .ConstList ta a        , .ConstList tb b         => ta == tb && listBeq a b
     | .ConstDataList a       , .ConstDataList b        => a == b
     | .ConstPairDataList a   , .ConstPairDataList b    => a == b
     | .Pair (a1, a2)         , .Pair (b1, b2)          => constBeq a1 b1 && constBeq a2 b2
@@ -60,7 +60,7 @@ mutual
   theorem constBeq_true_imp_eq : ∀ a b : Const, constBeq a b = true → a = b := by
     intro a b h
     cases a <;> cases b <;> simp_all [constBeq]
-    case ConstList.ConstList => exact listBeq_true_imp_eq _ _ h
+    case ConstList.ConstList => exact listBeq_true_imp_eq _ _ h.2
     case Pair.Pair => exact Prod.ext (constBeq_true_imp_eq _ _ h.1) (constBeq_true_imp_eq _ _ h.2)
 
   theorem listBeq_true_imp_eq : ∀ a b : List Const, listBeq a b = true → a = b := by

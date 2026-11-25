@@ -123,7 +123,7 @@ def constSize (c : Const) : Nat :=
   | Const.String s => s.length / 4
   | Const.Unit => 0
   | Const.Bool _ => 1
-  | Const.ConstList cs => cs.foldl (fun acc c => acc + constSize c) 0
+  | Const.ConstList _ cs => cs.foldl (fun acc c => acc + constSize c) 0
   | Const.ConstDataList ds => ds.foldl (fun acc d => acc + dataSize d) 0
   | Const.ConstPairDataList ps => ps.foldl (fun acc (d1, d2) => acc + dataSize d1 + dataSize d2) 0
   | Const.Pair (c1, c2) => constSize c1 + constSize c2
@@ -148,7 +148,7 @@ def argListLen (args : List CekValue) (i : Nat) : Nat :=
   match args[i]? with
   | some arg =>
     match arg with
-    | .VCon (.ConstList cs) => cs.length
+    | .VCon (.ConstList _ cs) => cs.length
     | _ => 0
   | none => 0
 

@@ -174,15 +174,15 @@ def step (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) : State :=
                      | none => State.Error
                    else State.Error
 
-             | CekValue.VCon (Const.ConstList (c :: cs)) =>
+             | CekValue.VCon (Const.ConstList elemTy (c :: cs)) =>
                    if Ms.length == 1 || Ms.length == 2 then
-                     let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList cs)]
+                     let Vs := [CekValue.VCon c, CekValue.VCon (Const.ConstList elemTy cs)]
                      match List.get?Internal Ms 0 with
                      | some mi => State.Eval (folding Vs s) ρ mi
                      | none => State.Error
                    else State.Error
 
-             | CekValue.VCon (Const.ConstList []) =>
+             | CekValue.VCon (Const.ConstList _ []) =>
                    if Ms.length == 2 then
                      match List.get?Internal Ms 1 with
                      | some mi => State.Eval s ρ mi

@@ -25,7 +25,7 @@ open PlutusCore.UPLC.BuiltinFunctions.Utils
 -- Define chooseList
 def chooseList (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [listCase, nullCase, .VCon (.ConstList l)]
+  | [listCase, nullCase, .VCon (.ConstList _ l)]
   | [listCase, nullCase, .VCon (.ConstDataList l)]
   | [listCase, nullCase, .VCon (.ConstPairDataList l)] => some (UPLC.chooseList l nullCase listCase)
   | _ => none
@@ -33,8 +33,9 @@ def chooseList (Vs : List CekValue) : Option CekValue :=
 -- Define mkCons
 def mkCons (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [.VCon (.ConstList xs), .VCon x] =>
-      some (.VCon (.ConstList (PLC.mkCons x xs)))
+  | [.VCon (.ConstList elemTy xs), .VCon x] =>
+      if x.builtinType == elemTy then some (.VCon (.ConstList elemTy (PLC.mkCons x xs)))
+      else none
 
   | [.VCon (.ConstDataList xs), .VCon (.Data x)] =>
       -- case for ConstDataList
@@ -48,7 +49,7 @@ def mkCons (Vs : List CekValue) : Option CekValue :=
 -- Define headList
 def headList (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [.VCon (.ConstList xs)] =>
+  | [.VCon (.ConstList _ xs)] =>
          match xs with
          | [] => none
          | x :: _ => some (.VCon x)
@@ -70,10 +71,10 @@ def headList (Vs : List CekValue) : Option CekValue :=
 -- Define tailList
 def tailList (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [.VCon (.ConstList xs)] =>
+  | [.VCon (.ConstList elemTy xs)] =>
         match xs with
         | [] => none
-        | _ :: tl => some (.VCon (.ConstList tl))
+        | _ :: tl => some (.VCon (.ConstList elemTy tl))
 
   | [.VCon (.ConstDataList xs)] =>
       -- case for ConstDataList
@@ -91,7 +92,7 @@ def tailList (Vs : List CekValue) : Option CekValue :=
 -- Define nullList
 def nullList (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [.VCon (.ConstList xs)]
+  | [.VCon (.ConstList _ xs)]
   | [.VCon (.ConstDataList xs)]
   | [.VCon (.ConstPairDataList xs)] =>
       some (.VCon (.Bool (PLC.nullList xs)))
@@ -101,8 +102,8 @@ def nullList (Vs : List CekValue) : Option CekValue :=
 -- Eval args (reversed): [list, Integer n]
 def dropList (Vs : List CekValue) : Option CekValue :=
   match Vs with
-  | [.VCon (.ConstList xs), .VCon (.Integer n)] =>
-      some (.VCon (.ConstList (xs.drop n.toNat)))
+  | [.VCon (.ConstList elemTy xs), .VCon (.Integer n)] =>
+      some (.VCon (.ConstList elemTy (xs.drop n.toNat)))
   | [.VCon (.ConstDataList xs), .VCon (.Integer n)] =>
       some (.VCon (.ConstDataList (xs.drop n.toNat)))
   | [.VCon (.ConstPairDataList xs), .VCon (.Integer n)] =>

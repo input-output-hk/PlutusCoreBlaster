@@ -150,7 +150,7 @@ partial def decodeConstValue (s : List Bool) : BuiltinType → Option (List Bool
                | some (xs', Const.PairData p) => some (xs', p)
                | _ => none -- don't produce anything on type mismatched
              Prod.map id .ConstPairDataList <$> decodeList decodeConstPairData s
-       | _ => Prod.map id Const.ConstList <$> decodeList (flip decodeConstValue t) s -- heterogenous list
+       | _ => Prod.map id (Const.ConstList t) <$> decodeList (flip decodeConstValue t) s
   | .TypeOperator (.TypePair t₁ t₂) => do
       let (s₁, c₁) ← decodeConstValue s  t₁
       let (s₂, c₂) ← decodeConstValue s₁ t₂
