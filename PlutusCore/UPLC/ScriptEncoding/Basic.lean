@@ -85,8 +85,10 @@ def elabSingleCborEncodedScriptFromHexM : TermElab := fromStringTermElaborator s
 /-- Decodes an UPLC program from it's double-cbor-encoded hexadecimal representation. -/
 def doubleCborEncodedScriptFromHex? (s : String) : Except String Program := do
   let hexDecoded        ← Option.toExcept (hexStringToString s.data [])              "Could not hexdecode input!"
-  let (_, decodedCbor₁) ← Option.toExcept (decodeLargeBytestring ⟨hexDecoded⟩)       "Could not cbor decode input (first pass)!"
-  let (_, decodedCbor₂) ← Option.toExcept (decodeLargeBytestring decodedCbor₁)       "Could not cbor decode input (second pass)!"
+  let (outerRest, decodedCbor₁) ← Option.toExcept (decodeLargeBytestring ⟨hexDecoded⟩) "Could not cbor decode input (first pass)!"
+  unless outerRest.isEmpty do throw "Trailing bytes after the outer CBOR wrapper"
+  let (innerRest, decodedCbor₂) ← Option.toExcept (decodeLargeBytestring decodedCbor₁) "Could not cbor decode input (second pass)!"
+  unless innerRest.isEmpty do throw "Trailing bytes after the inner CBOR wrapper"
   let program           ← Option.toExcept (decodeProgramFromByteString decodedCbor₂) "Could not decode program!"
   return program
 

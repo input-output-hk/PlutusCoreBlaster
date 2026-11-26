@@ -53,6 +53,14 @@ def test10 := doubleCborEncodedScriptFromHexM "49480100002221200101"
 #guard_msgs in
 def test11 := doubleCborEncodedScriptFromHexM "494801000022212001011"
 
+/-- error: Trailing bytes after the outer CBOR wrapper -/
+#guard_msgs in
+def doubleCborTrailingOuter := doubleCborEncodedScriptFromHexM "4948010000222120010100"
+
+/-- error: Trailing bytes after the inner CBOR wrapper -/
+#guard_msgs in
+def doubleCborTrailingInner := doubleCborEncodedScriptFromHexM "4a48010000222120010100"
+
 /-- info: Program.Program (Version.Version 1 0 0) (Term.Var 0).Lam.Delay.Lam.Lam.Lam -/
 #guard_msgs in
 #eval flatEncodedScriptFromHex! "0100002221200101"
