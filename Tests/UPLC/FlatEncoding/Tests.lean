@@ -100,8 +100,21 @@ example : decodeNat ([true]  ++ [false, false, false, false, false, false, false
   | some (.Program _ (.Const (.ConstList []))) => true
   | _ => false
 
--- A direct BLS G1 constant still has no Flat value decoder.
+-- Setting the list's element-present bit requires decoding a BLS value,
+-- which the reference Flat decoders reject for all three types.
+#guard (decodeProgramFromHexString "0101004bd729").isNone
+#guard (decodeProgramFromHexString "0101004bd749").isNone
+#guard (decodeProgramFromHexString "0101004bd769").isNone
+
+-- A nonempty outer list can still contain an empty BLS-typed inner list.
+#guard match decodeProgramFromHexString "0101004bd6f5ca01" with
+  | some (.Program _ (.Const (.ConstList [.ConstList []]))) => true
+  | _ => false
+
+-- Direct BLS constants likewise have no Flat value decoder.
 #guard (decodeProgramFromHexString "0101004c81").isNone
+#guard (decodeProgramFromHexString "0101004d01").isNone
+#guard (decodeProgramFromHexString "0101004d81").isNone
 
 /-- info: some (Program.Program (Version.Version 1 0 0) (Term.Term.Const (Const.ConstArray []))) -/
 #guard_msgs in
