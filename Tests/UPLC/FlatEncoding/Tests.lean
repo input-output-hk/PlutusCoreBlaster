@@ -85,6 +85,24 @@ example : decodeNat ([true]  ++ [false, false, false, false, false, false, false
 #guard_msgs in
 #eval decodeProgramFromHexString "0100004bd6f581"
 
+-- Aiken's Flat encoder emits these typed empty lists. BLS elements themselves
+-- cannot be serialized, but decoding an empty list never decodes an element.
+#guard match decodeProgramFromHexString "0101004bd721" with
+  | some (.Program _ (.Const (.ConstList []))) => true
+  | _ => false
+
+#guard match decodeProgramFromHexString "0101004bd741" with
+  | some (.Program _ (.Const (.ConstList []))) => true
+  | _ => false
+
+-- The reference Plutus type decoder also recognizes the ML result tag.
+#guard match decodeProgramFromHexString "0101004bd761" with
+  | some (.Program _ (.Const (.ConstList []))) => true
+  | _ => false
+
+-- A direct BLS G1 constant still has no Flat value decoder.
+#guard (decodeProgramFromHexString "0101004c81").isNone
+
 /-- info: some (Program.Program (Version.Version 1 0 0) (Term.Term.Const (Const.ConstArray []))) -/
 #guard_msgs in
 #eval decodeProgramFromHexString "0100004bf201"
