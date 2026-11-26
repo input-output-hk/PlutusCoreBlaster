@@ -4,9 +4,23 @@ import PlutusCore.UPLC.BlueprintEncoding.CounterexampleObserve
 namespace PlutusCore.UPLC.BlueprintEncoding.Counterexample
 open Lean Meta
 
-/-- Confirm a model on the original, closed proposition. Name matching is only
-    accepted for unique binders of matching types; erased/shadowed/unsupported
-    binders are reported, never assigned guessed values. -/
+/-- Try zero for an integer omitted from the model. Only evaluation of the
+    original proposition can confirm it. Keep the completion out of the SMT model. -/
+private unsafe def replayInput (name : Name) (type : Expr) (model : Blaster.Counterexample.Model) :
+    MetaM (Expr × Json) := do
+  match (model.bindings.filter (·.name == name)).toList with
+  | [binding] =>
+    let some value := binding.value | throwError "model value could not be reconstructed: {name}"
+    unless ← isDefEq (← inferType value) type do throwError "model type differs from original binder: {name}"
+    return (value, ← binding.toJson)
+  | [] =>
+    unless ← isDefEq type (mkConst ``Int) do throwError "missing model assignment: {name}"
+    let value := toExpr (0 : Int)
+    let binding : Blaster.Counterexample.Binding := { id := name, name, type, raw := "0", value := some value }
+    return (value, (← binding.toJson).setObjVal! "origin" (toJson "replay-completion"))
+  | _ => throwError "original binder has no unique model assignment: {name}"
+
+/-- Confirm a model on the original, closed proposition. -/
 unsafe def replay (original : Expr) (model : Blaster.Counterexample.Model) (targets : Array Name := #[]) : MetaM Json := do
   try
     let mut proposition := original
@@ -16,14 +30,10 @@ unsafe def replay (original : Expr) (model : Blaster.Counterexample.Model) (targ
       let .forallE name type body _ := proposition | break
       if ← isProp type then break
       if used.contains name then throwError "shadowed original binder: {name}"
-      let candidates := model.bindings.filter (·.name == name)
-      unless candidates.size == 1 do throwError "original binder has no unique model assignment: {name}"
-      let some binding := candidates[0]? | throwError "missing model assignment"
-      let some value := binding.value | throwError "model value could not be reconstructed: {name}"
-      unless ← isDefEq (← inferType value) type do throwError "model type differs from original binder: {name}"
+      let (value, input) ← replayInput name type model
       proposition := body.instantiate1 value
       used := name :: used
-      inputs := inputs.push (← binding.toJson)
+      inputs := inputs.push input
     if proposition.hasFVar || proposition.hasMVar then throwError "replay proposition is not closed"
     let mut observation := Json.null
     if let .const (.str parent short) _ := proposition.getAppFn then
