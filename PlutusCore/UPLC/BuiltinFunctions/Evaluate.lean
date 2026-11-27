@@ -13,6 +13,7 @@ import PlutusCore.UPLC.BuiltinFunctions.Pair
 import PlutusCore.UPLC.BuiltinFunctions.String
 import PlutusCore.UPLC.BuiltinFunctions.Trace
 import PlutusCore.UPLC.BuiltinFunctions.Unit
+import PlutusCore.UPLC.BuiltinFunctions.Unlifting
 import PlutusCore.UPLC.BuiltinFunctions.Value
 
 namespace PlutusCore.UPLC.BuiltinFunctions.Evaluate
@@ -32,9 +33,14 @@ open PlutusCore.UPLC.BuiltinFunctions.String
 open PlutusCore.UPLC.BuiltinFunctions.Trace
 open PlutusCore.UPLC.BuiltinFunctions.Unit
 open PlutusCore.UPLC.BuiltinFunctions.Value
+open PlutusCore.UPLC.BuiltinFunctions.Unlifting (argumentsReadable)
 
 -- Evaluate a builtin function based on its type.
+-- A call whose arguments 1.64 cannot read, e.g. of the wrong type or, under
+-- semantics variants D and E, out of bounds, fails before the builtin runs
+-- (see `Unlifting.lean`).
 def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : BuiltinFun) (Vs : List CekValue) : Option CekValue :=
+  if !argumentsReadable semanticsVariant b Vs then none else
   match b with
   -- Batch 1
   -- Integer

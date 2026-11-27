@@ -83,6 +83,13 @@ def costingLog2 (n : Nat) : Nat :=
 termination_by n
 decreasing_by exact Nat.log2_terminates _ ‹_›
 
+theorem costingLog2_eq_log2 (n : Nat) : costingLog2 n = n.log2 := by
+  induction n using costingLog2.induct with
+  | case1 n h ih => rw [costingLog2, Nat.log2_def, dif_pos h, if_pos h, ih]
+  | case2 n h    => rw [costingLog2, Nat.log2_def, dif_neg h, if_neg h]
+
+@[csimp] theorem costingLog2_eq_log2' : @costingLog2 = @Nat.log2 := funext costingLog2_eq_log2
+
 /-- Integer size in 64-bit words, with a one-word minimum. -/
 def integerSize (i : Integer) : Nat :=
   let n := i.natAbs
