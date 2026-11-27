@@ -1,0 +1,6 @@
+{
+  "aiken": "v1.1.24+bacbeb3",
+  "stdlib": "v3.0.0",
+  "uplc": "1.1.0",
+  "compiled_uplc_sha256": "df4a0a7721eb2d1042eaf64897644b0d020e77975f77f6b31fdf50fae9835133"
+}
