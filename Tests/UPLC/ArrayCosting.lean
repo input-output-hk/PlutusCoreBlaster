@@ -31,7 +31,7 @@ private def budgetOf (src : String) : Option (Nat × Nat) :=
   match PlutusCore.UPLC.TextEncoding.programFromString? src with
   | none => none
   | some p =>
-    match cekExecuteProgramWithBudget p .plutusV3 .postConway [] maxBudget with
+    match cekExecuteProgramWithBudget p .plutusV3 .postVanRossem [] maxBudget with
     | .Success _ b => some (b.exBudgetCPU.unExCPU, b.exBudgetMemory.unExMemory)
     | _ => none
 

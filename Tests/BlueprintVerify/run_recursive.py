@@ -51,7 +51,7 @@ code, log = run('Witness', f'''#import_blueprints Witness {json.dumps(str(out / 
 open PlutusCore.UPLC.Term PlutusCore.UPLC.CekMachine PlutusCore.Data
 #eval show IO Unit from do
   let good := Data.Constr 1 [Data.Constr 0 [Data.I 2], Data.Constr 1 [Data.Constr 0 [Data.I 1], Data.Constr 0 [Data.I 4]]]
-  let result := cekExecuteProgramWithSemanticVariant .defaultFunSemanticsVariantE Witness.Tree_validator.script [.Const (.Data good), .Const (.Data (.I 0))] 3000
+  let result := cekExecuteProgramWithSemanticVariant .defaultFunSemanticsVariantE .postVanRossem Witness.Tree_validator.script [.Const (.Data good), .Const (.Data (.I 0))] 3000
   match result with
   | .Halt (.VCon .Unit) => IO.println "PASS inhabited recursive tree accepted"
   | _ => throw (IO.userError "recursive witness failed")

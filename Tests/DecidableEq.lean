@@ -87,8 +87,8 @@ end
 
 /-! ### States that differ -/
 
-example : stepN testSemanticsVariant testStart 1
-    ≠ stepN testSemanticsVariant testStart 2 := by nofun
+example : stepN testSemanticsVariant testProtocolVersion testStart 1
+    ≠ stepN testSemanticsVariant testProtocolVersion testStart 2 := by nofun
 
 /-! ### At a realistic size -/
 
@@ -121,7 +121,7 @@ example : bigState ≠ bigStateAlt := by nofun
 /-! ### Checks that need the instances -/
 
 -- The body at each `n` is a state disequality, decided by `DecidableEq State`.
-example : ∀ n, n < 4 → stepN testSemanticsVariant testStart n ≠ State.Error := by decide
+example : ∀ n, n < 4 → stepN testSemanticsVariant testProtocolVersion testStart n ≠ State.Error := by decide
 
 -- `eraseDups` and `count` compare states through the `==` that `DecidableEq State` gives.
 example : [bigState, bigStateAlt, bigState].eraseDups.length = 2 := by decide

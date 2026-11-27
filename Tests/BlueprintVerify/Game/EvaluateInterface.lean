@@ -5,10 +5,11 @@ open PlutusCore.Data (Data)
 open PlutusCore.ByteString (ByteString)
 open PlutusCore.UPLC.Term (Term Const)
 open PlutusCore.UPLC.CekMachine
-open PlutusCore.Default.Internal (BuiltinSemanticsVariant)
+open PlutusCore.Default.Internal (BuiltinSemanticsVariant ProtocolVersion)
 
 def runGame (d r c : Data) :=
   cekExecuteProgramWithSemanticVariant BuiltinSemanticsVariant.defaultFunSemanticsVariantD
+    ProtocolVersion.postVanRossem
     Game.gameValidator.script [Term.Const (Const.Data d), Term.Const (Const.Data r), Term.Const (Const.Data c)] 500
 
 -- SHA-256 is opaque to SMT. This is a separate execution test of a known vector.
