@@ -126,6 +126,11 @@ partial def decodeConstType : List Nat → Option (List Nat × BuiltinType)
       let (l₂, t₂) ← decodeConstType l₁
       .some (l₂, .TypeOperator (.TypePair t₁ t₂))
   | 8           :: l => .some (l, .AtomicType .TypeData)
+  -- Plutus recognizes these BLS type tags even though their Flat value
+  -- decoders reject serialized BLS elements. Empty containers need no element.
+  | 9           :: l => .some (l, .AtomicType .TypeBls12_381_G1_element)
+  | 10          :: l => .some (l, .AtomicType .TypeBls12_381_G2_element)
+  | 11          :: l => .some (l, .AtomicType .TypeBls12_381_MlResult)
   | 13          :: l => .some (l, .AtomicType .TypeValue)
   | _      => .none
 

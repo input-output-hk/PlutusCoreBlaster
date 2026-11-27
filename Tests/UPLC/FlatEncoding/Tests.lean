@@ -85,6 +85,37 @@ example : decodeNat ([true]  ++ [false, false, false, false, false, false, false
 #guard_msgs in
 #eval decodeProgramFromHexString "0100004bd6f581"
 
+-- Aiken's Flat encoder emits these typed empty lists. BLS elements themselves
+-- cannot be serialized, but decoding an empty list never decodes an element.
+#guard match decodeProgramFromHexString "0101004bd721" with
+  | some (.Program _ (.Const (.ConstList []))) => true
+  | _ => false
+
+#guard match decodeProgramFromHexString "0101004bd741" with
+  | some (.Program _ (.Const (.ConstList []))) => true
+  | _ => false
+
+-- The reference Plutus type decoder also recognizes the ML result tag.
+#guard match decodeProgramFromHexString "0101004bd761" with
+  | some (.Program _ (.Const (.ConstList []))) => true
+  | _ => false
+
+-- Setting the list's element-present bit requires decoding a BLS value,
+-- which the reference Flat decoders reject for all three types.
+#guard (decodeProgramFromHexString "0101004bd729").isNone
+#guard (decodeProgramFromHexString "0101004bd749").isNone
+#guard (decodeProgramFromHexString "0101004bd769").isNone
+
+-- A nonempty outer list can still contain an empty BLS-typed inner list.
+#guard match decodeProgramFromHexString "0101004bd6f5ca01" with
+  | some (.Program _ (.Const (.ConstList [.ConstList []]))) => true
+  | _ => false
+
+-- Direct BLS constants likewise have no Flat value decoder.
+#guard (decodeProgramFromHexString "0101004c81").isNone
+#guard (decodeProgramFromHexString "0101004d01").isNone
+#guard (decodeProgramFromHexString "0101004d81").isNone
+
 /-- info: some (Program.Program (Version.Version 1 0 0) (Term.Term.Const (Const.ConstArray []))) -/
 #guard_msgs in
 #eval decodeProgramFromHexString "0100004bf201"
