@@ -1,6 +1,6 @@
 import PlutusCore.Default
 import PlutusCore.UPLC.Builtins
-import PlutusCore.UPLC.BuiltinFunctions.Bounds
+import PlutusCore.UPLC.BuiltinFunctions.Unlifting
 import PlutusCore.UPLC.BuiltinFunctions.Evaluate
 import PlutusCore.UPLC.CekValue
 import PlutusCore.UPLC.Term
@@ -12,7 +12,7 @@ namespace PlutusCore.UPLC.CekMachine
 open PlutusCore.Default
 open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.Builtins
-open PlutusCore.UPLC.BuiltinFunctions.Bounds (argumentsInBounds)
+open PlutusCore.UPLC.BuiltinFunctions.Unlifting (argumentsReadable)
 open PlutusCore.UPLC.BuiltinFunctions.Evaluate
 open PlutusCore.UPLC.Term
 open PlutusCore.UPLC.ExBudget
@@ -292,12 +292,13 @@ def calculateStepCostr (costs : CekMachineCosts) (Sigma : State) : ExBudget :=
 
 /-- The cost of calling builtin `b` on `args` (last argument first).
 
-    Under variants D and E, a call with an argument out of bounds costs nothing:
-    1.64 rejects the argument when it reads it, before it costs the call
-    (`builtinRuntimeFailure` with an empty cost, `Builtin/Meaning.hs`).
-    `evaluateBuiltinFunction` then fails the step. -/
+    A call with an argument that 1.64 cannot read costs nothing, e.g. one of the
+    wrong type or, under variants D and E, one out of bounds: 1.64 reads the
+    arguments before it costs the call (`builtinRuntimeFailure` with an empty
+    cost, `Builtin/Meaning.hs`). `evaluateBuiltinFunction` then fails the step.
+    A builtin that fails after reading its arguments is charged in full. -/
 def builtinCallCost (semVar : BuiltinSemanticsVariant) (b : BuiltinFun) (args : List CekValue) : ExBudget :=
-    if argumentsInBounds semVar b args then builtinCostSelected semVar b args else ExBudget.zero
+    if argumentsReadable semVar b args then builtinCostSelected semVar b args else ExBudget.zero
 
 def getBuiltinCostIfExecuted (semVar : BuiltinSemanticsVariant) (Sigma : State) : ExBudget :=
     match Sigma with

@@ -13,4 +13,5 @@ import PlutusCore.UPLC.BuiltinFunctions.Pair
 import PlutusCore.UPLC.BuiltinFunctions.String
 import PlutusCore.UPLC.BuiltinFunctions.Trace
 import PlutusCore.UPLC.BuiltinFunctions.Unit
+import PlutusCore.UPLC.BuiltinFunctions.Unlifting
 import PlutusCore.UPLC.BuiltinFunctions.Utils

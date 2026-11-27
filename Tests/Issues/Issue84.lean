@@ -17,7 +17,7 @@ namespace Tests.Issue84
 open PlutusCore.Default (BuiltinSemanticsVariant PlutusVersion ProtocolVersion)
 open PlutusCore.ByteString (ByteString)
 open PlutusCore.UPLC.BuiltinFunctions.Evaluate (evaluateBuiltinFunction)
-open PlutusCore.UPLC.BuiltinFunctions.Bounds (argumentsInBounds)
+open PlutusCore.UPLC.BuiltinFunctions.Unlifting (argumentsReadable)
 open PlutusCore.UPLC.CekMachine
 open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.ExBudget (ExBudget)
@@ -156,7 +156,7 @@ private def byteStringCases : List Case :=
 On a 65,537-byte input, `sha2_256`, `verifySchnorrSecp256k1Signature`, both
 `hashToGroup`s and `decodeUtf8` take about 3 s each, and `countSetBits` and
 `findFirstSetBit` about 50 s. So these run only where the bound rejects the call,
-which is fast. Where it accepts, the test checks `argumentsInBounds`, the check
+which is fast. Where it accepts, the test checks `argumentsReadable`, the check
 `evaluateBuiltinFunction` makes before running the builtin. -/
 
 private def slowCalls : List (String × BuiltinFun × (Const → List Const)) :=
@@ -171,10 +171,10 @@ private def slowCalls : List (String × BuiltinFun × (Const → List Const)) :=
   , ("countSetBits", .CountSetBits, fun x => [x])
   , ("findFirstSetBit", .FindFirstSetBit, fun x => [x]) ]
 
-/-- The variants, by letter, under which `argumentsInBounds` accepts the call. -/
+/-- The variants, by letter, under which `argumentsReadable` accepts the call. -/
 private def inBoundsUnder (b : BuiltinFun) (args : List Const) : String :=
   String.mk <| variants.filterMap fun (c, v) =>
-    if argumentsInBounds v b (stack args) then some c else none
+    if argumentsReadable v b (stack args) then some c else none
 
 /-- info: [] -/
 #guard_msgs in #eval slowCalls.filterMap fun (name, b, args) =>

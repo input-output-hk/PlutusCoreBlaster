@@ -1,7 +1,5 @@
 import PlutusCore.ByteString
 import PlutusCore.Default
-import PlutusCore.UPLC.CekValue
-import PlutusCore.UPLC.Term
 
 /-! # Builtin argument bounds under semantics variants D and E
 
@@ -19,19 +17,15 @@ evaluation failure, and it happens before the builtin runs. Only arguments are
 bounded: results such as `multiplyInteger`'s or `appendByteString`'s may exceed
 the bounds. Variants A–C bound nothing.
 
-`argumentsInBounds` lists the bounded arguments of each builtin, following the
-types of their 1.64 denotations. `evaluateBuiltinFunction` runs a builtin only
-if it returns `true`, and the budgeted machine charges the builtin's cost only
-then (`builtinCallCost` in `CekMachine.lean`), because 1.64 rejects the
-argument before it costs the call.
+Which arguments of which builtin are bounded is recorded with the other argument
+types in `argTypes` (`Unlifting.lean`), as `boundedInteger` and
+`boundedByteString`.
 -/
 
 namespace PlutusCore.UPLC.BuiltinFunctions.Bounds
 
 open PlutusCore.ByteString (ByteString)
 open PlutusCore.Default (BuiltinSemanticsVariant)
-open PlutusCore.UPLC.CekValue
-open PlutusCore.UPLC.Term
 
 /-- Whether a semantics variant bounds builtin arguments (`ensurable` in 1.64's
     `Builtins.hs`). -/
@@ -67,83 +61,5 @@ def maxByteStringLength : Nat := 65536
 /-- Whether `b` can be read as a `CByteString`. -/
 def byteStringInBounds (b : ByteString) : Bool :=
   b.length ≤ maxByteStringLength
-
-/-- Whether an argument read as `CInteger` is within bounds. An argument of
-    another type is left to the builtin, which fails on it. -/
-def integerArg : CekValue → Bool
-  | .VCon (.Integer x) => integerInBounds x
-  | _ => true
-
-/-- Whether an argument read as `CByteString` is within bounds. An argument of
-    another type is left to the builtin, which fails on it. -/
-def byteStringArg : CekValue → Bool
-  | .VCon (.ByteString b) => byteStringInBounds b
-  | _ => true
-
-/-- Whether the arguments `Vs` of builtin `b` are within the bounds of semantics
-    variant `v`. As everywhere in the CEK machine, `Vs` holds the last argument
-    first. Each comment gives the argument types of the 1.64 denotation, where
-    `_` is a type that is not bounded. -/
-def argumentsInBounds (v : BuiltinSemanticsVariant) (b : BuiltinFun) (Vs : List CekValue) : Bool :=
-  !ensurable v ||
-  match b with
-  -- `CInteger → CInteger`
-  | .AddInteger | .SubtractInteger | .MultiplyInteger | .DivideInteger
-  | .QuotientInteger | .RemainderInteger | .ModInteger | .LessThanInteger
-  | .LessThanEqualsInteger =>
-      match Vs with
-      | [y, x] => integerArg x && integerArg y
-      | _ => true
-  -- `CByteString → CByteString`
-  | .AppendByteString | .EqualsByteString | .LessThanByteString
-  | .LessThanEqualsByteString =>
-      match Vs with
-      | [y, x] => byteStringArg x && byteStringArg y
-      | _ => true
-  -- `CByteString`
-  | .Sha2_256 | .Sha3_256 | .Blake2b_256 | .Blake2b_224 | .Keccak_256 | .Ripemd_160
-  | .ComplementByteString | .CountSetBits | .FindFirstSetBit | .DecodeUtf8 =>
-      match Vs with
-      | [x] => byteStringArg x
-      | _ => true
-  -- `CByteString → _`: the index of `indexByteString` and `readBit` is an
-  -- `Int`; the domain separation tag of `hashToGroup` is not bounded.
-  | .IndexByteString | .ReadBit | .Bls12_381_G1_hashToGroup | .Bls12_381_G2_hashToGroup =>
-      match Vs with
-      | [_, x] => byteStringArg x
-      | _ => true
-  -- `_ → CByteString`: the flag of `byteStringToInteger` is a `Bool`.
-  | .ByteStringToInteger =>
-      match Vs with
-      | [x, _] => byteStringArg x
-      | _ => true
-  -- `CInteger → CByteString` under D, then reduced modulo 256;
-  -- `Word8 → CByteString` under E, where `consByteStringV2` rejects the integer
-  -- outside [0, 255] anyway.
-  | .ConsByteString =>
-      match Vs with
-      | [x, n] =>
-          byteStringArg x &&
-          match v with
-          | .defaultFunSemanticsVariantD => integerArg n
-          | _ => true
-      | _ => true
-  -- `Int → Int → CByteString`
-  | .SliceByteString =>
-      match Vs with
-      | [x, _, _] => byteStringArg x
-      | _ => true
-  -- `_ → CByteString → CByteString`: the flag is a `Bool`.
-  | .AndByteString | .OrByteString | .XorByteString =>
-      match Vs with
-      | [y, x, _] => byteStringArg x && byteStringArg y
-      | _ => true
-  -- `_ → CByteString → _`: only the message; the key and the signature are not
-  -- bounded.
-  | .VerifyEd25519Signature | .VerifySchnorrSecp256k1Signature =>
-      match Vs with
-      | [_, msg, _] => byteStringArg msg
-      | _ => true
-  | _ => true
 
 end PlutusCore.UPLC.BuiltinFunctions.Bounds

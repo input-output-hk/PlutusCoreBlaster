@@ -4,7 +4,6 @@ import PlutusCore.UPLC.Term
 import PlutusCore.UPLC.BuiltinFunctions.Array
 import PlutusCore.UPLC.BuiltinFunctions.Bitwise
 import PlutusCore.UPLC.BuiltinFunctions.Bool
-import PlutusCore.UPLC.BuiltinFunctions.Bounds
 import PlutusCore.UPLC.BuiltinFunctions.ByteString
 import PlutusCore.UPLC.BuiltinFunctions.Crypto
 import PlutusCore.UPLC.BuiltinFunctions.Data
@@ -14,6 +13,7 @@ import PlutusCore.UPLC.BuiltinFunctions.Pair
 import PlutusCore.UPLC.BuiltinFunctions.String
 import PlutusCore.UPLC.BuiltinFunctions.Trace
 import PlutusCore.UPLC.BuiltinFunctions.Unit
+import PlutusCore.UPLC.BuiltinFunctions.Unlifting
 import PlutusCore.UPLC.BuiltinFunctions.Value
 
 namespace PlutusCore.UPLC.BuiltinFunctions.Evaluate
@@ -24,7 +24,6 @@ open PlutusCore.UPLC.CekValue
 open PlutusCore.UPLC.BuiltinFunctions.Array
 open PlutusCore.UPLC.BuiltinFunctions.Bitwise
 open PlutusCore.UPLC.BuiltinFunctions.Bool
-open PlutusCore.UPLC.BuiltinFunctions.Bounds
 open PlutusCore.UPLC.BuiltinFunctions.ByteString
 open PlutusCore.UPLC.BuiltinFunctions.Data
 open PlutusCore.UPLC.BuiltinFunctions.Integer
@@ -34,12 +33,14 @@ open PlutusCore.UPLC.BuiltinFunctions.String
 open PlutusCore.UPLC.BuiltinFunctions.Trace
 open PlutusCore.UPLC.BuiltinFunctions.Unit
 open PlutusCore.UPLC.BuiltinFunctions.Value
+open PlutusCore.UPLC.BuiltinFunctions.Unlifting (argumentsReadable)
 
 -- Evaluate a builtin function based on its type.
--- Under semantics variants D and E some arguments are bounded, and a call with
--- an argument out of bounds fails before the builtin runs (see `Bounds.lean`).
+-- A call whose arguments 1.64 cannot read, e.g. of the wrong type or, under
+-- semantics variants D and E, out of bounds, fails before the builtin runs
+-- (see `Unlifting.lean`).
 def evaluateBuiltinFunction (semanticsVariant : BuiltinSemanticsVariant) (b : BuiltinFun) (Vs : List CekValue) : Option CekValue :=
-  if !argumentsInBounds semanticsVariant b Vs then none else
+  if !argumentsReadable semanticsVariant b Vs then none else
   match b with
   -- Batch 1
   -- Integer

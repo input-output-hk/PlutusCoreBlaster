@@ -24,6 +24,7 @@ import Tests.CekRuns
 import Tests.DataComparison
 import Tests.DecidableEq
 import Tests.UPLC.ArrayCosting
+import Tests.UPLC.BuiltinUnlifting
 
 import Tests.BlasterProofs
 import Tests.Issues.Issue84
