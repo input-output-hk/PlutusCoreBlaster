@@ -45,6 +45,10 @@ def run_case(name, modify, expected=None):
         print(f'PASS {name}', flush=True)
 
 run_case('fresh property', lambda d, p: None)
+for spelling in ['<=', '>=']:
+    run_case('ASCII ordering '+spelling, lambda d, p, spelling=spelling:
+             d['properties'][0]['statement']['formal'].update(
+                 source=d['properties'][0]['statement']['formal']['source'] + f' ∧ 1 {spelling} 1'))
 def incomplete_smt_evidence(d,p):
     d['properties'][0]['evidence'] = [{'method':'smt-check','verifier':'test','tool':'blaster',
                                      'outcome':'verified','date':'2026-09-29','scriptHash':'00'*28}]
