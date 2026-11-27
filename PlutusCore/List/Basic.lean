@@ -66,10 +66,25 @@ def tailList (xs : List α) : Except String (List α) :=
 -/
 def nullList (xs : List α) : Bool := xs.isEmpty
 
+/-- Given a count `n` and List `xs`, return `xs` without its first `n`
+    elements, or the empty list when `xs` has fewer than `n` elements.
+
+    Defined by structural recursion on the count, stepping the list one
+    element at a time, rather than as `List.drop`: the Blaster optimizer
+    unfolds this definition for a literal count, while it does not unfold
+    `List.drop`. The two agree; see `dropList_eq_drop` in
+    `PlutusCore/List/Lemmas.lean`.
+-/
+def dropList : Nat → List α → List α
+  | 0, xs => xs
+  | _ + 1, [] => []
+  | n + 1, _ :: xs => dropList n xs
+
 end PlutusCore.ListInternal
 
 export PlutusCore.ListInternal
   ( -- NOTE: macro rules chooseList, caseList are implicitly exported
+    dropList
     headList
     mkCons
     nullList
