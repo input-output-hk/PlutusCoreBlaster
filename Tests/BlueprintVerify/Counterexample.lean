@@ -16,17 +16,28 @@ run_cmd liftTermElabM do
   let cases : List (Model × String) := [
       ({ bindings := #[one] }, "confirmed"),
       ({ bindings := #[negative] }, "not-reproduced"),
-      ({}, "unavailable"),
+      ({}, "confirmed"),
       ({ bindings := #[one, negative] }, "unavailable")]
   for (model, status) in cases do
     let result ← replay original model
     unless (result.getObjValAs? String "status").toOption == some status do
       throwError "incorrect replay outcome: {result}"
+  let completed ← replay original {}
+  let inputs ← ofExcept (completed.getObjValAs? (Array Json) "inputs")
+  unless inputs.size == 1 && (inputs[0]!.getObjValAs? String "origin").toOption == some "replay-completion" &&
+      (inputs[0]!.getObjValD "value").getObjValD "value" == toJson "0" do
+    throwError "missing replay completion: {completed}"
+  let positiveAtZero ← replay (← parseProp "∀ (x : Int), x = 0") {}
+  unless (positiveAtZero.getObjValAs? String "status").toOption == some "not-reproduced" do
+    throwError "a completion satisfying the proposition was accepted: {positiveAtZero}"
+  let missingBool ← replay (← parseProp "∀ (x : Bool), x = true") {}
+  unless (missingBool.getObjValAs? String "status").toOption == some "unavailable" do
+    throwError "unexpected completion for a missing Bool: {missingBool}"
   let shadowed ← parseProp "∀ (x : Int), ∀ (x : Int), x < 0"
   let result ← replay shadowed { bindings := #[one] }
   unless (result.getObjValAs? String "status").toOption == some "unavailable" do
     throwError "shadowed original variables received fabricated assignments"
-  logInfo "PASS replay confirms genuine witnesses and rejects non-witnesses, missing, ambiguous and shadowed bindings"
+  logInfo "PASS integer completions are replayed; unsupported, ambiguous and shadowed bindings are rejected"
 
 -- Observe a wrapper through ordinary helpers, retaining all exact return data.
 namespace ReplayObservation
