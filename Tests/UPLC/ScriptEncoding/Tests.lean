@@ -112,6 +112,17 @@ info: Successfully decoded textual 'Tests/UPLC/ScriptEncoding/TestsText/factoria
 #guard_msgs in
 #import_uplc factorial PlutusV2 textual "Tests/UPLC/ScriptEncoding/TestsText/factorial.uplc"
 
+-- Evaluate the imported value and compare every term with a fresh decode.
+/-- info: true -/
+#guard_msgs in
+#eval do
+  let source ← IO.FS.readFile "Tests/UPLC/ScriptEncoding/TestsText/factorial.uplc"
+  let .ok original := TextEncoding.programFromString source
+    | throw <| IO.userError "factorial decode failed"
+  let .Program importedVersion importedTerm := factorial.script
+  let .Program originalVersion originalTerm := original
+  return decide (importedVersion = originalVersion) && importedTerm == originalTerm
+
 /--
 info: Successfully decoded textual 'Tests/UPLC/ScriptEncoding/TestsText/fibonacci.uplc'
 -/

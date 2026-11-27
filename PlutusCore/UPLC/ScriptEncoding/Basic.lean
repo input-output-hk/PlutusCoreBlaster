@@ -148,27 +148,57 @@ Example:
 -/
 syntax (name := import_uplc) "#import_uplc" ident ident ident str : command
 
+/--
+The compiler cannot reliably compile one enormous constructor expression. Break
+the closed expression produced by `ToExpr` into small, named definitions before
+compiling it. Each chunk is compiled separately and remains transparent to
+elaboration, so consumers still see the same `PlutusScript` value.
+
+Counting application nodes after replacing a child by its name bounds the size
+of every generated definition, including nested lists and constants.
+-/
+private def importChunkSize : Nat := 256
+
+private partial def chunkImportedExpr (scriptName : Name) (expr : Expr) :
+    StateT Nat CommandElabM (Expr × Nat) := do
+  match expr with
+  | .app fn arg =>
+      let (fn', fnSize) ← chunkImportedExpr scriptName fn
+      let (arg', argSize) ← chunkImportedExpr scriptName arg
+      let value := mkApp fn' arg'
+      let size := fnSize + argSize + 1
+      if size < importChunkSize then
+        return (value, size)
+      let index ← get
+      modify (· + 1)
+      let name := mkPrivateName (← getEnv) (Name.str scriptName s!"chunk{index}")
+      let type ← withoutModifyingEnv <| runTermElabM fun _ => inferType value
+      let decl := Declaration.defnDecl {
+        name, levelParams := [], type, value, hints := .regular 0, safety := .safe
+      }
+      liftCoreM do
+        addDecl decl
+        let env ← getEnv
+        match Compiler.setInlineAttribute env name .noinline with
+        | .ok env' => setEnv env'
+        | .error msg => throwError msg
+        compileDecl decl
+      return (mkConst name, 1)
+  | _ => return (expr, 1)
+
 /-- Elaboration for the #import_uplc command -/
 @[command_elab import_uplc]
 def importUplcImp : CommandElab := fun stx => do
-  let decl ← withoutModifyingEnv $ runTermElabM fun _ => do
-    let progExpr ← parseUplcFile stx
-    let t        ← inferType progExpr
-    return Declaration.defnDecl {
-             name        := ← validVariableName stx[1],
-             levelParams := [],
-             type        := t,
-             value       := progExpr,
-             hints       := .abbrev,
-             safety      := .safe
-           }
-  liftCoreM <| addAndCompile <| decl
+  let scriptName := stx[1].getId
+  let progExpr ← withoutModifyingEnv <| runTermElabM fun _ => parseUplcFile stx
+  let (value, _) ← (chunkImportedExpr scriptName progExpr).run' 0
+  let type ← withoutModifyingEnv <| runTermElabM fun _ => inferType value
+  let decl := Declaration.defnDecl {
+    name := scriptName, levelParams := [], type, value, hints := .abbrev, safety := .safe
+  }
+  liftCoreM <| addAndCompile decl
 
  where
-  /-- Extracts a valid variable name from syntax -/
-  validVariableName (stx : Syntax) : TermElabM Name := do
-    return stx.getId
-
   /-- Extracts the format identifier from syntax -/
   getFormat (stx : Syntax) : TermElabM Name := do
     return stx.getId
